@@ -11,7 +11,7 @@
  */
 
 import { CMD } from "../ffi/render-graph"
-import type { RenderCommand } from "../ffi/render-graph"
+import type { RenderCommand, RenderGraphOp, RenderGraphFrame } from "../ffi/render-graph"
 import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import {
   intersectRect,
@@ -27,7 +27,6 @@ import {
   type RendererBackendLayerContext,
   type RendererBackendPaintResult,
 } from "../ffi/renderer-backend"
-import { buildRenderGraphFrame } from "../ffi/render-graph"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
@@ -39,6 +38,7 @@ import { resolveProps, type TGENode } from "../ffi/node"
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
 import { nativeLayerRemove } from "../ffi/native-layer-registry"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
+import type { LayerOpBucket } from "./pipeline-types"
 
 
 
@@ -143,6 +143,9 @@ export type PaintFrameState = {
   // Renderer backend (injected override or global)
   backendOverride?: RendererBackend
 
+  // Layer buckets from pipeline-traverse (Pass 1)
+  layerBuckets?: LayerOpBucket[]
+
   // Interaction latency tracking
   interaction: InteractionLatencyTracking
 
@@ -160,6 +163,8 @@ export function collectLayerCommands(commands: RenderCommand[], cmdIndices: numb
   }
   return layerCommands
 }
+
+const EMPTY_COMMANDS: RenderCommand[] = []
 
 export function selectLayerRepaintRect(
   effectiveUseRegionalRepaint: boolean,
@@ -279,7 +284,7 @@ function hasCaptureExpansion(node: TGENode, includeTransform = false): boolean {
 }
 
 function expandCommandBoundsForEffects(
-  cmd: RenderCommand,
+  cmd: RenderCommand | RenderGraphOp,
   node: TGENode,
 ): { minX: number; minY: number; maxX: number; maxY: number } {
   let minX = cmd.x
@@ -321,12 +326,19 @@ function applyPendingNodeDamage(
   commands: RenderCommand[],
   pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }>,
   markLayerDamaged: (layer: Layer, rect: DamageRect) => void,
+  bucket?: LayerOpBucket,
 ) {
   if (pendingNodeDamageRects.length === 0) return
   const nodeIds = new Set<number>()
+  if (bucket) {
+    for (const op of bucket.ops) {
+      if (op.nodeId !== undefined) nodeIds.add(op.nodeId)
+    }
+  } else {
   for (const idx of slot.cmdIndices) {
     const nodeId = commands[idx]?.nodeId
     if (nodeId !== undefined) nodeIds.add(nodeId)
+  }
   }
   if (nodeIds.size === 0) return
   for (const pending of pendingNodeDamageRects) {
@@ -344,7 +356,7 @@ function updateLayerStabilityCounters(
       const dirty = prepared.dirtyRect
       for (const [, node] of nodeRefById) {
         if (node.destroyed || node.kind === "text" || node.kind === "root") continue
-        if (node._layerKey && node._layerKey !== "bg") continue
+        if (node._layerKey && node._layerKey !== "bg" && node._layerKey !== "root") continue
         const nodeDirty = dirty !== null && (
           !node.layout ||
           (node.layout.width > 0 && node.layout.height > 0 && intersectRect(node.layout, dirty) !== null)
@@ -373,6 +385,12 @@ function updateLayerStabilityCounters(
   }
 }
 
+function findBucketForSlot(bucketByKey: Map<string, LayerOpBucket> | null, slotKey: string): LayerOpBucket | undefined {
+  if (!bucketByKey) return undefined
+  return bucketByKey.get(slotKey)
+    ?? (slotKey === "bg" ? bucketByKey.get("root") : (slotKey === "root" ? bucketByKey.get("bg") : undefined))
+}
+
 // ── paintFrame ────────────────────────────────────────────────────────────
 
 /**
@@ -398,6 +416,7 @@ export function paintFrame(
   cellW: number,
   cellH: number,
   state: PaintFrameState,
+  layerBuckets?: LayerOpBucket[],
 ): PaintResult & {
   repaintedThisFrame: number
   ioMs: number
@@ -439,6 +458,16 @@ export function paintFrame(
     },
   } = state
   const profile = state.profile
+  const buckets = layerBuckets ?? state.layerBuckets
+  const bucketByKey = buckets ? new Map<string, LayerOpBucket>() : null
+  if (buckets && bucketByKey) {
+    for (const b of buckets) {
+      bucketByKey.set(b.key, b)
+    }
+  }
+  const totalCommandCount = buckets
+    ? buckets.reduce((sum, b) => sum + b.ops.length, 0)
+    : commands.length
 
   const allSlots: LayerSlot[] = [plan.bgSlot, ...plan.contentSlots]
   const slotBoundaryByKey = plan.slotBoundaryByKey
@@ -452,7 +481,8 @@ export function paintFrame(
   // ── Step 1: Layer prep ──
   const layerPrepStart = profile ? performance.now() : 0
   for (const slot of allSlots) {
-    if (slot.cmdIndices.length === 0) continue
+    const bucket = findBucketForSlot(bucketByKey, slot.key)
+    if (bucket ? bucket.ops.length === 0 : slot.cmdIndices.length === 0) continue
 
     if (expFrameBudgetMs > 0 && !frameBudgetExceeded && slot.z >= 0) {
       const elapsed = performance.now() - frameStart
@@ -480,6 +510,28 @@ export function paintFrame(
     let scissorR = 0
     let scissorB = 0
 
+    if (bucket) {
+      for (const op of bucket.ops) {
+        let opMinX = op.x
+        let opMinY = op.y
+        let opMaxX = op.x + op.width
+        let opMaxY = op.y + op.height
+        if (op.nodeId !== undefined && (!boundary?.hasSubtreeTransform || op.nodeId === boundary?.nodeId)) {
+          const node = state.nodeRefById.get(op.nodeId)
+          if (node) {
+            const expanded = expandCommandBoundsForEffects(op, node)
+            opMinX = expanded.minX
+            opMinY = expanded.minY
+            opMaxX = expanded.maxX
+            opMaxY = expanded.maxY
+          }
+        }
+        minX = Math.min(minX, opMinX)
+        minY = Math.min(minY, opMinY)
+        maxX = Math.max(maxX, opMaxX)
+        maxY = Math.max(maxY, opMaxY)
+      }
+    } else {
     const pendingBounds: RenderCommand[] = []
     for (const idx of slot.cmdIndices) {
       const cmd = commands[idx]
@@ -544,8 +596,9 @@ export function paintFrame(
         if (cmd.type === CMD.RECTANGLE || cmd.type === CMD.BORDER) pendingBounds.push(cmd)
       }
     }
+    }
 
-    const isBg = slot.z < 0
+    const isBg = slot.z < 0 || slot.key === "bg" || slot.key === "root"
     let lx = isBg ? 0 : Math.floor(minX)
     let ly = isBg ? 0 : Math.floor(minY)
     let lw = isBg ? viewportWidth : (Math.ceil(maxX) - lx)
@@ -618,7 +671,7 @@ export function paintFrame(
     }
 
     updateLayerGeometry(layer, lx, ly, lw, lh, { moveOnly: false })
-    applyPendingNodeDamage(layer, slot, commands, pendingNodeDamageRects, markLayerDamaged)
+    applyPendingNodeDamage(layer, slot, commands, pendingNodeDamageRects, markLayerDamaged, bucket)
     const geometryChanged = !!previousRect && (
       previousRect.x !== layer.x
       || previousRect.y !== layer.y
@@ -744,7 +797,7 @@ export function paintFrame(
       moveOnlyCount,
       moveFallbackCount,
       stableReuseCount,
-      commandCount: commands.length,
+      commandCount: totalCommandCount,
       frameCtx,
       framePlan,
       frameResult,
@@ -808,7 +861,8 @@ export function paintFrame(
       // that child content — exactly the Lightcode "window content disappears"
       // failure mode. Keep regional optimization at the readback/emit boundary,
       // not at semantic command selection.
-      const layerCommands = collectLayerCommands(commands, slot.cmdIndices)
+      const bucket = findBucketForSlot(bucketByKey, slot.key)
+      const layerCommands = bucket ? EMPTY_COMMANDS : collectLayerCommands(commands, slot.cmdIndices)
 
       const basePaintCtx = {
         targetWidth: lw,
@@ -824,7 +878,7 @@ export function paintFrame(
         layer: layerCtx,
       }
       const renderGraphStart = profile ? performance.now() : 0
-      const graph = buildRenderGraphFrame(layerCommands)
+      const graph: RenderGraphFrame = bucket ? { ops: bucket.ops } : { ops: [] }
       if (profile) profile.paintRenderGraphMs += performance.now() - renderGraphStart
       const backendPaintStart = profile ? performance.now() : 0
       const paintResult = backend.paint({
@@ -894,7 +948,7 @@ export function paintFrame(
     : { totalBytes: 0, gpuBytes: 0, cacheEntries: 0 }
   const nativeFrameStats = frameResult?.output === "native-presented" ? (frameResult.stats ?? null) : nativePresentationStats
   debugUpdateStats({
-    commandCount: commands.length,
+    commandCount: totalCommandCount,
     dirtyBeforeCount: 0, // coordinator passes this separately
     layerCount: layerCount(),
     moveOnlyCount,
@@ -932,7 +986,7 @@ export function paintFrame(
     moveOnlyCount,
     moveFallbackCount,
     stableReuseCount,
-    commandCount: commands.length,
+    commandCount: totalCommandCount,
     frameCtx,
     framePlan,
     frameResult,

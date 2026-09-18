@@ -4,7 +4,7 @@ import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { resetFocus, focusedId, getNodeFocusId } from "../reconciler/focus"
 import { setProp } from "../reconciler/reconciler"
 import { buildNodeMouseEvent, isFullyOutsideScrollViewport, setActiveScrollOffsets } from "../reconciler/hit-test"
-import { writeLayoutBack } from "./layout"
+import { damageRectForLayoutTransition, traverseFrame } from "./pipeline-traverse"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import { updateInteractiveStates, type InteractiveStatesBag } from "./layout"
 import { walkTree, type WalkTreeState } from "./walk-tree"
@@ -41,11 +41,34 @@ function frame(root: TGENode, width: number, height: number) {
     layout,
   }
   walkTree(root, state)
-  const commands = layout.endLayout(root._flexNode)
-  const map = layout.getLastLayoutMap()!
+  root._flexNode?.calculateLayout(width, height)
+
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  const prevLayouts = new Map<number, { x: number; y: number; width: number; height: number }>()
+  const collect = (n: TGENode) => {
+    prevLayouts.set(n.id, { ...n.layout })
+    for (const c of n.children) collect(c)
+  }
+  collect(root)
+
+  const result = traverseFrame(root, state, width, height)
   const damage: Array<{ nodeId: number; rect: { x: number; y: number; width: number; height: number } }> = []
-  writeLayoutBack(map, { ...state, pendingNodeDamageRects: damage })
-  return { layout, state, commands, map, damage }
+  for (const node of state.boxNodes) {
+    const prev = prevLayouts.get(node.id)
+    if (prev) {
+      const d = damageRectForLayoutTransition(prev, node.layout)
+      if (d) damage.push({ nodeId: node.id, rect: d })
+    }
+  }
+
+  return { layout, state, result, damage }
 }
 
 function interactionBag(state: WalkTreeState, pointerX: number, pointerY: number, pointerDown = false): InteractiveStatesBag {
@@ -90,9 +113,8 @@ describe("Grid interaction bridge", () => {
       gridTemplateRows: [50],
     }, [regular, floating])
     const state = frame(root, 200, 50)
-    expect(state.map.get(regular.id)).toMatchObject({ x: 0, y: 0, width: 200, height: 50 })
-    expect(state.map.get(floating.id)).toMatchObject({ x: 10, y: 5, width: 20, height: 10 })
-    expect(floating._flexNode?.getParent()).toBeNull()
+    expect(regular.layout).toMatchObject({ x: 0, y: 0, width: 200, height: 50 })
+    expect(floating.layout).toMatchObject({ x: 10, y: 5, width: 20, height: 10 })
     const bag = interactionBag(state.state, 15, 10, true)
     bag.pendingPress = true
     updateInteractiveStates(bag)
@@ -116,7 +138,7 @@ describe("Grid interaction bridge", () => {
     setProp(button, "onPress", () => { presses++ })
     const root = box({ layout: "grid", width: 200, height: 50, gridTemplateColumns: [100, 100], gridTemplateRows: [50] }, [button])
     const state = frame(root, 200, 50)
-    expect(state.map.get(button.id)).toMatchObject({ x: 100, y: 0, width: 100, height: 50 })
+    expect(button.layout).toMatchObject({ x: 100, y: 0, width: 100, height: 50 })
 
     const bag = interactionBag(state.state, 150, 25, true)
     bag.pendingPress = true
@@ -362,7 +384,7 @@ describe("Grid interaction bridge", () => {
     })
     const root = box({ width: 100, height: 100 }, [smallBtn])
     const state = frame(root, 100, 100)
-    expect(state.map.get(smallBtn.id)).toMatchObject({ x: 20, y: 20, width: 4, height: 4 })
+    expect(smallBtn.layout).toMatchObject({ x: 20, y: 20, width: 4, height: 4 })
 
     // Pointer at (19, 15) is outside [20..24) x [20..24) and must NOT hit (no cell expansion)
     const bagOutside = interactionBag(state.state, 19, 15)

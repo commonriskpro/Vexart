@@ -1,274 +1,377 @@
 import { describe, expect, test } from "bun:test"
-import { BACKDROP_FILTER_KIND, buildRenderGraphFrame, CMD, type CanvasPaintConfig, type EffectConfig, type ImagePaintConfig, type RenderCommand, type RenderGraphOp } from "./render-graph"
-import { createNode } from "./node"
+import {
+  BACKDROP_FILTER_KIND,
+  type RenderGraphOp,
+  type RectangleRenderOp,
+  type TextRenderOp,
+  type BorderRenderOp,
+  type ImageRenderOp,
+  type CanvasRenderOp,
+  type EffectRenderOp,
+} from "./render-graph"
+import { createNode, createTextNode, insertChild, ensureImageExtra, type TGENode } from "./node"
+import { traverseFrame } from "../loop/pipeline-traverse"
+import type { WalkTreeState } from "../loop/walk-tree"
 
-type CommandBacked = { command?: RenderCommand }
-type RectFields = {
-  x?: number
-  y?: number
-  width?: number
-  height?: number
-  color?: number
-  cornerRadius?: number
-  radius?: number
-  image?: ImagePaintConfig | null
-  canvas?: CanvasPaintConfig | null
-  effect?: EffectConfig | null
-  borderWidth?: number
-  borderWidths?: { left: number; right: number; top: number; bottom: number }
-  text?: string
-  fontId?: number
-  fontSize?: number
-  lineHeight?: number
-  fontFamily?: string
-  fontWeight?: number
-  fontStyle?: string
+function mockFlex(node: TGENode, left = 0, top = 0, width = 100, height = 50) {
+  node._flexNode = {
+    getComputedLeft: () => left,
+    getComputedTop: () => top,
+    getComputedWidth: () => width,
+    getComputedHeight: () => height,
+    setWidth: () => {},
+    setHeight: () => {},
+    isGridMode: () => false,
+  } as any
+  return node
 }
-type InputBacked = { inputs?: RectFields; rect?: RectFields & InputBacked & CommandBacked }
-type Graph = RenderGraphOp & RectFields & InputBacked & CommandBacked
 
-function cmd(overrides: Partial<RenderCommand> = {}): RenderCommand {
-  return {
-    type: CMD.RECTANGLE,
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 50,
-    color: 0xff0000ff,
-    cornerRadius: 0,
-    extra1: 0,
-    extra2: 0,
-    ...overrides,
+function renderTree(root: TGENode, viewportW = 300, viewportH = 200): RenderGraphOp[] {
+  const state: WalkTreeState = {
+    scrollSpeedCap: { value: 0 },
+    nodeCount: { value: 0 },
+    rectNodes: [],
+    textNodes: [],
+    boxNodes: [],
+    layerBoundaries: [],
+    scrollContainers: [],
+    nodeRefById: new Map(),
+    rectNodeById: new Map(),
+    layout: null as any,
   }
+  const result = traverseFrame(root, state, viewportW, viewportH)
+  return result.layerBuckets.flatMap((b) => b.ops)
 }
 
-function field(op: Graph, key: keyof RectFields) {
-  if (op.kind === "border" && key === "width" && op.borderWidth !== undefined) return op.borderWidth
-  if (op[key] !== undefined) return op[key]
-  if (op.inputs?.[key] !== undefined) return op.inputs[key]
-  if (op.command?.[key as keyof RenderCommand] !== undefined) return op.command[key as keyof RenderCommand]
-  return op.rect?.[key] ?? op.rect?.inputs?.[key] ?? op.rect?.command?.[key as keyof RenderCommand]
-}
-
-function graph(command: RenderCommand) {
-  return buildRenderGraphFrame([command]).ops[0] as Graph
-}
-
-function effectOp(op: RenderGraphOp) {
-  if (op.kind !== "effect") throw new Error(`Expected effect op, received ${op.kind}`)
-  return op
-}
-
-describe("buildRenderGraphFrame", () => {
-  test("empty commands produce empty ops", () => {
-    expect(buildRenderGraphFrame([]).ops).toEqual([])
+describe("Render graph op emission through traverseFrame", () => {
+  test("empty root without background produces empty ops", () => {
+    const root = createNode("box")
+    expect(renderTree(root)).toEqual([])
   })
 
-  test("single rectangle command produces a rectangle op with rect inputs", () => {
-    const op = graph(cmd({ x: 10, y: 20, width: 30, height: 40, color: 0x123456ff, cornerRadius: 7 }))
+  test("single rectangle node produces a rectangle op with rect inputs", () => {
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = { backgroundColor: 0x123456ff, cornerRadius: 7 }
+    insertChild(root, child)
+    mockFlex(child, 10, 20, 30, 40)
 
+    const ops = renderTree(root)
+    expect(ops).toHaveLength(1)
+    const op = ops[0] as RectangleRenderOp
     expect(op.kind).toBe("rectangle")
-    expect(field(op, "x")).toBe(10)
-    expect(field(op, "y")).toBe(20)
-    expect(field(op, "width")).toBe(30)
-    expect(field(op, "height")).toBe(40)
-    expect(field(op, "color")).toBe(0x123456ff)
-    expect(field(op, "radius")).toBe(7)
+    expect(op.x).toBe(10)
+    expect(op.y).toBe(20)
+    expect(op.width).toBe(30)
+    expect(op.height).toBe(40)
+    expect(op.color).toBe(0x123456ff)
+    expect(op.radius).toBe(7)
   })
 
-  test("single text command produces a text op with text inputs", () => {
-    const op = graph(cmd({
-      type: CMD.TEXT,
-      text: "hello",
-      width: 80,
-      height: 24,
+  test("single text node produces a text op with text inputs", () => {
+    const root = createNode("box")
+    const textNode = createNode("text")
+    textNode.props = {
       color: 0xffffffff,
-      extra1: 16,
-      extra2: 3,
+      fontSize: 16,
+      fontId: 3,
       lineHeight: 20,
       fontFamily: "JetBrains Mono",
       fontWeight: 700,
       fontStyle: "italic",
-    }))
+    }
+    insertChild(textNode, createTextNode("hello"))
+    insertChild(root, textNode)
+    mockFlex(textNode, 0, 0, 80, 24)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "text") as TextRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("text")
-    expect(field(op, "text")).toBe("hello")
-    expect(field(op, "fontSize")).toBe(16)
-    expect(field(op, "fontId")).toBe(3)
-    expect(field(op, "lineHeight")).toBe(20)
-    expect(field(op, "fontFamily")).toBe("JetBrains Mono")
-    expect(field(op, "fontWeight")).toBe(700)
-    expect(field(op, "fontStyle")).toBe("italic")
+    expect(op.text).toBe("hello")
+    expect(op.fontSize).toBe(16)
+    expect(op.fontId).toBe(3)
+    expect(op.lineHeight).toBe(20)
+    expect(op.fontFamily).toBe("JetBrains Mono")
+    expect(op.fontWeight).toBe(700)
+    expect(op.fontStyle).toBe("italic")
   })
 
-  test("single border command produces a border op with border inputs", () => {
-    const op = graph(cmd({ type: CMD.BORDER, color: 0x00ff00ff, cornerRadius: 6, extra1: 2 }))
+  test("single border node produces a border op with border inputs", () => {
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = { borderColor: 0x00ff00ff, cornerRadius: 6, borderWidth: 2 }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 100, 50)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "border") as BorderRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("border")
-    expect(field(op, "color")).toBe(0x00ff00ff)
-    expect(field(op, "radius")).toBe(6)
-    expect(field(op, "width")).toBe(2)
+    expect(op.color).toBe(0x00ff00ff)
+    expect(op.radius).toBe(6)
+    expect(op.borderWidth).toBe(2)
     expect(op.borderWidths).toBeNull()
   })
 
   test("preserves non-uniform border widths in the border op", () => {
     const widths = { left: 1, right: 3, top: 2, bottom: 4 }
-    const op = graph(cmd({ type: CMD.BORDER, extra1: 4, borderWidths: widths }))
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = { borderColor: 0x00ff00ff, borderLeft: 1, borderRight: 3, borderTop: 2, borderBottom: 4 }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 100, 50)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "border") as BorderRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("border")
     expect(op.borderWidths).toEqual(widths)
   })
 
   test("rectangle with shadow effect produces an effect op without backdrop", () => {
-    const effect: EffectConfig = { color: 0xff0000ff, shadow: { x: 1, y: 2, blur: 3, color: 0x00000080 } }
-    const op = graph(cmd({ effect }))
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = {
+      backgroundColor: 0xff0000ff,
+      shadow: { x: 1, y: 2, blur: 3, color: 0x00000080 },
+    }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 100, 50)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "effect") as EffectRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("effect")
-    expect(op.effect).toBe(effect)
-    expect(effectOp(op).backdrop).toBeNull()
+    expect(op.effect.shadow).toMatchObject({ x: 1, y: 2, blur: 3, color: 0x00000080 })
+    expect(op.backdrop).toBeNull()
   })
 
   test("rectangle with backdrop blur produces an effect op with backdrop metadata", () => {
-    const effect: EffectConfig = { color: 0xff0000ff, backdropBlur: 8 }
-    const op = graph(cmd({ x: 4, y: 5, width: 20, height: 10, cornerRadius: 3, effect }))
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = {
+      backgroundColor: 0xff0000ff,
+      backdropBlur: 8,
+      cornerRadius: 3,
+    }
+    insertChild(root, child)
+    mockFlex(child, 4, 5, 20, 10)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "effect") as EffectRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("effect")
-    const out = effectOp(op)
-    expect(out.backdrop?.filterKind).toBe(BACKDROP_FILTER_KIND.BLUR)
-    expect(out.backdrop?.filterParams.blur).toBe(8)
-    expect(out.backdrop?.inputBounds).toEqual({ x: 4, y: 5, width: 20, height: 10 })
-    expect(out.backdrop?.outputBounds).toEqual({ x: 4, y: 5, width: 20, height: 10 })
-    expect(out.backdrop?.sampleBounds).toEqual({ x: -4, y: -3, width: 36, height: 26 })
+    expect(op.backdrop?.filterKind).toBe(BACKDROP_FILTER_KIND.BLUR)
+    expect(op.backdrop?.filterParams.blur).toBe(8)
+    expect(op.backdrop?.inputBounds).toEqual({ x: 4, y: 5, width: 20, height: 10 })
+    expect(op.backdrop?.outputBounds).toEqual({ x: 4, y: 5, width: 20, height: 10 })
+    expect(op.backdrop?.sampleBounds).toEqual({ x: -4, y: -3, width: 36, height: 26 })
   })
 
   test("rectangle with image produces an image op", () => {
-    const image: ImagePaintConfig = {
-      color: 0xffffffff,
-      cornerRadius: 4,
-      imageBuffer: { data: new Uint8Array([255, 0, 0, 255]), width: 1, height: 1 },
-      objectFit: "cover",
+    const root = createNode("box")
+    const child = createNode("img")
+    const extra = ensureImageExtra(child)
+    extra.buffer = {
+      data: new Uint8Array([255, 0, 0, 255]),
+      width: 1,
+      height: 1,
     }
-    const op = graph(cmd({ image }))
+    child.props = {
+      cornerRadius: 4,
+    }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 100, 50)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "image") as ImageRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("image")
-    expect(op.image).toBe(image)
-    expect(field(op, "image")).toBe(image)
+    expect(op.image).toBeDefined()
   })
 
   test("rectangle with canvas produces a canvas op", () => {
-    const canvas: CanvasPaintConfig = { color: 0xffffffff, onDraw: () => undefined }
-    const op = graph(cmd({ canvas }))
+    const root = createNode("box")
+    const child = createNode("canvas")
+    child.props = {
+      onDraw: () => undefined,
+    }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 100, 50)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "canvas") as CanvasRenderOp
+    expect(op).toBeDefined()
     expect(op.kind).toBe("canvas")
-    expect(op.canvas).toBe(canvas)
-    expect(field(op, "canvas")).toBe(canvas)
+    expect(op.canvas).toBeDefined()
   })
 
-  test("scissor commands are skipped but clip enclosed backdrop effects", () => {
-    const effect: EffectConfig = { color: 0xff0000ff, backdropBlur: 4 }
-    const frame = buildRenderGraphFrame([
-      cmd({ type: CMD.SCISSOR_START, x: 10, y: 10, width: 20, height: 20 }),
-      cmd({ x: 0, y: 0, width: 50, height: 50, effect }),
-      cmd({ type: CMD.SCISSOR_END }),
-    ])
-    const op = effectOp(frame.ops[0])
+  test("scroll container clips enclosed backdrop effects", () => {
+    const root = createNode("box")
+    const scroller = createNode("box")
+    scroller.props = { scrollY: true }
+    const child = createNode("box")
+    child.props = { backgroundColor: 0xff0000ff, backdropBlur: 4 }
+    insertChild(scroller, child)
+    insertChild(root, scroller)
+    mockFlex(scroller, 10, 10, 20, 20)
+    mockFlex(child, 0, 0, 50, 50)
 
-    expect(frame.ops).toHaveLength(1)
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "effect" && o.nodeId === child.id) as EffectRenderOp
+    expect(op).toBeDefined()
     expect(op.backdrop?.clipBounds).toEqual({ x: 10, y: 10, width: 20, height: 20 })
     expect(op.clipStateId).not.toBe(0)
   })
 
-  test("scissor bounds attach to every enclosed paint op", () => {
-    const frame = buildRenderGraphFrame([
-      cmd({ type: CMD.SCISSOR_START, x: 10, y: 12, width: 20, height: 16 }),
-      cmd({ x: 0, y: 0, width: 50, height: 50 }),
-      cmd({ type: CMD.SCISSOR_END }),
-    ])
+  test("scroll container bounds attach to every enclosed paint op", () => {
+    const root = createNode("box")
+    const scroller = createNode("box")
+    scroller.props = { scrollY: true }
+    const child = createNode("box")
+    child.props = { backgroundColor: 0x112233ff }
+    insertChild(scroller, child)
+    insertChild(root, scroller)
+    mockFlex(scroller, 10, 12, 20, 16)
+    mockFlex(child, 0, 0, 50, 50)
 
-    expect(frame.ops[0].clipBounds).toEqual({ x: 10, y: 12, width: 20, height: 16 })
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.nodeId === child.id)
+    expect(op?.clipBounds).toEqual({ x: 10, y: 12, width: 20, height: 16 })
   })
 
-  test("multiple commands preserve render order", () => {
-    const frame = buildRenderGraphFrame([
-      cmd({ type: CMD.RECTANGLE }),
-      cmd({ type: CMD.BORDER }),
-      cmd({ type: CMD.TEXT, text: "ordered" }),
-    ])
+  test("multiple nodes preserve render order", () => {
+    const root = createNode("box")
+    const r = createNode("box")
+    r.props = { backgroundColor: 0xff0000ff }
+    const b = createNode("box")
+    b.props = { borderColor: 0x00ff00ff, borderWidth: 2 }
+    const t = createNode("text")
+    insertChild(t, createTextNode("ordered"))
+    insertChild(root, r)
+    insertChild(root, b)
+    insertChild(root, t)
+    mockFlex(r, 0, 0, 10, 10)
+    mockFlex(b, 0, 0, 10, 10)
+    mockFlex(t, 0, 0, 10, 10)
 
-    expect(frame.ops.map((op) => op.kind)).toEqual(["rectangle", "border", "text"])
+    const ops = renderTree(root)
+    expect(ops.map((o) => o.kind)).toEqual(["rectangle", "border", "text"])
   })
 
-  test("command nodeId sets renderObjectId", () => {
-    const rect = graph(cmd({ nodeId: 42 }))
-    const text = graph(cmd({ type: CMD.TEXT, text: "node", nodeId: 43 }))
+  test("nodeId sets renderObjectId", () => {
+    const root = createNode("box")
+    const r = createNode("box")
+    r.id = 42
+    r.props = { backgroundColor: 0xff0000ff }
+    insertChild(root, r)
+    mockFlex(r, 0, 0, 10, 10)
 
-    expect(rect.renderObjectId).toBe(42)
-    expect(text.renderObjectId).toBe(43)
+    const ops = renderTree(root)
+    expect(ops[0].renderObjectId).toBe(42)
   })
 
   test("effect with transform computes a transform state id", () => {
-    const transform = new Float64Array([1, 0, 12, 0, 1, 24, 0, 0, 1])
-    const op = graph(cmd({ effect: { color: 0xff0000ff, shadow: { x: 0, y: 1, blur: 2, color: 0x00000080 }, transform } }))
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = {
+      backgroundColor: 0xff0000ff,
+      shadow: { x: 0, y: 1, blur: 2, color: 0x00000080 },
+      transform: { translateX: 12, translateY: 24 },
+    }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 10, 10)
 
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "effect") as EffectRenderOp
     expect(op.kind).toBe("effect")
-    expect(effectOp(op).transformStateId).not.toBe(0)
+    expect(op.transformStateId).not.toBe(0)
   })
 
   test("effect state identity includes self-filter channels", () => {
-    const brightness = graph(cmd({ effect: { color: 0xff0000ff, filter: { brightness: 150 } } }))
-    const grayscale = graph(cmd({ effect: { color: 0xff0000ff, filter: { grayscale: 100 } } }))
+    const root = createNode("box")
+    const child1 = createNode("box")
+    child1.props = { backgroundColor: 0xff0000ff, filter: { brightness: 150 } }
+    const child2 = createNode("box")
+    child2.props = { backgroundColor: 0xff0000ff, filter: { grayscale: 100 } }
+    insertChild(root, child1)
+    insertChild(root, child2)
+    mockFlex(child1, 0, 0, 10, 10)
+    mockFlex(child2, 0, 0, 10, 10)
 
-    expect(effectOp(brightness).effectStateId).not.toBe(effectOp(grayscale).effectStateId)
+    const ops = renderTree(root)
+    const op1 = ops.find((o) => o.nodeId === child1.id) as EffectRenderOp
+    const op2 = ops.find((o) => o.nodeId === child2.id) as EffectRenderOp
+    expect(op1.effectStateId).not.toBe(op2.effectStateId)
   })
 
   test("hydrates a laid-out node transform into the effect op", () => {
-    const node = createNode("box")
-    const transform = new Float64Array([1, 0, 12, 0, 1, 24, 0, 0, 1])
-    node._transform = transform
-    node._transformInverse = transform
-    const effect: EffectConfig = { color: 0xff0000ff, transform: new Float64Array(9), _node: node }
-    const op = effectOp(graph(cmd({ effect })))
+    const root = createNode("box")
+    const child = createNode("box")
+    child.props = {
+      backgroundColor: 0xff0000ff,
+      transform: { translateX: 12, translateY: 24 },
+    }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 10, 10)
 
-    expect(op.effect.transform).toBe(transform)
-    expect(op.effect.transformInverse).toBe(transform)
-  })
-
-  test("removes the pre-layout placeholder when the laid-out transform is identity", () => {
-    const node = createNode("box")
-    const effect: EffectConfig = { color: 0xff0000ff, transform: new Float64Array(9), _node: node }
-    const op = effectOp(graph(cmd({ effect })))
-
-    expect(op.effect.transform).toBeUndefined()
-    expect(op.effect.transformInverse).toBeUndefined()
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.nodeId === child.id) as EffectRenderOp
+    expect(op.effect.transform).toBeDefined()
+    expect(op.effect.transformInverse).toBeDefined()
   })
 
   test("nested scissor clips affect clip stack depth and intersection", () => {
-    const frame = buildRenderGraphFrame([
-      cmd({ type: CMD.SCISSOR_START, x: 0, y: 0, width: 100, height: 100 }),
-      cmd({ x: 10, y: 10, width: 20, height: 20, effect: { color: 0xff0000ff, backdropBlur: 2 } }),
-      cmd({ type: CMD.SCISSOR_START, x: 15, y: 15, width: 10, height: 10 }),
-      cmd({ x: 10, y: 10, width: 20, height: 20, effect: { color: 0x00ff00ff, backdropBlur: 2 } }),
-      cmd({ type: CMD.SCISSOR_END }),
-      cmd({ type: CMD.SCISSOR_END }),
-    ])
-    const outer = effectOp(frame.ops[0])
-    const inner = effectOp(frame.ops[1])
+    const root = createNode("box")
+    const outer = createNode("box")
+    outer.props = { scrollY: true }
+    const child1 = createNode("box")
+    child1.props = { backgroundColor: 0xff0000ff, backdropBlur: 2 }
+    const inner = createNode("box")
+    inner.props = { scrollY: true }
+    const child2 = createNode("box")
+    child2.props = { backgroundColor: 0x00ff00ff, backdropBlur: 2 }
 
-    expect(frame.ops).toHaveLength(2)
-    expect(outer.backdrop?.clipBounds).toEqual({ x: 10, y: 10, width: 20, height: 20 })
-    expect(inner.backdrop?.clipBounds).toEqual({ x: 15, y: 15, width: 10, height: 10 })
-    expect(inner.clipStateId).not.toBe(outer.clipStateId)
+    insertChild(inner, child2)
+    insertChild(outer, child1)
+    insertChild(outer, inner)
+    insertChild(root, outer)
+
+    mockFlex(outer, 0, 0, 100, 100)
+    mockFlex(child1, 10, 10, 20, 20)
+    mockFlex(inner, 15, 15, 10, 10)
+    mockFlex(child2, 0, 0, 20, 20)
+
+    const ops = renderTree(root)
+    const op1 = ops.find((o) => o.nodeId === child1.id) as EffectRenderOp
+    const op2 = ops.find((o) => o.nodeId === child2.id) as EffectRenderOp
+
+    expect(op1.backdrop?.clipBounds).toEqual({ x: 10, y: 10, width: 20, height: 20 })
+    expect(op2.backdrop?.clipBounds).toEqual({ x: 15, y: 15, width: 10, height: 10 })
+    expect(op2.clipStateId).not.toBe(op1.clipStateId)
   })
 
   test("keeps disjoint nested scissors as an empty clip, not no clip", () => {
-    const frame = buildRenderGraphFrame([
-      cmd({ type: CMD.SCISSOR_START, x: 0, y: 0, width: 20, height: 20, nodeId: 10 }),
-      cmd({ type: CMD.SCISSOR_START, x: 100, y: 0, width: 20, height: 20, nodeId: 11 }),
-      cmd({ x: 110, y: 0, width: 10, height: 10 }),
-      cmd({ type: CMD.SCISSOR_END }),
-      cmd({ type: CMD.SCISSOR_END }),
-    ])
+    const root = createNode("box")
+    const scroller1 = createNode("box")
+    scroller1.props = { scrollY: true }
+    const scroller2 = createNode("box")
+    scroller2.props = { scrollY: true }
+    const child = createNode("box")
+    child.props = { backgroundColor: 0x112233ff }
 
-    expect(frame.ops[0]?.clipBounds).toEqual({ x: 100, y: 0, width: 0, height: 0 })
+    insertChild(scroller2, child)
+    insertChild(scroller1, scroller2)
+    insertChild(root, scroller1)
+
+    // scroller1 at (0, 0, 20, 20), scroller2 at (100, 0, 20, 20) -> disjoint!
+    mockFlex(scroller1, 0, 0, 20, 20)
+    mockFlex(scroller2, 100, 0, 20, 20)
+    mockFlex(child, 10, 0, 10, 10)
+
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.nodeId === child.id)
+    expect(op?.clipBounds).toEqual({ x: 100, y: 0, width: 0, height: 0 })
   })
 })

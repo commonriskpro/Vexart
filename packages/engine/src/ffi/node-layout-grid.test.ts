@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createNode, createTextNode, insertChild, parseSizing } from "./node"
 import { syncAllLayoutProps } from "./flex-sync"
-import { writeLayoutBack } from "../loop/layout"
+import { traverseFrame } from "../loop/pipeline-traverse"
 import { createVexartLayoutCtx } from "../loop/layout-adapter"
 import { walkTree, type WalkTreeState } from "../loop/walk-tree"
 import type { TGENode, TGEProps } from "./node"
@@ -37,8 +37,27 @@ function frame(root: TGENode, width = 200, height = 100) {
     layout,
   }
   walkTree(root, state)
-  layout.endLayout(root._flexNode)
-  return { layout, map: layout.getLastLayoutMap()!, state }
+  const calcResult = root._flexNode?.calculateLayout(width, height)
+  const isError = Boolean(calcResult && typeof calcResult === "object" && "error" in calcResult && (calcResult as any).error)
+
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  if (isError) {
+    return {
+      layout,
+      state,
+      result: { success: false, layerBuckets: [], hasAnyTransforms: false, error: (calcResult as any).error },
+    }
+  }
+
+  const result = traverseFrame(root, state, width, height)
+  return { layout, state, result }
 }
 
 function rect(node: TGENode) {
@@ -46,7 +65,7 @@ function rect(node: TGENode) {
 }
 
 describe("Node/layout Grid integration", () => {
-  test("writes the single layout map to box and text nodes and damages only transitions", () => {
+  test("writes layout directly to box and text nodes and computes transform", () => {
     const childBox = box({ width: 200, height: 40 })
     const text = createNode("text")
     insertChild(text, createTextNode("grid text"))
@@ -62,30 +81,19 @@ describe("Node/layout Grid integration", () => {
     syncTree(root)
 
     const first = frame(root)
-    const pending: Array<{ nodeId: number; rect: { x: number; y: number; width: number; height: number } }> = []
-    expect(writeLayoutBack(first.map, {
-      rectNodes: first.state.rectNodes,
-      textNodes: first.state.textNodes,
-      boxNodes: first.state.boxNodes,
-      pendingNodeDamageRects: pending,
-    })).toBe(true)
-    expect(rect(root)).toEqual({ x: first.map.get(root.id)!.x, y: first.map.get(root.id)!.y, width: first.map.get(root.id)!.width, height: first.map.get(root.id)!.height })
-    expect(rect(childBox)).toEqual({ x: first.map.get(childBox.id)!.x, y: first.map.get(childBox.id)!.y, width: first.map.get(childBox.id)!.width, height: first.map.get(childBox.id)!.height })
-    expect(rect(text)).toEqual({ x: first.map.get(text.id)!.x, y: first.map.get(text.id)!.y, width: first.map.get(text.id)!.width, height: first.map.get(text.id)!.height })
-    expect(pending.map((entry) => entry.nodeId)).toEqual([root.id, childBox.id, text.id])
+    expect(first.result.success).toBe(true)
+    expect(rect(root)).toEqual({ x: 0, y: 0, width: 200, height: 100 })
+    expect(rect(childBox)).toEqual({ x: 0, y: 0, width: 200, height: 40 })
+    expect(rect(text)).toEqual({ x: 200, y: 0, width: 8, height: 40 })
     expect(root._transform).not.toBeNull()
 
     first.layout.destroy()
 
     const second = frame(root)
-    const noChange: Array<{ nodeId: number; rect: { x: number; y: number; width: number; height: number } }> = []
-    expect(writeLayoutBack(second.map, {
-      rectNodes: second.state.rectNodes,
-      textNodes: second.state.textNodes,
-      boxNodes: second.state.boxNodes,
-      pendingNodeDamageRects: noChange,
-    })).toBe(true)
-    expect(noChange).toEqual([])
+    expect(second.result.success).toBe(true)
+    expect(rect(root)).toEqual({ x: 0, y: 0, width: 200, height: 100 })
+    expect(rect(childBox)).toEqual({ x: 0, y: 0, width: 200, height: 40 })
+    expect(rect(text)).toEqual({ x: 200, y: 0, width: 8, height: 40 })
     expect(root._transform).not.toBeNull()
     second.layout.destroy()
   })
@@ -103,13 +111,7 @@ describe("Node/layout Grid integration", () => {
     syncTree(root)
 
     const valid = frame(root, 100, 20)
-    const initialPending: Array<{ nodeId: number; rect: { x: number; y: number; width: number; height: number } }> = []
-    expect(writeLayoutBack(valid.map, {
-      rectNodes: valid.state.rectNodes,
-      textNodes: valid.state.textNodes,
-      boxNodes: valid.state.boxNodes,
-      pendingNodeDamageRects: initialPending,
-    })).toBe(true)
+    expect(valid.result.success).toBe(true)
     const previousRoot = rect(root)
     const previousChild = rect(child)
     const previousTransform = root._transform
@@ -118,18 +120,11 @@ describe("Node/layout Grid integration", () => {
     root.props = { ...root.props, gridTemplateColumns: [{ percent: 101 }] }
     syncAllLayoutProps(root)
     const invalid = frame(root, 100, 20)
-    const pending: Array<{ nodeId: number; rect: { x: number; y: number; width: number; height: number } }> = []
-    expect(writeLayoutBack(invalid.map, {
-      rectNodes: invalid.state.rectNodes,
-      textNodes: invalid.state.textNodes,
-      boxNodes: invalid.state.boxNodes,
-      pendingNodeDamageRects: pending,
-    })).toBe(false)
+    expect(invalid.result.success).toBe(false)
 
     expect(rect(root)).toEqual(previousRoot)
     expect(rect(child)).toEqual(previousChild)
     expect(root._transform).toBe(previousTransform)
-    expect(pending).toEqual([])
     expect(root._flexNode?.getGridResult()?.error).toMatchObject({
       code: "GRID_INVALID_VALUE",
       path: "columns[0]",

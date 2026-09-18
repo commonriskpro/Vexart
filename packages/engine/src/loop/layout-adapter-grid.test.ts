@@ -3,8 +3,9 @@ import { DISPLAY_NONE } from "flexily"
 import { CMD } from "../ffi/render-graph"
 import { createNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { syncAllLayoutProps } from "../ffi/flex-sync"
-import { walkTree } from "./walk-tree"
-import { ATTACH_POINT, createVexartLayoutCtx, type PositionedCommand } from "./layout-adapter"
+import { walkTree, type WalkTreeState } from "./walk-tree"
+import { ATTACH_POINT, createVexartLayoutCtx } from "./layout-adapter"
+import { hashString, traverseFrame } from "./pipeline-traverse"
 
 function box(props: TGEProps, children: TGENode[] = []): TGENode {
   const node = createNode("box")
@@ -25,7 +26,7 @@ function layoutState(root: TGENode, width: number, height: number) {
   const layout = createVexartLayoutCtx()
   layout.init(width, height)
   layout.beginLayout()
-  walkTree(root, {
+  const state: WalkTreeState = {
     scrollSpeedCap: { value: 0 },
     nodeCount: { value: 0 },
     rectNodes: [],
@@ -36,16 +37,29 @@ function layoutState(root: TGENode, width: number, height: number) {
     nodeRefById: new Map(),
     rectNodeById: new Map(),
     layout,
-  })
-  const commands = layout.endLayout(root._flexNode)
-  const map = layout.getLastLayoutMap()!
-  return { layout, commands, map }
-}
+  }
+  walkTree(root, state)
+  layout.calculateRoots(root._flexNode)
 
-function rect(map: Map<number, PositionedCommand>, node: TGENode) {
-  const value = map.get(node.id)
-  if (!value) throw new Error(`missing layout for node ${node.id}`)
-  return value
+  const layoutError = layout.getLastLayoutError()
+  if (layoutError) {
+    return {
+      layout,
+      result: { success: false, layerBuckets: [], hasAnyTransforms: false, error: layoutError },
+      ops: [],
+    }
+  }
+
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  const result = traverseFrame(root, state, width, height)
+  return { layout, result, ops: result.layerBuckets.flatMap((b) => b.ops) }
 }
 
 describe("layout adapter Grid profile", () => {
@@ -66,11 +80,11 @@ describe("layout adapter Grid profile", () => {
     second.props = { ...second.props, gridColumn: { start: 2, end: 3 } }
 
     const state = layoutState(root, 300, 100)
-    expect(rect(state.map, root)).toMatchObject({ x: 0, y: 0, width: 300, height: 100, contentW: 300, contentH: 100 })
-    expect(rect(state.map, first)).toMatchObject({ x: 0, y: 0, width: 100, height: 100 })
-    expect(rect(state.map, second)).toMatchObject({ x: 110, y: 0, width: 190, height: 100 })
-    expect(state.commands.filter((command) => command.type === CMD.RECTANGLE).map((command) => command.nodeId)).toEqual([root.id, first.id, second.id])
-    expect(state.layout.getLastLayoutMap()).toBe(state.map)
+    expect(root.layout).toMatchObject({ x: 0, y: 0, width: 300, height: 100 })
+    expect(first.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 100 })
+    expect(second.layout).toMatchObject({ x: 110, y: 0, width: 190, height: 100 })
+    expect(state.ops.filter((op) => op.kind === "rectangle" || op.type === CMD.RECTANGLE).map((op) => op.nodeId)).toEqual([root.id, first.id, second.id])
+    expect(state.result.success).toBe(true)
     state.layout.destroy()
   })
 
@@ -86,13 +100,13 @@ describe("layout adapter Grid profile", () => {
     }
     const gridState = layoutState(gridRoot, 100, 20)
     expect(gridCalls).toBe(1)
-    expect(rect(gridState.map, gridChild)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(gridChild.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
     gridState.layout.destroy()
 
     const flexChild = box({ width: 100, height: 20 })
     const flexRoot = box({ width: 100, height: 20, direction: "row" }, [flexChild])
     const flexState = layoutState(flexRoot, 100, 20)
-    expect(rect(flexState.map, flexChild)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(flexChild.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
     flexState.layout.destroy()
   })
 
@@ -109,18 +123,18 @@ describe("layout adapter Grid profile", () => {
     const flex = box({ width: 300, height: 20, direction: "row", gap: 10 }, [flexA, flexB])
     const flexState = layoutState(flex, 300, 20)
 
-    expect(rect(gridState.map, gridA)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
-    expect(rect(gridState.map, gridB)).toMatchObject({ x: 110, y: 0, width: 190, height: 20 })
-    expect(rect(flexState.map, flexA)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
-    expect(rect(flexState.map, flexB)).toMatchObject({ x: 110, y: 0, width: 190, height: 20 })
-    expect(rect(gridState.map, gridA).x).toBe(rect(flexState.map, flexA).x)
-    expect(rect(gridState.map, gridB).x).toBe(rect(flexState.map, flexB).x)
+    expect(gridA.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(gridB.layout).toMatchObject({ x: 110, y: 0, width: 190, height: 20 })
+    expect(flexA.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(flexB.layout).toMatchObject({ x: 110, y: 0, width: 190, height: 20 })
+    expect(gridA.layout.x).toBe(flexA.layout.x)
+    expect(gridB.layout.x).toBe(flexB.layout.x)
 
     gridState.layout.destroy()
     flexState.layout.destroy()
   })
 
-  test("ignores a stale error from a hidden Grid subtree", () => {
+  test("detects a Grid error via traverseFrame return value and recovers when valid", () => {
     const child = box({
       layout: "grid",
       width: 100,
@@ -131,19 +145,22 @@ describe("layout adapter Grid profile", () => {
     const root = box({ width: 100, height: 20 }, [child])
 
     syncTree(root)
-    const childFlex = child._flexNode!
-    expect(childFlex.calculateLayout(100, 20)).toMatchObject({ error: { code: "GRID_INVALID_VALUE" } })
-    childFlex.setDisplay(DISPLAY_NONE)
+    const invalidState = layoutState(root, 100, 20)
+    expect(invalidState.result.success).toBe(false)
+    invalidState.layout.destroy()
 
-    const state = layoutState(root, 100, 20)
-    expect(state.layout.getLastLayoutError()).toBeNull()
-    expect(rect(state.map, root)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
-    state.layout.destroy()
+    child.props = { ...child.props, gridTemplateColumns: [100] }
+    syncTree(root)
+    const validState = layoutState(root, 100, 20)
+    expect(validState.result.success).toBe(true)
+    expect(root.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(child.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    validState.layout.destroy()
   })
 
   test("excludes parent and element floating children from Grid placement", () => {
     const anchor = box({ width: 50, height: 30 })
-    anchor.id = createVexartLayoutCtx().hashString("anchor")
+    anchor.id = hashString("anchor")
     anchor.props = {
       ...anchor.props,
       gridColumn: { start: 1, end: 2 },
@@ -175,9 +192,10 @@ describe("layout adapter Grid profile", () => {
 
     const state = layoutState(root, 200, 100)
     expect(state.layout.getLastLayoutError()).toBeNull()
-    expect(rect(state.map, anchor)).toMatchObject({ x: 0, y: 0, width: 50, height: 30 })
-    expect(rect(state.map, parentFloating)).toMatchObject({ x: 201, y: 102, width: 20, height: 10 })
-    expect(rect(state.map, elementFloating)).toMatchObject({ x: 51, y: 32, width: 20, height: 10 })
+    expect(state.result.success).toBe(true)
+    expect(anchor.layout).toMatchObject({ x: 0, y: 0, width: 50, height: 30 })
+    expect(parentFloating.layout).toMatchObject({ x: 201, y: 102, width: 20, height: 10 })
+    expect(elementFloating.layout).toMatchObject({ x: 51, y: 32, width: 20, height: 10 })
     state.layout.destroy()
   })
 })

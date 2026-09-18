@@ -24,15 +24,10 @@ import { isLayoutProp } from "../ffi/flex-sync"
 
 import { debugFrameStart, debugUpdateStats, isDebugEnabled } from "./debug"
 import {
-  writeLayoutBack as _writeLayoutBack,
   updateInteractiveStates as _updateInteractiveStates,
   type InteractiveStatesBag,
 } from "./layout"
 import { setActiveScrollOffsets } from "../reconciler/hit-test"
-import {
-  assignLayersSpatial as _assignLayersSpatial,
-  type AssignLayersState,
-} from "./assign-layers"
 import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking } from "./types"
 export type { FrameProfile } from "./types"
 import {
@@ -50,10 +45,13 @@ import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } fr
 import { unionRect, type DamageRect } from "../ffi/damage"
 import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
+import { traverseFrame } from "./pipeline-traverse"
+import { applyScrollOffsetsToOps } from "./pipeline-scroll"
+import type { LayerOpBucket } from "./pipeline-types"
 
 
 import { DIRTY_KIND, isLayoutDirty, clearLayoutDirty, markLayoutDirty } from "../reconciler/dirty"
-import { routeScrollDeltas, applyScrollOffsets } from "./composite-scroll"
+import { routeScrollDeltas } from "./composite-scroll"
 import { buildRetainedCompositorLayers } from "./composite-retained"
 
 let layerDirtyStore: Map<string, Layer> | null = null
@@ -197,7 +195,11 @@ export type CompositeFrameState = {
 
   debug?: unknown
 
+  // Transform flag from pipeline-traverse
+  hasAnyTransforms?: boolean
+
   // Cached layout/layer artifacts for layout-clean frame reuse
+  lastLayerBuckets?: LayerOpBucket[]
   lastCommands?: RenderCommand[]
   lastBoundaries?: LayerBoundary[]
   lastBgSlot?: LayerSlot
@@ -237,6 +239,47 @@ function syncVisualPropsToCommands(commands: RenderCommand[], nodeRefById: Map<n
   }
 }
 
+function syncVisualPropsToOps(buckets: LayerOpBucket[], nodeRefById: Map<number, TGENode>): void {
+  for (const bucket of buckets) {
+    for (const op of bucket.ops) {
+      if (op.nodeId === undefined) continue
+      const node = nodeRefById.get(op.nodeId)
+      if (!node) continue
+      const resolved = resolveProps(node)
+      if (op.kind === "rectangle") {
+        if (typeof resolved.backgroundColor === "number") op.color = resolved.backgroundColor >>> 0
+        if (typeof resolved.cornerRadius === "number") {
+          op.cornerRadius = resolved.cornerRadius
+          op.radius = resolved.cornerRadius
+        }
+      } else if (op.kind === "border") {
+        if (typeof resolved.borderColor === "number") op.color = resolved.borderColor >>> 0
+        if (typeof resolved.cornerRadius === "number") {
+          op.cornerRadius = resolved.cornerRadius
+          op.radius = resolved.cornerRadius
+        }
+        if (typeof resolved.borderWidth === "number") {
+          const bw = resolved.borderWidth
+          op.extra1 = bw
+          op.borderWidth = bw
+          op.borderWidths = {
+            left: resolved.borderLeft ?? bw,
+            right: resolved.borderRight ?? bw,
+            top: resolved.borderTop ?? bw,
+            bottom: resolved.borderBottom ?? bw,
+          }
+        } else if (op.extra1 > 0 && (node.props.hoverStyle?.borderWidth !== undefined || node.props.activeStyle?.borderWidth !== undefined || node.props.focusStyle?.borderWidth !== undefined)) {
+          op.extra1 = 0
+          op.borderWidth = 0
+          if (typeof node.props.borderColor !== "number") op.color = 0
+        }
+      } else if (op.kind === "text") {
+        if (typeof resolved.color === "number") op.color = resolved.color >>> 0
+      }
+    }
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function buildWalkState(s: CompositeFrameState): WalkTreeState {
@@ -270,39 +313,6 @@ function resetWalkAccumulators(s: CompositeFrameState) {
   s.scrollContainers.length = 0
   s.nodeCountValue.value = 0
   s.nodeRefById.clear()
-}
-
-function writeLayoutBack(s: CompositeFrameState): boolean {
-  const layoutMap = s.layoutAdapter.getLastLayoutMap()
-  return _writeLayoutBack(layoutMap, {
-    rectNodes: s.rectNodes,
-    textNodes: s.textNodes,
-    boxNodes: s.boxNodes,
-    pendingNodeDamageRects: s.pendingNodeDamageRects,
-    scrollOffsets: s.scrollOffsets,
-  })
-}
-
-function runLayoutPass(s: CompositeFrameState, profile?: FrameProfile): RenderCommand[] | null {
-  resetWalkAccumulators(s)
-  s.layoutAdapter.beginLayout()
-  const walkStart = profile ? performance.now() : 0
-  walkTreeOnce(s)
-  if (profile) profile.walkTreeMs = performance.now() - walkStart
-  const layoutComputeStart = profile ? performance.now() : 0
-  const commands = s.layoutAdapter.endLayout(s.root._flexNode, s.nodeRefById)
-  if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
-  const layoutError = s.layoutAdapter.getLastLayoutError()
-  if (layoutError) {
-    return null
-  }
-  const layoutWritebackStart = profile ? performance.now() : 0
-  if (!writeLayoutBack(s)) {
-    return null
-  }
-  applyScrollOffsets(commands, s, markLayerDirtyByKey)
-  if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
-  return commands
 }
 
 // HP-6: Scroll offsets applied lazily via composite-scroll.ts
@@ -547,54 +557,92 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   const isStateLayoutDirty = typeof (s.dirty as any).isLayoutDirty === "function"
     ? (s.dirty as any).isLayoutDirty()
     : isLayoutDirty()
-  const layoutDirty = (s.lastCommands === undefined)
+  const layoutDirty = (s.lastLayerBuckets === undefined)
     || (s.root._flexNode?.isDirty?.() ?? false)
     || isStateLayoutDirty
     || layoutChanged
     || s.forceLayerRepaint
 
-  let commands: RenderCommand[] | null = null
+  let layerBuckets: LayerOpBucket[] | null = null
   let boundaries: LayerBoundary[] = []
   let bgSlot: LayerSlot
   let contentSlots: LayerSlot[]
   let slotBoundaryByKey: Map<string, LayerBoundary>
 
-  if (!layoutDirty && s.lastCommands) {
-    commands = s.lastCommands
+  if (!layoutDirty && s.lastLayerBuckets) {
+    layerBuckets = s.lastLayerBuckets
+    syncVisualPropsToOps(layerBuckets, s.nodeRefById)
     boundaries = s.lastBoundaries ?? []
     bgSlot = s.lastBgSlot!
     contentSlots = s.lastContentSlots ?? []
     slotBoundaryByKey = s.lastSlotBoundaryByKey ?? new Map()
-    syncVisualPropsToCommands(commands, s.nodeRefById)
     if (profile) {
       profile.walkTreeMs = 0
       profile.layoutComputeMs = 0
       profile.layoutWritebackMs = 0
       profile.layoutMs = performance.now() - layoutStart
       profile.layerAssignMs = 0
-      profile.commands = commands.length
+      profile.commands = layerBuckets.reduce((sum, b) => sum + b.ops.length, 0)
       profile.dirtyBefore = dirtyBeforeFrame
     }
   } else {
-    commands = runLayoutPass(s, profile)
-    if (!commands) {
+    resetWalkAccumulators(s)
+    s.layoutAdapter.beginLayout()
+    const walkStart = profile ? performance.now() : 0
+    walkTreeOnce(s)
+    if (profile) profile.walkTreeMs = performance.now() - walkStart
+    const layoutComputeStart = profile ? performance.now() : 0
+    s.layoutAdapter.calculateRoots(s.root._flexNode)
+    if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
+    const layoutError = s.layoutAdapter.getLastLayoutError()
+    if (layoutError) {
       if (profile) profile.layoutMs = performance.now() - layoutStart
-      // Keep the dirty bit and pending damage: this frame was not presented and
-      // must be retried after the Grid snapshot is corrected.
       return
     }
 
+    // Step 2: Clear arrays that traverseFrame will repopulate
+    s.rectNodes.length = 0
+    s.textNodes.length = 0
+    s.boxNodes.length = 0
+    s.nodeRefById.clear()
+    s.rectNodeById.clear()
+    s.scrollContainers.length = 0
+    s.layerBoundaries.length = 0
+
+    // Step 3: Run the new pipeline pass 1
+    const layoutWritebackStart = profile ? performance.now() : 0
+    const traversalResult = traverseFrame(s.root, buildWalkState(s), s.viewportWidth, s.viewportHeight)
+    if (!traversalResult.success) {
+      if (profile) profile.layoutMs = performance.now() - layoutStart
+      return
+    }
+    s.hasAnyTransforms = traversalResult.hasAnyTransforms
+
+    // Step 4: Run the new pipeline pass 2 (scroll offsets on ops)
+    const newScrollOffsets = applyScrollOffsetsToOps(
+      traversalResult.layerBuckets,
+      s.scrollContainers,
+      s.nodeRefById,
+      s.scrollOffsets,
+    )
+    s.scrollOffsets = newScrollOffsets
+    if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
     if (profile) profile.layoutMs = performance.now() - layoutStart
 
-    if (commands.length === 0) {
-      s.dirty.clearDirty(dirtyVersionForFrame)
-      return
-    }
-
+    // Step 5: Clear layout dirty flags
+    clearLayoutDirty()
     if (typeof (s.dirty as any).clearLayoutDirty === "function") {
       (s.dirty as any).clearLayoutDirty()
     }
-    clearLayoutDirty()
+
+    layerBuckets = traversalResult.layerBuckets
+    s.lastLayerBuckets = layerBuckets
+
+    const totalOps = layerBuckets.reduce((sum, b) => sum + b.ops.length, 0)
+    if (totalOps === 0) {
+      s.dirty.clearDirty(dirtyVersionForFrame)
+      return
+    }
 
     const prepStart = s.debugCadence ? performance.now() : 0
     const layerAssignStart = profile ? performance.now() : 0
@@ -603,21 +651,32 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     boundaries = s.forceLayerRepaint
       ? s.layerBoundaries.filter((boundary) => s.nodeRefById.get(boundary.nodeId)?._autoLayer !== true)
       : s.layerBoundaries
-    const assignState: AssignLayersState = { root: s.root, collectText, nodeRefById: s.nodeRefById, scrollContainers: s.scrollContainers }
-    const assignResult = _assignLayersSpatial(commands, boundaries, assignState)
-    bgSlot = assignResult.bgSlot
-    contentSlots = assignResult.contentSlots
-    slotBoundaryByKey = assignResult.slotBoundaryByKey
 
-    if (contentSlots.length === 0 && commands.length > bgSlot.cmdIndices.length) {
-      const fallbackSlot: LayerSlot = { key: "layer:fallback", z: 0, cmdIndices: [] }
-      for (let i = 0; i < commands.length; i++) {
-        if (!bgSlot.cmdIndices.includes(i)) fallbackSlot.cmdIndices.push(i)
+    const bgBucket = layerBuckets[0]
+    bgSlot = { key: bgBucket?.key ?? "root", z: -1, cmdIndices: [] }
+    contentSlots = []
+    slotBoundaryByKey = new Map()
+
+    for (let i = 1; i < layerBuckets.length; i++) {
+      const bucket = layerBuckets[i]
+      const boundary = boundaries.find((b) => b.nodeId === bucket.nodeId)
+      if (boundary) {
+        slotBoundaryByKey.set(bucket.key, boundary)
       }
-      if (fallbackSlot.cmdIndices.length > 0) contentSlots.push(fallbackSlot)
+      contentSlots.push({
+        key: bucket.key,
+        z: boundary ? boundary.z : i,
+        cmdIndices: [],
+      })
     }
 
-    s.lastCommands = commands
+    const flatCommands: RenderCommand[] = []
+    for (const b of layerBuckets) {
+      for (const op of b.ops) {
+        flatCommands.push(op as unknown as RenderCommand)
+      }
+    }
+    s.lastCommands = flatCommands
     s.lastBoundaries = boundaries
     s.lastBgSlot = bgSlot
     s.lastContentSlots = contentSlots
@@ -626,7 +685,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     if (profile) {
       profile.layerAssignMs = performance.now() - layerAssignStart
       profile.prepMs = performance.now() - prepStart
-      profile.commands = commands.length
+      profile.commands = totalOps
       profile.dirtyBefore = dirtyBeforeFrame
     }
   }
@@ -660,9 +719,10 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     backendOverride: s.backendOverride,
     interaction: s.interaction,
     profile,
+    layerBuckets: layerBuckets ?? undefined,
   }
   const layerPlan = { bgSlot, contentSlots, slotBoundaryByKey, boundaries }
-  const paintResult = _paintFrame(layerPlan, commands, cellW, cellH, paintState)
+  const paintResult = _paintFrame(layerPlan, s.lastCommands ?? [], cellW, cellH, paintState, layerBuckets ?? undefined)
   s.pendingNodeDamageRects.length = 0
 
   // Write back interaction latency from paint state bag

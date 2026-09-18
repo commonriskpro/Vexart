@@ -388,54 +388,6 @@ function createTextRenderOp(cmd: RenderCommand, renderObjectId: number | null): 
   }
 }
 
-function createRenderBounds(x: number, y: number, width: number, height: number): RenderBounds {
-  return {
-    x: Math.round(x),
-    y: Math.round(y),
-    width: Math.max(0, Math.round(width)),
-    height: Math.max(0, Math.round(height)),
-  }
-}
-
-function boundsFromCommand(cmd: RenderCommand): RenderBounds {
-  return createRenderBounds(cmd.x, cmd.y, cmd.width, cmd.height)
-}
-
-function intersectBounds(a: RenderBounds, b: RenderBounds): RenderBounds | null {
-  const left = Math.max(a.x, b.x)
-  const top = Math.max(a.y, b.y)
-  const right = Math.min(a.x + a.width, b.x + b.width)
-  const bottom = Math.min(a.y + a.height, b.y + b.height)
-  if (right <= left || bottom <= top) return null
-  return createRenderBounds(left, top, right - left, bottom - top)
-}
-
-function expandBounds(bounds: RenderBounds, pad: number) {
-  if (pad <= 0) return bounds
-  return createRenderBounds(bounds.x - pad, bounds.y - pad, bounds.width + pad * 2, bounds.height + pad * 2)
-}
-
-function getCurrentClipBounds(stack: ClipStackEntry[]) {
-  let bounds: RenderBounds | null = null
-  for (let index = 0; index < stack.length; index++) {
-    const entry = stack[index]
-    bounds = bounds ? intersectBounds(bounds, entry.bounds) : entry.bounds
-    if (!bounds) {
-      // Keep an empty clip distinguishable from an absent clip. The backend
-      // treats a zero-area scissor as "paint nothing"; null means that no
-      // scissor is active and must not accidentally become unrestricted.
-      const last = stack[index - 1] ?? entry
-      return createRenderBounds(
-        Math.max(last.bounds.x, entry.bounds.x),
-        Math.max(last.bounds.y, entry.bounds.y),
-        0,
-        0,
-      )
-    }
-  }
-  return bounds
-}
-
 function getBackdropFilterParams(effect: EffectConfig): BackdropFilterParams {
   const params = {} as BackdropFilterParams
   for (let i = 0; i < BACKDROP_FIELDS.length; i++) {
@@ -567,65 +519,6 @@ function createClipStateId(stack: ClipStackEntry[]) {
   return h >>> 0
 }
 
-function createBackdropSourceKey(effect: EffectConfig, clipStateId: number, transformStateId: number) {
-  const node = effect._node
-  const parentId = node?.parent?.id ?? 0
-  const layerId = node?.props.layer ? node.id : parentId
-  return `backdrop-source:layer:${layerId}:parent:${parentId}:${clipStateId}:${transformStateId}`
-}
-
-function createBackdropMetadata(effect: EffectConfig, command: RenderCommand, clipStack: ClipStackEntry[]): BackdropRenderMetadata | null {
-  if (!hasBackdropEffect(effect)) return null
-  const inputBounds = boundsFromCommand(command)
-  const stackClipBounds = getCurrentClipBounds(clipStack)
-  const clipBounds = stackClipBounds
-    ? intersectBounds(inputBounds, stackClipBounds) ?? createRenderBounds(stackClipBounds.x, stackClipBounds.y, 0, 0)
-    : inputBounds
-  const outputBounds = clipBounds
-  const blurPad = effect.backdropBlur ? Math.ceil(effect.backdropBlur) : 0
-  const sampleBounds = expandBounds(outputBounds, blurPad)
-  const filterParams = getBackdropFilterParams(effect)
-  const transformStateId = getTransformStateId(effect)
-  const clipStateId = createClipStateId(clipStack)
-  const effectStateId = getEffectStateId(effect, Math.round(command.cornerRadius))
-  return {
-    backdropSourceKey: createBackdropSourceKey(effect, clipStateId, transformStateId),
-    filterKind: getBackdropFilterKind(filterParams),
-    filterParams,
-    inputBounds,
-    sampleBounds,
-    outputBounds,
-    clipBounds,
-    transformStateId,
-    clipStateId,
-    effectStateId,
-  }
-}
-
-function createClipStackEntry(cmd: RenderCommand, depth: number): ClipStackEntry {
-  const bounds = boundsFromCommand(cmd)
-  const id = hashU32Scratch(depth, bounds.x, bounds.y, bounds.width, bounds.height)
-  return {
-    bounds,
-    id,
-    nodeId: cmd.nodeId,
-  }
-}
-
-function hashU32Scratch(a: number, b: number, c: number, d: number, e: number) {
-  let h = 0x811c9dc5
-  const mix = (input: number) => {
-    let value = input >>> 0
-    for (let i = 0; i < 4; i++) {
-      h ^= value & 0xff
-      h = Math.imul(h, 0x01000193)
-      value >>>= 8
-    }
-  }
-  mix(a); mix(b); mix(c); mix(d); mix(e)
-  return h >>> 0
-}
-
 /** @public */
 export function buildRenderOp(cmd: RenderCommand, ownerIds?: { rect: number | null; text: number | null }): RenderGraphOp | null {
   if (cmd.type === CMD.RECTANGLE) {
@@ -680,51 +573,4 @@ export function buildRenderOp(cmd: RenderCommand, ownerIds?: { rect: number | nu
     kind: "raw-command",
     ...createBaseRenderOpFields(cmd, null),
   }
-}
-
-/** @public */
-export function buildRenderGraphFrame(
-  commands: RenderCommand[],
-): RenderGraphFrame {
-  const ops: RenderGraphOp[] = []
-  const clipStack: ClipStackEntry[] = []
-  for (const cmd of commands) {
-    // Process SCISSOR commands for clipStack before building render ops
-    if (cmd.type === CMD.SCISSOR_START) {
-      clipStack.push(createClipStackEntry(cmd, clipStack.length))
-      continue
-    }
-    if (cmd.type === CMD.SCISSOR_END) {
-      clipStack.pop()
-      continue
-    }
-
-    // Use cmd.nodeId directly (set by layout-adapter.endLayout()).
-    // All commands carry nodeId — the legacy counter-based fallback has been removed.
-    const rectId = cmd.nodeId ?? null
-    const textId = cmd.nodeId ?? null
-    const op = buildRenderOp(cmd, {
-      rect: cmd.type === CMD.RECTANGLE ? rectId : null,
-      text: cmd.type === CMD.TEXT ? textId : null,
-    })
-    const clipBounds = getCurrentClipBounds(clipStack)
-    if (op?.kind === "effect") {
-      const backdrop = createBackdropMetadata(op.effect, cmd, clipStack)
-      const output = {
-        ...op,
-        clipBounds,
-        backdrop,
-        transformStateId: backdrop?.transformStateId ?? getTransformStateId(op.effect),
-        clipStateId: backdrop?.clipStateId ?? createClipStateId(clipStack),
-        effectStateId: backdrop?.effectStateId ?? getEffectStateId(op.effect, Math.round(op.cornerRadius)),
-      }
-      renderOpClipStacks.set(output, clipStack.length > 0 ? clipStack.slice() : EMPTY_CLIP_STACK)
-      ops.push(output)
-    } else if (op) {
-      const output = { ...op, clipBounds }
-      renderOpClipStacks.set(output, clipStack.length > 0 ? clipStack.slice() : EMPTY_CLIP_STACK)
-      ops.push(output)
-    }
-  }
-  return { ops }
 }

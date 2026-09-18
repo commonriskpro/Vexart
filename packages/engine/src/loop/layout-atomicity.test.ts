@@ -5,6 +5,7 @@ import { getRendererBackend, setRendererBackend, type RendererBackend } from "..
 import { createRenderLoop } from "./loop"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import { walkTree, type WalkTreeState } from "./walk-tree"
+import { traverseFrame } from "./pipeline-traverse"
 import { markDirty } from "../reconciler/dirty"
 
 function box(props: TGEProps, children: TGENode[] = []) {
@@ -21,7 +22,7 @@ function syncTree(node: TGENode): void {
   for (const child of node.children) syncTree(child)
 }
 
-function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>) {
+function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>, width = 200, height = 80) {
   layout.beginLayout()
   const state: WalkTreeState = {
     scrollSpeedCap: { value: 0 },
@@ -36,8 +37,24 @@ function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCt
     layout,
   }
   walkTree(root, state)
-  const commands = layout.endLayout(root._flexNode)
-  return { commands, map: layout.getLastLayoutMap(), state }
+  const calcError = layout.calculateRoots(root._flexNode)
+  if (calcError) {
+    return {
+      state,
+      result: { success: false, layerBuckets: [], hasAnyTransforms: false, error: calcError },
+    }
+  }
+
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  const result = traverseFrame(root, state, width, height)
+  return { state, result }
 }
 
 function mockTerminal(width: number, height: number) {
@@ -88,7 +105,7 @@ afterEach(() => {
 })
 
 describe("Grid layout pipeline atomicity", () => {
-  test("preserves the published map and commands when a nested Grid becomes invalid", () => {
+  test("preserves node.layout when a nested Grid becomes invalid", () => {
     const child = box({
       layout: "grid",
       width: 100,
@@ -101,28 +118,30 @@ describe("Grid layout pipeline atomicity", () => {
 
     const layout = createVexartLayoutCtx()
     layout.init(200, 80)
-    const valid = walkFrame(root, layout)
-    const previousMap = valid.map
-    const previousCommands = valid.commands
-    expect(previousMap?.get(child.id)).toMatchObject({ width: 100, height: 40 })
+    const valid = walkFrame(root, layout, 200, 80)
+    expect(valid.result.success).toBe(true)
+    expect(child.layout).toMatchObject({ width: 100, height: 40 })
     expect(layout.getLastLayoutError()).toBeNull()
+
+    const previousRootLayout = { ...root.layout }
+    const previousChildLayout = { ...child.layout }
 
     child.props = { ...child.props, gridTemplateColumns: [{ percent: 101 }] }
     syncTree(root)
-    const invalid = walkFrame(root, layout)
+    const invalid = walkFrame(root, layout, 200, 80)
 
     expect(layout.getLastLayoutError()).toMatchObject({
       code: "GRID_INVALID_VALUE",
       path: "columns[0]",
       nodeId: child._flexNode?.getGridNodeId(),
     })
-    expect(invalid.map).toBe(previousMap)
-    expect(invalid.commands).toBe(previousCommands)
-    expect(invalid.map?.get(child.id)).toMatchObject({ width: 100, height: 40 })
+    expect(invalid.result.success).toBe(false)
+    expect(root.layout).toEqual(previousRootLayout)
+    expect(child.layout).toEqual(previousChildLayout)
     layout.destroy()
   })
 
-  test("does not publish a map or commands for an initial Grid error", () => {
+  test("does not update node.layout for an initial Grid error", () => {
     const root = box({
       layout: "grid",
       width: 100,
@@ -134,11 +153,51 @@ describe("Grid layout pipeline atomicity", () => {
 
     const layout = createVexartLayoutCtx()
     layout.init(100, 20)
-    const result = walkFrame(root, layout)
+    const result = walkFrame(root, layout, 100, 20)
 
-    expect(result.commands).toEqual([])
-    expect(layout.getLastLayoutMap()).toBeNull()
+    expect(result.result.success).toBe(false)
+    expect(root.layout).toEqual({ x: 0, y: 0, width: 0, height: 0 })
     expect(layout.getLastLayoutError()).toMatchObject({ code: "GRID_INVALID_VALUE", path: "columns[0]" })
+    layout.destroy()
+  })
+
+  test("atomically restores node.layout when calculation or traversal throws", () => {
+    const child = box({ width: 60, height: 30 })
+    const root = box({ width: 200, height: 80 }, [child])
+    syncTree(root)
+
+    const layout = createVexartLayoutCtx()
+    layout.init(200, 80)
+    const valid = walkFrame(root, layout, 200, 80)
+    expect(valid.result.success).toBe(true)
+    expect(child.layout).toMatchObject({ width: 60, height: 30 })
+    const previousRoot = { ...root.layout }
+    const previousChild = { ...child.layout }
+
+    const flex = child._flexNode!
+    const originalLeft = flex.getComputedLeft.bind(flex)
+    flex.getComputedLeft = () => {
+      throw new Error("Injected layout solver failure")
+    }
+
+    const state: WalkTreeState = {
+      scrollSpeedCap: { value: 0 },
+      nodeCount: { value: 0 },
+      rectNodes: [],
+      textNodes: [],
+      boxNodes: [],
+      layerBoundaries: [],
+      scrollContainers: [],
+      nodeRefById: new Map(),
+      rectNodeById: new Map(),
+      layout,
+    }
+    const result = traverseFrame(root, state, 200, 80)
+    expect(result.success).toBe(false)
+    expect(root.layout).toEqual(previousRoot)
+    expect(child.layout).toEqual(previousChild)
+
+    flex.getComputedLeft = originalLeft
     layout.destroy()
   })
 

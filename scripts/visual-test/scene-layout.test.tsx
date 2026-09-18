@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { createNode, parseSizing, resetFocus, solidRender, type TGENode } from "@vexart/engine/internal"
 import { syncAllLayoutProps } from "../../packages/engine/src/ffi/flex-sync"
 import { createVexartLayoutCtx } from "../../packages/engine/src/loop/layout-adapter"
-import { walkTree } from "../../packages/engine/src/loop/walk-tree"
+import { walkTree, type WalkTreeState } from "../../packages/engine/src/loop/walk-tree"
+import { traverseFrame } from "../../packages/engine/src/loop/pipeline-traverse"
 import { Scene as AvatarBadgeScene } from "./scenes/components-avatar-badge"
 import { Scene as BackdropBlurScene } from "./scenes/effects-backdrop-blur"
 import { Scene as GridDashboardScene } from "./scenes/grid-dashboard"
@@ -43,7 +44,7 @@ function layoutScene(scene: Scene, width: number, height: number, check: (root: 
 
   try {
     syncTree(root)
-    walkTree(root, {
+    const state: WalkTreeState = {
       scrollSpeedCap: { value: 0 },
       nodeCount: { value: 0 },
       rectNodes: [],
@@ -54,9 +55,24 @@ function layoutScene(scene: Scene, width: number, height: number, check: (root: 
       nodeRefById: new Map(),
       rectNodeById: new Map(),
       layout,
-    })
-    layout.endLayout()
-    check(root, new Map(layout.getLastLayoutMap() ?? []))
+    }
+    walkTree(root, state)
+    layout.calculateRoots(root._flexNode)
+
+    state.rectNodes.length = 0
+    state.textNodes.length = 0
+    state.boxNodes.length = 0
+    state.nodeRefById.clear()
+    state.rectNodeById.clear()
+    state.scrollContainers.length = 0
+    state.layerBoundaries.length = 0
+
+    traverseFrame(root, state, width, height)
+    const map = new Map<number, Layout>()
+    for (const [id, node] of state.nodeRefById) {
+      map.set(id, node.layout)
+    }
+    check(root, map)
   } finally {
     dispose()
     layout.destroy()
@@ -73,7 +89,7 @@ afterEach(() => resetFocus())
 
 suite("visual-test scene bounds", () => {
   test("keeps avatar badges legible in two rows", () => {
-    layoutScene(AvatarBadgeScene, 420, 320, (root, map) => {
+    layoutScene(AvatarBadgeScene, 420, 320, (root) => {
       const labels = findNodes(root, (node) => node.kind === "text" && ["Stable", "Beta", "Docs", "Alert"].includes(node.text))
       expect(labels.map((node) => node.text).sort()).toEqual(["Alert", "Beta", "Docs", "Stable"])
 
@@ -82,9 +98,9 @@ suite("visual-test scene bounds", () => {
         // Solid text leaves are nested in a mapped text wrapper; use that
         // wrapper's geometry while grouping by the containing badge row.
         const renderedLabel = label.parent ?? label
-        const labelLayout = map.get(renderedLabel.id)
+        const labelLayout = renderedLabel.layout
         const badge = renderedLabel.parent
-        const badgeLayout = badge ? map.get(badge.id) : undefined
+        const badgeLayout = badge ? badge.layout : undefined
         if (!labelLayout || !badgeLayout) throw new Error(`missing layout for ${label.text}`)
         expect(contains(badgeLayout, labelLayout)).toBe(true)
         const row = rows.get(badgeLayout.y) ?? []
@@ -98,20 +114,20 @@ suite("visual-test scene bounds", () => {
   })
 
   test("keeps all backdrop cards inside the gradient parent", () => {
-    layoutScene(BackdropBlurScene, 420, 320, (root, map) => {
+    layoutScene(BackdropBlurScene, 420, 320, (root) => {
       const cards = findNodes(root, (node) => node.kind === "box" && node.props.backdropBlur !== undefined)
       expect(cards).toHaveLength(3)
       const parent = cards[0]?.parent
       if (!parent) throw new Error("backdrop cards did not mount in a shared row")
-      const parentLayout = map.get(parent.id)
+      const parentLayout = parent.layout
       if (!parentLayout) throw new Error("backdrop card row has no layout")
       const gradient = parent.parent
       if (!gradient) throw new Error("backdrop card row has no gradient parent")
-      const gradientLayout = map.get(gradient.id)
+      const gradientLayout = gradient.layout
       if (!gradientLayout) throw new Error("backdrop gradient has no layout")
       expect(contains(gradientLayout, parentLayout)).toBe(true)
 
-      const layouts = cards.map((card) => map.get(card.id))
+      const layouts = cards.map((card) => card.layout)
       expect(layouts.every((card) => card && card.width > 0 && card.height === 140 && contains(parentLayout, card) && contains(gradientLayout, card))).toBe(true)
       const sorted = layouts
         .filter((card): card is Layout => card !== undefined)
@@ -124,14 +140,14 @@ suite("visual-test scene bounds", () => {
   })
 
   test("shrink-wraps hello content while centering it", () => {
-    layoutScene(HelloScene, 400, 300, (root, map) => {
+    layoutScene(HelloScene, 400, 300, (root) => {
       const canvas = findNodes(root, (node) => node.kind === "box" && node.props.backgroundColor === 0x141414ff)[0]
       const inner = findNodes(root, (node) => node.kind === "box" && node.props.backgroundColor === 0x262626ff)[0]
       const label = findNodes(root, (node) => node.kind === "text" && node.text === "Hello from TGE")[0]
       if (!canvas || !inner || !label) throw new Error("hello scene nodes did not mount")
-      const canvasLayout = map.get(canvas.id)
-      const innerLayout = map.get(inner.id)
-      const labelLayout = map.get((label.parent ?? label).id)
+      const canvasLayout = canvas.layout
+      const innerLayout = inner.layout
+      const labelLayout = (label.parent ?? label).layout
       if (!canvasLayout || !innerLayout || !labelLayout) throw new Error("hello scene has incomplete layout")
 
       expect(innerLayout.width).toBeLessThan(canvasLayout.width)
@@ -142,7 +158,7 @@ suite("visual-test scene bounds", () => {
   })
 
   test("lays out the grid dashboard composition and its interaction state", () => {
-    layoutScene(GridDashboardScene, 420, 320, (root, map) => {
+    layoutScene(GridDashboardScene, 420, 320, (root) => {
       const grids = findNodes(root, (node) => node.kind === "box" && node.props.layout === "grid")
       expect(grids.length).toBeGreaterThanOrEqual(2)
 
@@ -150,8 +166,8 @@ suite("visual-test scene bounds", () => {
       const content = grids.find((node) => node.props.gridTemplateColumns !== undefined && node !== outer)
       if (!outer || !content) throw new Error("grid dashboard containers did not mount")
 
-      const outerLayout = map.get(outer.id)
-      const contentLayout = map.get(content.id)
+      const outerLayout = outer.layout
+      const contentLayout = content.layout
       if (!outerLayout || !contentLayout) throw new Error("grid dashboard containers have no layout")
       expect(outerLayout.width).toBe(420)
       expect(outerLayout.height).toBe(320)
@@ -163,7 +179,7 @@ suite("visual-test scene bounds", () => {
       const areaNodes = areas.map((area) => {
         const node = findNodes(root, (candidate) => candidate.props.gridArea === area)[0]
         if (!node) throw new Error(`missing grid area ${area}`)
-        const layout = map.get(node.id)
+        const layout = node.layout
         if (!layout) throw new Error(`missing layout for grid area ${area}`)
         expect(layout.width).toBeGreaterThan(0)
         expect(layout.height).toBeGreaterThan(0)
@@ -177,7 +193,7 @@ suite("visual-test scene bounds", () => {
         { repeat: { count: "auto-fit", tracks: [{ minmax: [96, { fr: 1 }] }] } },
       ])
       expect(content.props.gridAutoRows).toBe(44)
-      expect(contains(map.get(areaNodes[2].node.id) ?? contentLayout, contentLayout)).toBe(true)
+      expect(contains(areaNodes[2].node.layout ?? contentLayout, contentLayout)).toBe(true)
 
       const spanningCards = findNodes(root, (node) => {
         const placement = node.props.gridColumn
@@ -185,7 +201,7 @@ suite("visual-test scene bounds", () => {
       })
       expect(spanningCards).toHaveLength(2)
       for (const card of spanningCards) {
-        const cardLayout = map.get(card.id)
+        const cardLayout = card.layout
         if (!cardLayout) throw new Error("spanning dashboard card has no layout")
         expect(cardLayout.width).toBeGreaterThan(100)
         expect(contains(contentLayout, cardLayout)).toBe(true)
@@ -197,7 +213,7 @@ suite("visual-test scene bounds", () => {
 
       const interactive = findNodes(root, (node) => node.props.focusable === true)[0]
       if (!interactive) throw new Error("grid dashboard interactive control did not mount")
-      const interactiveLayout = map.get(interactive.id)
+      const interactiveLayout = interactive.layout
       if (!interactiveLayout) throw new Error("interactive dashboard control has no layout")
       expect(interactive.props.hoverStyle).toBeDefined()
       expect(interactive.props.activeStyle).toBeDefined()
@@ -209,7 +225,7 @@ suite("visual-test scene bounds", () => {
       expect(text.some((node) => node.text === "Production")).toBe(true)
       expect(text.some((node) => node.text === "Apply")).toBe(true)
       for (const control of controls) {
-        const controlLayout = map.get(control.id)
+        const controlLayout = control.layout
         if (!controlLayout) throw new Error("interactive dashboard control has no layout")
         expect(controlLayout.width).toBeGreaterThan(0)
         expect(controlLayout.height).toBeGreaterThan(0)
@@ -219,7 +235,7 @@ suite("visual-test scene bounds", () => {
       expect(areaNodes[0].node.props.borderWidth).toBe(1)
       expect(areaNodes[0].node.props.padding).toBe(10)
       for (const node of findNodes(root, (candidate) => candidate.kind === "box")) {
-        const layout = map.get(node.id)
+        const layout = node.layout
         if (!layout) continue
         expect(Number.isFinite(layout.x)).toBe(true)
         expect(Number.isFinite(layout.y)).toBe(true)

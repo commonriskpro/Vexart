@@ -12,7 +12,6 @@ import type {
   ScrollState,
   FrameState,
   WalkResult,
-  LayoutResult,
   LayerSlot,
   LayerBoundary,
   LayerPlan,

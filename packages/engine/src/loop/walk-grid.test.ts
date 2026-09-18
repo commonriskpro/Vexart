@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { syncAllLayoutProps } from "../ffi/flex-sync"
 import { createVexartLayoutCtx } from "./layout-adapter"
-import { walkTree } from "./walk-tree"
+import { walkTree, type WalkTreeState } from "./walk-tree"
+import { traverseFrame } from "./pipeline-traverse"
 
 function box(props: TGEProps, children: TGENode[] = []): TGENode {
   const node = createNode("box")
@@ -18,9 +19,9 @@ function syncTree(node: TGENode): void {
   for (const child of node.children) syncTree(child)
 }
 
-function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>): void {
+function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>, width: number, height: number) {
   layout.beginLayout()
-  walkTree(root, {
+  const state: WalkTreeState = {
     scrollSpeedCap: { value: 0 },
     nodeCount: { value: 0 },
     rectNodes: [],
@@ -31,8 +32,19 @@ function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCt
     nodeRefById: new Map(),
     rectNodeById: new Map(),
     layout,
-  })
-  layout.endLayout(root._flexNode)
+  }
+  walkTree(root, state)
+  root._flexNode?.calculateLayout(width, height)
+
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  return traverseFrame(root, state, width, height)
 }
 
 describe("walk-tree Grid integration", () => {
@@ -65,14 +77,14 @@ describe("walk-tree Grid integration", () => {
     }
     const layout = createVexartLayoutCtx()
     layout.init(300, 100)
-    walkFrame(root, layout)
+    const result = walkFrame(root, layout, 300, 100)
 
-    const map = layout.getLastLayoutMap()!
+    expect(result.success).toBe(true)
     expect(calculates).toBe(1)
-    expect(map.get(root.id)).toMatchObject({ x: 0, y: 0, width: 300, height: 100 })
-    expect(map.get(flex.id)).toMatchObject({ x: 0, y: 0, width: 300, height: 100 })
-    expect(map.get(innerGrid.id)).toMatchObject({ x: 0, y: 0, width: 150, height: 60 })
-    expect(map.get(text.id)).toMatchObject({ x: 0, y: 0, width: 150 })
+    expect(root.layout).toMatchObject({ x: 0, y: 0, width: 300, height: 100 })
+    expect(flex.layout).toMatchObject({ x: 0, y: 0, width: 300, height: 100 })
+    expect(innerGrid.layout).toMatchObject({ x: 0, y: 0, width: 150, height: 60 })
+    expect(text.layout).toMatchObject({ x: 0, y: 0, width: 150 })
     layout.destroy()
   })
 
@@ -94,15 +106,17 @@ describe("walk-tree Grid integration", () => {
     }
     const layout = createVexartLayoutCtx()
     layout.init(240, 40)
-    walkFrame(root, layout)
+    const first = walkFrame(root, layout, 240, 40)
+    expect(first.success).toBe(true)
     expect(calculates).toBe(1)
-    expect(layout.getLastLayoutMap()!.get(root.id)?.width).toBe(240)
+    expect(root.layout.width).toBe(240)
 
     calculates = 0
     layout.setDimensions(320, 40)
-    walkFrame(root, layout)
+    const second = walkFrame(root, layout, 320, 40)
+    expect(second.success).toBe(true)
     expect(calculates).toBe(1)
-    expect(layout.getLastLayoutMap()!.get(root.id)?.width).toBe(320)
+    expect(root.layout.width).toBe(320)
     layout.destroy()
   })
 })

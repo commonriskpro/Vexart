@@ -13,21 +13,14 @@
 
 import {
   type TGENode,
-  parseDirection,
-  parseAlignX,
-  parseAlignY,
   resolveProps,
   ensureImageExtra,
   ensureCanvasExtra,
 } from "../ffi/node"
 import { createTextFlexNode } from "../ffi/flex-sync"
-import { normalizeTextForLayout } from "../ffi/text-layout"
-// measureForLayout is called inside the retained text Flexily measureFunc (flex-sync.ts)
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
 import { decodeImageForNode } from "./image"
-import { ATTACH_TO, ATTACH_POINT, POINTER_CAPTURE, type createVexartLayoutCtx } from "./layout-adapter"
-import { BACKDROP_FIELDS } from "../ffi/render-graph"
-import type { EffectConfig } from "../ffi/render-graph"
+import type { createVexartLayoutCtx } from "./layout-adapter"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import type { LayerBoundary } from "./types"
 import { hasBackdropEffect, isInteractiveNode } from "./predicates"
@@ -88,11 +81,6 @@ const AUTO_LAYER_MIN_AREA = 64 * 64
 
 const warnedRawTextNodes = new Set<number>()
 
-// WARNING: Module-level singleton — prevents multi-loop usage.
-const effectPool: EffectConfig[] = []
-// WARNING: Module-level singleton — prevents multi-loop usage.
-let effectPoolIdx = 0
-// WARNING: Module-level singleton — prevents multi-loop usage.
 let autoLayerCount = 0
 
 function hasPromotableArea(node: TGENode) {
@@ -104,29 +92,6 @@ function registerCulledSubtree(node: TGENode, state: WalkTreeState) {
   for (const child of node.children) {
     registerCulledSubtree(child, state)
   }
-}
-
-function claimEffect(): EffectConfig {
-  const effect = effectPool[effectPoolIdx] ?? { color: 0 }
-  effectPool[effectPoolIdx++] = effect
-  effect.renderObjectId = undefined
-  effect.color = 0
-  effect.shadow = undefined
-  effect.glow = undefined
-  effect.gradient = undefined
-  for (const f of BACKDROP_FIELDS) effect[f] = undefined
-  effect.opacity = undefined
-  effect.cornerRadii = undefined
-  if (effect.transform?.length === 9) {
-    effect._transformBuf = effect.transform
-  }
-  effect.transform = undefined
-  effect.transformInverse = undefined
-  effect.transformBounds = undefined
-  effect.filter = undefined
-  effect._node = undefined
-  effect._stateHash = undefined
-  return effect
 }
 
 // ── collectText ───────────────────────────────────────────────────────────
@@ -185,7 +150,6 @@ export function walkTree(
   const { layout } = state
   const dfsIndex = state.nodeCount.value++
   if (dfsIndex === 0) {
-    effectPoolIdx = 0
     autoLayerCount = 0
     state.hasAnyTransforms = false
     if (layout) (layout as any).hasAnyTransforms = false
@@ -224,7 +188,7 @@ export function walkTree(
     if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && shouldPromoteToLayer(node)) {
       node._autoLayer = false
       shouldBoundary = true
-    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && (isInteractionLayer || (hasSubtreeTransform && !insideScroll))) {
+    } else if (!insideIsolation && !transformedInsideScroll && !insideTransformedScrollSubtree && !insideScroll && (isInteractionLayer || hasSubtreeTransform)) {
       // A transformed child of a scroll container must remain in the
       // container's paint stream. Promoting it to a separate layer would
       // detach it from the ancestor scissor; the layer compositor has no
@@ -267,34 +231,10 @@ export function walkTree(
       }
     }
 
-    const renderContent = normalizeTextForLayout(content, props.whiteSpace)
-    const color = (props.color as number) || 0xe0e0e0ff
-    const fontSize = props.fontSize ?? 14
-    const fontId = props.fontId ?? 0
-    const lineHeight = props.lineHeight ?? Math.ceil(fontSize * 1.2)
-    const fontFamily = props.fontFamily as string | undefined
-    const fontWeight = props.fontWeight as number | undefined
-    const fontStyle = props.fontStyle as string | undefined
-
-    // Text dimensions are computed by Flexily's measure function in the
-    // layout adapter — no pre-measurement needed here.
     createTextFlexNode(node)
     layout.setCurrentFlexNode(node._flexNode)
-    layout.text(
-      renderContent,
-      color,
-      fontId,
-      fontSize,
-      node.id,
-      undefined,
-      undefined,
-      fontFamily,
-      fontWeight,
-      fontStyle,
-      lineHeight,
-      props.whiteSpace,
-      props.wordBreak,
-    )
+    layout.openElement()
+    layout.closeElement()
     state.textNodes.push(node)
     return
   }
@@ -313,42 +253,11 @@ export function walkTree(
     layout.openElement()
     layout.setCurrentNodeId(node.id)
 
-    // Use a placeholder RECT so the layout adapter emits a RECTANGLE command for painting
     const imgBuf = extra.buffer
-    // A Grid item with omitted dimensions must remain auto so the Grid
-    // profile's default stretch can size it to its resolved area. Intrinsic
-    // image dimensions are only defaults in the Flex profile.
     const isGridItem = node.parent?.props.layout === "grid"
     if (imgBuf && !node._widthSizing && !isGridItem) node._flexNode?.setWidth(imgBuf.width)
     if (imgBuf && !node._heightSizing && !isGridItem) node._flexNode?.setHeight(imgBuf.height)
-    const placeholderColor = 0x00000001 // near-transparent
-    layout.configureRectangle(placeholderColor, props.cornerRadius ?? 0)
     registerRectNode(node, state)
-
-    // Attach image data directly to layout command (no Map intermediary)
-    if (imgBuf) {
-      layout.setImage({
-        renderObjectId: node.id,
-        color: placeholderColor,
-        cornerRadius: props.cornerRadius ?? 0,
-        imageBuffer: imgBuf,
-        nativeImageHandle: extra.nativeHandle,
-        objectFit: props.objectFit ?? "contain",
-      })
-    }
-
-    // Images are emitted as image ops rather than effect ops, so preserve an
-    // image node's own opacity on the attached rectangle metadata. The GPU
-    // image compositor consumes this internal effect value while keeping the
-    // public ImagePaintConfig shape unchanged.
-    if (typeof props.opacity === "number") {
-      const effect = claimEffect()
-      effect.renderObjectId = node.id
-      effect.color = placeholderColor
-      effect.opacity = props.opacity
-      effect._node = node
-      layout.setEffect(effect)
-    }
 
     layout.closeElement()
     return
@@ -359,20 +268,10 @@ export function walkTree(
     const extra = ensureCanvasExtra(node)
     state.boxNodes.push(node)
 
-    if (isInteractiveNode(props)) {
-      layout.setCurrentFlexNode(node._flexNode)
-      layout.setId(`tge-node-${node.id}`)
-    } else {
-      layout.setCurrentFlexNode(node._flexNode)
-      layout.openElement()
-    }
+    layout.setCurrentFlexNode(node._flexNode)
+    layout.openElement()
     layout.setCurrentNodeId(node.id)
     if (!node._widthSizing && !node._heightSizing) node._flexNode?.setFlexGrow(1)
-
-    // Use a UNIQUE placeholder RECT so Canvas emits a RECTANGLE command for painting.
-    // Pack node.id into RGB, keep alpha near-transparent.
-    const placeholderColor = (((node.id & 0x00ffffff) << 8) | 0x02) >>> 0
-    layout.configureRectangle(placeholderColor, 0)
     registerRectNode(node, state)
 
     // Queue canvas config for paintCommand
@@ -391,15 +290,6 @@ export function walkTree(
         extra.displayListCommands = commands
         extra.displayListHash = hashCanvasDisplayList(serializedBytes)
       }
-
-      layout.setCanvas({
-        renderObjectId: node.id,
-        color: placeholderColor,
-        onDraw: props.onDraw,
-        displayListCommands: commands ?? undefined,
-        viewport: props.viewport,
-        displayListHash: extra.displayListHash,
-      })
     }
 
     layout.closeElement()
@@ -408,67 +298,18 @@ export function walkTree(
 
   state.boxNodes.push(node)
 
-  // Assign layout element ID for:
-  // 1. Scroll containers — for scroll offset tracking
-  // 2. Interactive nodes — for reliable layout readback (hit-testing)
-  // willChange pre-promotes to own layer — needs a stable layout ID for layer key (REQ-2B-501)
-  const hasWillChange = props.willChange !== undefined
   const isScrollContainer = !!(props.scrollX || props.scrollY)
-  const needsLayoutId = isInteractiveNode(props) || props.layer === true || hasWillChange
-  if (isScrollContainer) {
-    // Use node.id for a stable scroll ID that survives frame resets.
-    // Fallback to user-provided scrollId for programmatic scroll handles.
-    const sid = props.scrollId ?? `tge-scroll-${node.id}`
-    layout.setCurrentFlexNode(node._flexNode)
-    layout.setId(sid)
-    if (props.scrollSpeed) {
-      state.scrollSpeedCap.value = props.scrollSpeed
-    }
-  } else if (needsLayoutId) {
-    layout.setCurrentFlexNode(node._flexNode)
-    layout.setId(`tge-node-${node.id}`)
-  } else {
-    layout.setCurrentFlexNode(node._flexNode)
-    layout.openElement()
-  }
+  layout.setCurrentFlexNode(node._flexNode)
+  layout.openElement()
   layout.setCurrentNodeId(node.id)
 
-  // Layout — resolve aliases, then use per-side padding if set
-  const dir = parseDirection(props.direction ?? props.flexDirection)
-  const ax = parseAlignX(props.alignX ?? props.justifyContent)
-  const ay = parseAlignY(props.alignY ?? props.alignItems)
-  // Grid's inline axis is always horizontal LTR. Keep the inherited
-  // direction metadata consistent for nested Flex nodes without changing
-  // the retained Node tree or creating a second layout pass.
-  const childDir = props.layout === "grid" ? 0 : dir
-
-  // Floating / absolute positioning
-  if (props.floating) {
-    const f = props.floating
-    const ox = props.floatOffset?.x ?? 0
-    const oy = props.floatOffset?.y ?? 0
-    const z = props.zIndex ?? 0
-    const ape = props.floatAttach?.element ?? ATTACH_POINT.LEFT_TOP
-    const app = props.floatAttach?.parent ?? ATTACH_POINT.LEFT_TOP
-    const pc = props.pointerPassthrough ? POINTER_CAPTURE.PASSTHROUGH : POINTER_CAPTURE.CAPTURE
-
-    if (f === "parent") {
-      layout.configureFloating(ATTACH_TO.PARENT, ox, oy, z, ape, app, pc, 0)
-    } else if (f === "root") {
-      layout.configureFloating(ATTACH_TO.ROOT, ox, oy, z, ape, app, pc, 0)
-    } else if (typeof f === "object" && f.attachTo) {
-      const pid = layout.hashString(f.attachTo)
-      layout.configureFloating(ATTACH_TO.ELEMENT, ox, oy, z, ape, app, pc, pid)
-    }
+  if (isScrollContainer && props.scrollSpeed) {
+    state.scrollSpeedCap.value = props.scrollSpeed
   }
 
   // Resolve visual props — merges hoverStyle/activeStyle when the node is hovered/active
   const vp = props
 
-  // Inject a RECT command from the layout adapter when needed for:
-  // 1. Visual effects (gradient, backdrop filter, opacity)
-  // 2. Interactive nodes (onPress, focusable, hoverStyle, mouse callbacks)
-  //    Without a RECT, the node doesn't enter rectNodes → no hit-testing → mouse events never fire.
   const hasBackdropFilter = hasBackdropEffect(vp)
   const hasTransform = vp.transform !== undefined
   if (hasTransform && vp.transform) {
@@ -486,91 +327,7 @@ export function walkTree(
   const needsBorderGeometry = hasVisualBorderWidth && (vp.cornerRadius !== undefined || vp.cornerRadii !== undefined)
   const needsRect = vp.backgroundColor !== undefined || vp.gradient !== undefined || hasBackdropFilter || vp.opacity !== undefined || isInteractiveNode(vp) || hasTransform || hasSelfFilter || needsBorderGeometry
   if (needsRect) {
-    const bgColor = vp.backgroundColor !== undefined ? (vp.backgroundColor as number) : 0x00000001
-    const cr = vp.cornerRadius ?? 0
-    layout.configureRectangle(bgColor, cr)
     registerRectNode(node, state)
-
-    // Record effects for this RECT — matched during paint.
-    // NOTE: effect.color duplicates the RenderCommand color value.
-    // It exists because the gpu-renderer reads from EffectConfig for effect nodes,
-    // while plain rects read from RenderCommand. cornerRadius was removed from
-    // EffectConfig — it now lives only on the flat RectangleRenderOp radius.
-    if (vp.shadow || vp.glow || vp.gradient || hasBackdropFilter || vp.cornerRadii || vp.opacity !== undefined || hasTransform || vp.filter) {
-      const effect = claimEffect()
-      effect.renderObjectId = node.id
-      effect.color = bgColor
-      effect._node = node
-      if (vp.shadow) {
-        // Colors already resolved to u32 by reconciler (resolveShadow)
-        effect.shadow = vp.shadow as typeof effect.shadow
-      }
-      if (vp.glow) {
-        effect.glow = {
-          radius: vp.glow.radius,
-          color: vp.glow.color as number,
-          intensity: vp.glow.intensity ?? 80,
-        }
-      }
-      if (vp.gradient) {
-        const g = vp.gradient
-        if (g.type === "linear") {
-          effect.gradient = { type: "linear", from: g.from as number, to: g.to as number, angle: g.angle ?? 90 }
-        } else {
-          effect.gradient = { type: "radial", from: g.from as number, to: g.to as number }
-        }
-      }
-      for (const f of BACKDROP_FIELDS) if (vp[f] !== undefined) effect[f] = vp[f]
-      if (vp.opacity !== undefined) effect.opacity = vp.opacity
-      if (vp.cornerRadii) effect.cornerRadii = vp.cornerRadii
-      if (vp.filter) effect.filter = vp.filter
-      if (hasTransform && vp.transform) {
-        const usesSubtreeTransformPass = node.children.length > 0
-        if (!usesSubtreeTransformPass) {
-          if (!effect.transform || effect.transform.length !== 9) {
-            effect.transform = effect._transformBuf && effect._transformBuf.length === 9
-              ? effect._transformBuf
-              : new Float64Array(9)
-          }
-          effect.transform.fill(0)
-        }
-      }
-      layout.setEffect(effect)
-    }
-  }
-
-  // Borders — per-side or uniform (uses resolved visual props)
-  // Interactive styles reserve the maximum border space in Flexily (see
-  // flex-sync.ts), but only the currently-resolved visual props are painted.
-  const paintBorderWidth = vp.borderWidth ?? 0
-  const paintBorderColor = vp.borderColor as number | undefined
-
-  const hasPerSideBorder = vp.borderLeft !== undefined || vp.borderRight !== undefined ||
-                           vp.borderTop !== undefined || vp.borderBottom !== undefined ||
-                           vp.borderBetweenChildren !== undefined
-  if (hasPerSideBorder) {
-    const base = paintBorderWidth
-    layout.configureBorderSides(
-      vp.borderLeft ?? base,
-      vp.borderRight ?? base,
-      vp.borderTop ?? base,
-      vp.borderBottom ?? base,
-      vp.borderBetweenChildren ?? 0,
-      paintBorderColor ?? 0)
-  } else if (paintBorderWidth > 0) {
-    layout.configureBorder(paintBorderWidth, paintBorderColor ?? 0)
-  }
-
-  // Scroll / clip container.
-  // Scroll offsets are applied TS-side in applyScrollOffsets() after layout —
-  // the offset params here were layout-adapter no-ops and have been removed.
-  if (props.scrollX || props.scrollY) {
-    layout.configureClip(
-      props.scrollX ?? false,
-      props.scrollY ?? false,
-      0,
-      0,
-    )
   }
 
   // ── AABB viewport culling (Slice 3.3) ──
@@ -610,8 +367,9 @@ export function walkTree(
   const childInsideIsolation = insideIsolation || isolatesSubtree
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i]
-    walkTree(child, state, childDir, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1, childInsideIsolation)
+    walkTree(child, state, 0, childInsideXform, childScrollContainerId, childInsideScroll, depth + 1, childInsideIsolation)
   }
 
   layout.closeElement()
+
 }

@@ -62,7 +62,7 @@ export { chooseGpuLayerStrategy } from "./ffi/gpu-layer-strategy"
 export type { GpuLayerStrategyInput, GpuLayerStrategyMode } from "./ffi/gpu-layer-strategy"
 export type { GpuRendererBackend, GpuRendererBackendCacheStats } from "./ffi/gpu-renderer-backend"
 
-export { BACKDROP_FILTER_KIND, buildRenderOp, buildRenderGraphFrame } from "./ffi/render-graph"
+export { BACKDROP_FILTER_KIND, buildRenderOp } from "./ffi/render-graph"
 export type {
   RenderCommand,
   ShadowDef,

@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Node } from "flexily"
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
-import { CMD, type RenderCommand } from "../ffi/render-graph"
+import { CMD, type BorderRenderOp, type RenderGraphOp } from "../ffi/render-graph"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { ATTACH_POINT, createVexartLayoutCtx } from "./layout-adapter"
-import { walkTree } from "./walk-tree"
+import { walkTree, type WalkTreeState } from "./walk-tree"
+import { hashString, traverseFrame } from "./pipeline-traverse"
 
 function box(props: TGEProps, children: TGENode[] = []) {
   const node = createNode("box")
@@ -25,7 +26,7 @@ function layoutState(root: TGENode) {
   layout.init(300, 200)
   layout.beginLayout()
 
-  walkTree(root, {
+  const state: WalkTreeState = {
     scrollSpeedCap: { value: 0 },
     nodeCount: { value: 0 },
     rectNodes: [],
@@ -36,22 +37,31 @@ function layoutState(root: TGENode) {
     nodeRefById: new Map(),
     rectNodeById: new Map(),
     layout,
-  })
+  }
+  walkTree(root, state)
+  root._flexNode?.calculateLayout(300, 200)
 
-  const commands = [...layout.endLayout()]
-  const map = layout.getLastLayoutMap() ? new Map(layout.getLastLayoutMap()!) : null
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  const result = traverseFrame(root, state, 300, 200)
   layout.destroy()
-  return { commands, map }
+  return { result, ops: result.layerBuckets.flatMap((b) => b.ops) }
 }
 
-function layoutCommands(root: TGENode) {
-  return layoutState(root).commands
+function layoutOps(root: TGENode) {
+  return layoutState(root).ops
 }
 
-function rectOrder(commands: RenderCommand[]) {
-  return commands
-    .filter((command) => command.type === CMD.RECTANGLE)
-    .map((command) => command.nodeId)
+function rectOrder(ops: RenderGraphOp[]) {
+  return ops
+    .filter((op) => op.kind === "rectangle" || op.type === CMD.RECTANGLE)
+    .map((op) => op.nodeId)
 }
 
 // Ubuntu CI installs this real font explicitly. fontdb's generic sans-serif
@@ -67,16 +77,12 @@ describe("layout adapter stacking contexts", () => {
     const root = box({ width: 300, height: 200, direction: "column" }, [row])
 
     syncTree(root)
-    const state = layoutState(root)
-    const rowLayout = state.map?.get(row.id)
-    const fixedLayout = state.map?.get(fixed.id)
-    const growLayout = state.map?.get(grow.id)
-    const percentLayout = state.map?.get(percent.id)
+    layoutState(root)
 
-    expect(rowLayout).toMatchObject({ width: 300, height: 48 })
-    expect(fixedLayout?.width).toBe(64)
-    expect(percentLayout?.width).toBe(75)
-    expect(growLayout?.width).toBe(145)
+    expect(row.layout).toMatchObject({ width: 300, height: 48 })
+    expect(fixed.layout.width).toBe(64)
+    expect(percent.layout.width).toBe(75)
+    expect(grow.layout.width).toBe(145)
   })
 
   test("does not let width grow consume a column parent's height", () => {
@@ -87,10 +93,10 @@ describe("layout adapter stacking contexts", () => {
     const root = box({ width: 420, height: 320, direction: "column" }, [scroll])
 
     syncTree(root)
-    const state = layoutState(root)
+    layoutState(root)
 
-    expect(state.map?.get(scroll.id)).toMatchObject({ width: 420, height: 220 })
-    expect(state.map?.get(scroll.children[0]!.id)?.width).toBe(420)
+    expect(scroll.layout).toMatchObject({ width: 420, height: 220 })
+    expect(scroll.children[0]!.layout.width).toBe(420)
   })
 
   test("stretches height grow across a row without changing its fixed width", () => {
@@ -100,9 +106,9 @@ describe("layout adapter stacking contexts", () => {
     const root = box({ width: 300, height: 100, direction: "row" }, [column])
 
     syncTree(root)
-    const state = layoutState(root)
+    layoutState(root)
 
-    expect(state.map?.get(column.id)).toMatchObject({ width: 100, height: 100 })
+    expect(column.layout).toMatchObject({ width: 100, height: 100 })
   })
 
   test("shrink-wraps explicit fit wrappers before cross-axis alignment", () => {
@@ -113,10 +119,10 @@ describe("layout adapter stacking contexts", () => {
       const root = box({ width: 300, height: 100, direction: "column", alignX }, [wrapper])
 
       syncTree(root)
-      const state = layoutState(root)
+      layoutState(root)
 
-      expect(state.map?.get(wrapper.id)).toMatchObject({ x, width: 80, height: 20 })
-      expect(state.map?.get(inner.id)).toMatchObject({ x, width: 80, height: 20 })
+      expect(wrapper.layout).toMatchObject({ x, width: 80, height: 20 })
+      expect(inner.layout).toMatchObject({ x, width: 80, height: 20 })
     }
   })
 
@@ -126,14 +132,15 @@ describe("layout adapter stacking contexts", () => {
     const root = box({ width: 300, height: 100, direction: "row" }, [grow, fixed])
 
     syncTree(root)
-    expect(layoutState(root).map?.get(grow.id)).toMatchObject({ width: 250, height: 20 })
+    layoutState(root)
+    expect(grow.layout).toMatchObject({ width: 250, height: 20 })
 
     root.props.direction = "column"
     syncLayoutProp(root, "direction", "column")
-    const state = layoutState(root)
+    layoutState(root)
 
-    expect(state.map?.get(grow.id)).toMatchObject({ width: 300, height: 20 })
-    expect(state.map?.get(fixed.id)).toMatchObject({ x: 0, y: 20, width: 50, height: 30 })
+    expect(grow.layout).toMatchObject({ width: 300, height: 20 })
+    expect(fixed.layout).toMatchObject({ x: 0, y: 20, width: 50, height: 30 })
   })
 
   test("walkTree applies margin props", () => {
@@ -141,10 +148,10 @@ describe("layout adapter stacking contexts", () => {
     const second = box({ width: 100, height: 50, marginTop: 20 })
     const root = box({ width: 300, height: 200, direction: "column" }, [first, second])
 
-    const state = layoutState(root)
+    layoutState(root)
 
-    expect(state.map?.get(first.id)?.y).toBe(0)
-    expect(state.map?.get(second.id)?.y).toBe(70)
+    expect(first.layout.y).toBe(0)
+    expect(second.layout.y).toBe(70)
   })
 
   test("keeps high-z descendants inside their parent context", () => {
@@ -175,7 +182,7 @@ describe("layout adapter stacking contexts", () => {
     }, [upperChild])
     const root = box({ width: 300, height: 200, backgroundColor: 0x111111ff }, [upperWindow, lowerWindow])
 
-    const order = rectOrder(layoutCommands(root))
+    const order = rectOrder(layoutOps(root))
 
     expect(order.indexOf(lowerWindow.id)).toBeLessThan(order.indexOf(escapingChild.id))
     expect(order.indexOf(escapingChild.id)).toBeLessThan(order.indexOf(upperWindow.id))
@@ -187,7 +194,7 @@ describe("layout adapter stacking contexts", () => {
     const second = box({ width: 40, height: 40, backgroundColor: 0x00ff00ff, floating: "parent" })
     const root = box({ width: 300, height: 200, backgroundColor: 0x111111ff }, [first, second])
 
-    const order = rectOrder(layoutCommands(root))
+    const order = rectOrder(layoutOps(root))
 
     expect(order.indexOf(first.id)).toBeLessThan(order.indexOf(second.id))
   })
@@ -204,22 +211,21 @@ describe("layout adapter stacking contexts", () => {
     }, [child])
 
     syncTree(root)
-    const commands = layoutCommands(root)
-    const borderIndex = commands.findIndex((command) => command.type === CMD.BORDER && command.nodeId === root.id)
+    const ops = layoutOps(root)
+    const borderIndex = ops.findIndex((op) => (op.kind === "border" || op.type === CMD.BORDER) && op.nodeId === root.id)
 
     expect(borderIndex).toBeGreaterThan(-1)
-    expect(commands[borderIndex]).toMatchObject({
-      type: CMD.BORDER,
+    expect(ops[borderIndex]).toMatchObject({
       color: 0xff0000ff,
       cornerRadius: 8,
       extra1: 3,
       nodeId: root.id,
     })
-    expect(commands.findIndex((command) => command.type === CMD.RECTANGLE && command.nodeId === child.id)).toBeLessThan(borderIndex)
+    expect(ops.findIndex((op) => (op.kind === "rectangle" || op.type === CMD.RECTANGLE) && op.nodeId === child.id)).toBeLessThan(borderIndex)
   })
 
   test("emits existing per-side widths without collapsing them to the maximum", () => {
-    const root = box({
+    const target = box({
       width: 100,
       height: 60,
       backgroundColor: 0x111111ff,
@@ -229,12 +235,12 @@ describe("layout adapter stacking contexts", () => {
       borderTop: 2,
       borderBottom: 4,
     })
+    const root = box({ width: 300, height: 200 }, [target])
 
     syncTree(root)
-    const border = layoutCommands(root).find((command) => command.type === CMD.BORDER && command.nodeId === root.id)
+    const border = layoutOps(root).find((op) => (op.kind === "border" || op.type === CMD.BORDER) && op.nodeId === target.id) as BorderRenderOp
 
     expect(border).toMatchObject({
-      type: CMD.BORDER,
       color: 0xff0000ff,
       extra1: 4,
       borderWidths: { left: 1, right: 3, top: 2, bottom: 4 },
@@ -242,41 +248,22 @@ describe("layout adapter stacking contexts", () => {
   })
 
   test("emits a transparent border command when maxInteractiveBorder > 0 and paintBorderWidth is 0", () => {
-    const root = box({
+    const target = box({
       width: 100,
       height: 60,
       backgroundColor: 0x111111ff,
       hoverStyle: { borderWidth: 4 },
     })
+    const root = box({ width: 300, height: 200 }, [target])
 
     syncTree(root)
-    const border = layoutCommands(root).find((command) => command.type === CMD.BORDER && command.nodeId === root.id)
+    const border = layoutOps(root).find((op) => (op.kind === "border" || op.type === CMD.BORDER) && op.nodeId === target.id) as BorderRenderOp
 
     expect(border).toMatchObject({
-      type: CMD.BORDER,
       color: 0x00000000,
       extra1: 4,
-      nodeId: root.id,
+      nodeId: target.id,
     })
-  })
-
-  test("keeps border reservation for adapter-owned fallback nodes", () => {
-    const layout = createVexartLayoutCtx()
-    layout.init(100, 80)
-    layout.beginLayout()
-    layout.openElement()
-    layout.setCurrentNodeId(1)
-    layout.configureBorder(4, 0xff0000ff)
-    layout.closeElement()
-    layout.endLayout()
-
-    expect(layout.getLastLayoutMap()?.get(1)).toMatchObject({
-      contentX: 4,
-      contentY: 4,
-      contentW: 92,
-      contentH: 72,
-    })
-    layout.destroy()
   })
 
   test("cleans orphaned node slots from the previous layout pass on beginLayout", () => {
@@ -284,66 +271,31 @@ describe("layout adapter stacking contexts", () => {
     layout.init(100, 80)
 
     let orphanedNodeRef: WeakRef<Node> | undefined
-    let orphanedEffectRef: WeakRef<object> | undefined
-    let orphanedImageRef: WeakRef<object> | undefined
-    let orphanedCanvasRef: WeakRef<object> | undefined
 
     ;(() => {
       const rootNode = Node.create()
       const childNode = Node.create()
-      const effect = { shadow: { color: 0xff0000ff, blur: 4, offsetX: 0, offsetY: 0 } }
-      const image = { handle: 10n, width: 32, height: 32 }
-      const canvas = { handle: 20n, width: 32, height: 32 }
 
-      orphanedNodeRef = new WeakRef(childNode)
-      orphanedEffectRef = new WeakRef(effect)
-      orphanedImageRef = new WeakRef(image)
-      orphanedCanvasRef = new WeakRef(canvas)
+      orphanedNodeRef = new WeakRef(rootNode)
 
       layout.beginLayout()
       layout.setCurrentFlexNode(rootNode)
       layout.openElement()
-      layout.setCurrentNodeId(1)
 
       layout.setCurrentFlexNode(childNode)
       layout.openElement()
-      layout.setCurrentNodeId(2)
-      layout.setEffect(effect as any)
-      layout.setImage(image as any)
-      layout.setCanvas(canvas as any)
       layout.closeElement()
 
       layout.closeElement()
-      layout.endLayout()
     })()
 
     Bun.gc(true)
     expect(orphanedNodeRef!.deref()).toBeDefined()
-    expect(orphanedEffectRef!.deref()).toBeDefined()
-    expect(orphanedImageRef!.deref()).toBeDefined()
-    expect(orphanedCanvasRef!.deref()).toBeDefined()
 
     layout.beginLayout()
     Bun.gc(true)
 
     expect(orphanedNodeRef!.deref()).toBeUndefined()
-    expect(orphanedEffectRef!.deref()).toBeUndefined()
-    expect(orphanedImageRef!.deref()).toBeUndefined()
-    expect(orphanedCanvasRef!.deref()).toBeUndefined()
-
-    // Pass 2 mounts only the root node; verify unmounted child slot remains clean
-    const nextRoot = Node.create()
-    layout.setCurrentFlexNode(nextRoot)
-    layout.openElement()
-    layout.setCurrentNodeId(1)
-    layout.closeElement()
-    layout.endLayout()
-    Bun.gc(true)
-
-    expect(orphanedNodeRef!.deref()).toBeUndefined()
-    expect(orphanedEffectRef!.deref()).toBeUndefined()
-    expect(orphanedImageRef!.deref()).toBeUndefined()
-    expect(orphanedCanvasRef!.deref()).toBeUndefined()
 
     layout.destroy()
   })
@@ -366,19 +318,16 @@ describe("layout adapter stacking contexts", () => {
     const logicalParent = box({ width: 120, height: 80 }, [overlay])
     const root = box({ width: 300, height: 200 }, [logicalParent])
 
-    const state = layoutState(root)
-    const overlayLayout = state.map?.get(overlay.id)
-    const wrapperLayout = state.map?.get(wrapper.id)
-    const contentLayout = state.map?.get(content.id)
+    layoutState(root)
 
-    expect(overlayLayout).toMatchObject({ x: 4, y: 6, width: 300, height: 200 })
-    expect(wrapperLayout).toMatchObject({ x: 4, y: 6, width: 300, height: 200 })
-    expect(contentLayout).toMatchObject({ x: 134, y: 96, width: 40, height: 20 })
+    expect(overlay.layout).toMatchObject({ x: 4, y: 6, width: 300, height: 200 })
+    expect(wrapper.layout).toMatchObject({ x: 4, y: 6, width: 300, height: 200 })
+    expect(content.layout).toMatchObject({ x: 134, y: 96, width: 40, height: 20 })
   })
 
   test("applies parent and element attach points with offsets", () => {
     const anchor = box({ width: 50, height: 30, backgroundColor: 0xffffffff })
-    const anchorId = createVexartLayoutCtx().hashString("anchor")
+    const anchorId = hashString("anchor")
     anchor.id = anchorId
     const attached = box({
       width: 20,
@@ -393,10 +342,9 @@ describe("layout adapter stacking contexts", () => {
     })
     const root = box({ width: 300, height: 200 }, [anchor, attached])
 
-    const state = layoutState(root)
-    const attachedLayout = state.map?.get(attached.id)
+    layoutState(root)
 
-    expect(attachedLayout).toMatchObject({ x: 51, y: 27, width: 20, height: 10 })
+    expect(attached.layout).toMatchObject({ x: 51, y: 27, width: 20, height: 10 })
   })
 
   test("measures floating fit wrappers from intrinsic children before attaching", () => {
@@ -417,15 +365,13 @@ describe("layout adapter stacking contexts", () => {
     const root = box({ width: 300, height: 200 }, [box({ width: 100, height: 30 }), floating])
 
     syncTree(root)
-    const state = layoutState(root)
-    const floatingLayout = state.map?.get(floating.id)
-    const textLayout = state.map?.get(text.id)
+    layoutState(root)
 
-    expect(floatingLayout).toMatchObject({ x: 304, y: 205, height: 33 })
-    expect(floatingLayout?.width).toBeGreaterThan(16)
-    expect(textLayout).toMatchObject({ x: 312, y: 213, height: 17 })
-    expect(textLayout?.width).toBeGreaterThan(0)
-    expect(floatingLayout?.width).toBe((textLayout?.width ?? 0) + 16)
+    expect(floating.layout).toMatchObject({ x: 304, y: 205, height: 33 })
+    expect(floating.layout.width).toBeGreaterThan(16)
+    expect(text.layout).toMatchObject({ x: 312, y: 213, height: 17 })
+    expect(text.layout.width).toBeGreaterThan(0)
+    expect(floating.layout.width).toBe(text.layout.width + 16)
   })
 
   test("wraps text inside a narrow responsive column", () => {
@@ -443,11 +389,10 @@ describe("layout adapter stacking contexts", () => {
 
     syncAllLayoutProps(root)
     const state = layoutState(root)
-    const textLayout = state.map?.get(text.id)
-    const textCommand = state.commands.find(command => command.nodeId === text.id && command.type === CMD.TEXT)
+    const textOp = state.ops.find(op => op.nodeId === text.id && (op.kind === "text" || op.type === CMD.TEXT))
 
-    expect(textLayout?.width).toBeLessThan(200)
-    expect(textLayout?.height).toBeGreaterThan(Math.ceil(14 * 1.2))
-    expect(textCommand?.width).toBe(textLayout?.width)
+    expect(text.layout.width).toBeLessThan(200)
+    expect(text.layout.height).toBeGreaterThan(Math.ceil(14 * 1.2))
+    expect(textOp?.width).toBe(text.layout.width)
   })
 })

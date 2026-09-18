@@ -21,6 +21,7 @@ import { describe, test, expect } from "bun:test"
 import { collectText, walkTree } from "./walk-tree"
 import { createNode, createTextNode } from "../ffi/node"
 import { createVexartLayoutCtx } from "./layout-adapter"
+import { traverseFrame } from "./pipeline-traverse"
 import type { WalkTreeState } from "./walk-tree"
 
 // ── Inline culling decision (mirrors walk-tree.ts AABB logic exactly) ──
@@ -304,5 +305,81 @@ describe("raw text inside <box> warning (DEF-07)", () => {
       console.warn = originalWarn
       layout.destroy()
     }
+  })
+})
+
+describe("DFS metadata set by traverseFrame", () => {
+  test("sets sequential _dfsIndex, _depth, and _scrollContainerId across hierarchy", () => {
+    const root = createNode("box")
+    const header = createNode("box")
+    const scroller = createNode("box")
+    scroller.props = { scrollY: true }
+    const list = createNode("box")
+    const item1 = createNode("box")
+    const item2 = createNode("box")
+    const footer = createNode("box")
+
+    list.children.push(item1, item2)
+    item1.parent = list
+    item2.parent = list
+
+    scroller.children.push(list)
+    list.parent = scroller
+
+    root.children.push(header, scroller, footer)
+    header.parent = root
+    scroller.parent = root
+    footer.parent = root
+
+    const state: WalkTreeState = {
+      scrollSpeedCap: { value: 0 },
+      nodeCount: { value: 0 },
+      rectNodes: [],
+      textNodes: [],
+      boxNodes: [],
+      layerBoundaries: [],
+      scrollContainers: [],
+      nodeRefById: new Map(),
+      rectNodeById: new Map(),
+      layout: null as any,
+    }
+
+    const result = traverseFrame(root, state, 300, 200)
+    expect(result.success).toBe(true)
+
+    // Root metadata
+    expect(root._dfsIndex).toBe(0)
+    expect(root._depth).toBe(0)
+    expect(root._scrollContainerId).toBe(0)
+
+    // Header metadata
+    expect(header._depth).toBe(1)
+    expect(header._scrollContainerId).toBe(0)
+
+    // Scroller metadata
+    expect(scroller._depth).toBe(1)
+    expect(scroller._scrollContainerId).toBe(0)
+
+    // List inside scroller
+    expect(list._depth).toBe(2)
+    expect(list._scrollContainerId).toBe(scroller.id)
+
+    // Items inside scroller
+    expect(item1._depth).toBe(3)
+    expect(item1._scrollContainerId).toBe(scroller.id)
+    expect(item2._depth).toBe(3)
+    expect(item2._scrollContainerId).toBe(scroller.id)
+
+    // Footer outside scroller
+    expect(footer._depth).toBe(1)
+    expect(footer._scrollContainerId).toBe(0)
+
+    // Sequential DFS index ordering
+    expect(root._dfsIndex).toBeLessThan(header._dfsIndex!)
+    expect(header._dfsIndex).toBeLessThan(scroller._dfsIndex!)
+    expect(scroller._dfsIndex).toBeLessThan(list._dfsIndex!)
+    expect(list._dfsIndex).toBeLessThan(item1._dfsIndex!)
+    expect(item1._dfsIndex).toBeLessThan(item2._dfsIndex!)
+    expect(item2._dfsIndex).toBeLessThan(footer._dfsIndex!)
   })
 })

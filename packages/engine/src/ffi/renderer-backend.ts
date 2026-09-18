@@ -122,7 +122,7 @@ export type RendererBackendPaintContext = {
     width: number
     height: number
   }
-  commands: RenderCommand[]
+  commands?: RenderCommand[]
   graph: RenderGraphFrame
   offsetX: number
   offsetY: number
@@ -150,7 +150,7 @@ export type RendererBackendPaintContext = {
 export type RendererBackend = {
   name: string
   beginFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFramePlan | void
-  paint: (ctx: RendererBackendPaintContext) => RendererBackendPaintResult | void
+  paint: (ctx: RendererBackendPaintContext & { commands: RenderCommand[] }) => RendererBackendPaintResult | void
   reuseLayer?: (ctx: { frame: RendererBackendFrameContext; layer: RendererBackendLayerContext }) => boolean | void
   compositeRetainedFrame?: (ctx: { frame: RendererBackendFrameContext; layers: RendererBackendRetainedLayer[] }) => RendererBackendFrameResult | null | void
   endFrame?: (ctx: RendererBackendFrameContext) => RendererBackendFrameResult | null | void

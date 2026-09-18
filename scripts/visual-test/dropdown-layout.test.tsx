@@ -3,7 +3,8 @@ import { createNode, parseSizing, resetFocus, solidRender, type TGENode } from "
 import { VoidDropdownMenu } from "@vexart/styled"
 import { syncAllLayoutProps } from "../../packages/engine/src/ffi/flex-sync"
 import { createVexartLayoutCtx } from "../../packages/engine/src/loop/layout-adapter"
-import { walkTree } from "../../packages/engine/src/loop/walk-tree"
+import { walkTree, type WalkTreeState } from "../../packages/engine/src/loop/walk-tree"
+import { traverseFrame } from "../../packages/engine/src/loop/pipeline-traverse"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 const suite = browserRuntime ? describe : describe.skip
@@ -54,7 +55,7 @@ suite("styled DropdownMenu floating layout", () => {
 
     try {
       syncTree(root)
-      walkTree(root, {
+      const state: WalkTreeState = {
         scrollSpeedCap: { value: 0 },
         nodeCount: { value: 0 },
         rectNodes: [],
@@ -65,15 +66,26 @@ suite("styled DropdownMenu floating layout", () => {
         nodeRefById: new Map(),
         rectNodeById: new Map(),
         layout,
-      })
-      layout.endLayout()
+      }
+      walkTree(root, state)
+      layout.calculateRoots(root._flexNode)
+
+      state.rectNodes.length = 0
+      state.textNodes.length = 0
+      state.boxNodes.length = 0
+      state.nodeRefById.clear()
+      state.rectNodeById.clear()
+      state.scrollContainers.length = 0
+      state.layerBoundaries.length = 0
+
+      traverseFrame(root, state, 320, 200)
 
       const trigger = findNode(root, (node) => node.props.debugName === "dropdown-trigger")
       const content = findNode(root, (node) => node.props.floating === "parent")
       if (!trigger || !content) throw new Error("dropdown trigger/content did not mount")
 
-      const triggerLayout = layout.getLastLayoutMap()?.get(trigger.id)
-      const contentLayout = layout.getLastLayoutMap()?.get(content.id)
+      const triggerLayout = trigger.layout
+      const contentLayout = content.layout
       if (!triggerLayout || !contentLayout) throw new Error("dropdown trigger/content layout was not recorded")
 
       expect(contentLayout.y).toBe(triggerLayout.y + triggerLayout.height + offset)

@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createNode, type TGENode } from "../ffi/node"
 import { createLayerStore, type Layer } from "../ffi/layers"
-import { CMD, type RenderCommand } from "../ffi/render-graph"
+import { CMD, type RenderGraphOp } from "../ffi/render-graph"
 import { createScrollHandle, resetScrollHandles } from "./scroll"
-import { applyScrollOffsets, getParentScrollContainer, routeScrollDeltas } from "./composite-scroll"
+import { routeScrollDeltas } from "./composite-scroll"
+import { applyScrollOffsetsToOps, getParentScrollContainer } from "./pipeline-scroll"
+import type { LayerOpBucket } from "./pipeline-types"
 import { bindLayerDirtyStore, markLayerDirtyByKey } from "./composite"
 import { getEffectivePosition } from "../reconciler/hit-test"
 
@@ -41,7 +43,7 @@ describe("applyScrollOffsets scroll geometry", () => {
     child(scroller, rect(createNode("text"), 20, 40, 90, 30))
     child(scroller, rect(createNode("text"), 20, 70, 90, 40))
 
-    applyScrollOffsets([], state([scroller]), markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], [scroller], new Map(), markLayerDirtyByKey)
 
     const handle = createScrollHandle("direct-text")
     expect(handle.contentHeight).toBe(70)
@@ -66,7 +68,7 @@ describe("applyScrollOffsets scroll geometry", () => {
 
     child(outer, rect(createNode("text"), 0, 140, 100, 20))
 
-    applyScrollOffsets([], state([outer, inner]), markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], [outer, inner], new Map(), markLayerDirtyByKey)
 
     const outerHandle = createScrollHandle("outer")
     const innerHandle = createScrollHandle("inner")
@@ -94,10 +96,10 @@ describe("applyScrollOffsets scroll geometry", () => {
     bindLayerDirtyStore(new Map([["bg", layer]]))
 
     const frame = state([scroller])
-    applyScrollOffsets([], frame, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], frame.scrollContainers, frame.nodeRefById, { scrollOffsets: frame.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
     createScrollHandle("dirty-layer").scrollTo(-100)
     layer.dirty = false
-    applyScrollOffsets([], frame, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], frame.scrollContainers, frame.nodeRefById, { scrollOffsets: frame.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     expect(layer.dirty).toBe(true)
     expect(layer.damageRect).toEqual({ x: 0, y: 0, width: 100, height: 50 })
@@ -130,12 +132,12 @@ describe("compounded scroll map (Decision 8 Option C)", () => {
     s.nodeRefById.set(childC.id, childC)
 
     // First pass to set up content extents
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     createScrollHandle("container-a").scrollTo(-50)
     createScrollHandle("container-b").scrollTo(-20)
 
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     expect(s.scrollOffsets.get(containerA.id)).toEqual({ x: 0, y: -50 })
     expect(s.scrollOffsets.get(containerB.id)).toEqual({ x: 0, y: -70 })
@@ -164,18 +166,18 @@ describe("compounded scroll map (Decision 8 Option C)", () => {
     s.nodeRefById.set(containerB.id, containerB)
     s.nodeRefById.set(childC.id, childC)
 
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     createScrollHandle("container-a-zero").scrollTo(-50)
     createScrollHandle("container-b-zero").scrollTo(0)
 
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     expect(s.scrollOffsets.get(containerA.id)).toEqual({ x: 0, y: -50 })
     expect(s.scrollOffsets.get(containerB.id)).toEqual({ x: 0, y: -50 })
   })
 
-  test("render command shifting: root SCISSOR unshifted, nested SCISSOR shifted by parent, child shifted by compounded", () => {
+  test("render op shifting: root op unshifted, nested op shifted by parent, child shifted by compounded", () => {
     const containerA = rect(createNode("box"), 0, 0, 200, 100)
     containerA.props.scrollY = true
     containerA.props.scrollId = "shift-a"
@@ -198,43 +200,91 @@ describe("compounded scroll map (Decision 8 Option C)", () => {
     s.nodeRefById.set(containerB.id, containerB)
     s.nodeRefById.set(childC.id, childC)
 
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     createScrollHandle("shift-a").scrollTo(-50)
     createScrollHandle("shift-b").scrollTo(-20)
 
-    const commands: RenderCommand[] = [
-      // Root container A scissor start (should stay unshifted)
-      { type: CMD.SCISSOR_START, x: 0, y: 0, width: 200, height: 100, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: containerA.id },
-      // Nested container B scissor start (should be shifted by parent A's offset: y + -50)
-      { type: CMD.SCISSOR_START, x: 10, y: 20, width: 180, height: 80, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: containerB.id },
-      // Child C text command (should be shifted by compounded offset: y + -70)
-      { type: CMD.TEXT, x: 15, y: 25, width: 100, height: 20, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: childC.id },
-      // Nested container B scissor end (should remain unshifted)
-      { type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: containerB.id },
-      // Root container A scissor end (should remain unshifted)
-      { type: CMD.SCISSOR_END, x: 0, y: 0, width: 0, height: 0, color: 0, cornerRadius: 0, extra1: 0, extra2: 0, nodeId: containerA.id },
+    const rootOp: RenderGraphOp = {
+      kind: "rectangle",
+      renderObjectId: containerA.id,
+      type: CMD.RECTANGLE,
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      color: 0,
+      cornerRadius: 0,
+      radius: 0,
+      extra1: 0,
+      extra2: 0,
+      nodeId: containerA.id,
+      image: null,
+      canvas: null,
+      effect: null,
+      clipBounds: null,
+    }
+    const containerBOp: RenderGraphOp = {
+      kind: "rectangle",
+      renderObjectId: containerB.id,
+      type: CMD.RECTANGLE,
+      x: 10,
+      y: 20,
+      width: 180,
+      height: 80,
+      color: 0,
+      cornerRadius: 0,
+      radius: 0,
+      extra1: 0,
+      extra2: 0,
+      nodeId: containerB.id,
+      image: null,
+      canvas: null,
+      effect: null,
+      clipBounds: null,
+    }
+    const childCOp: RenderGraphOp = {
+      kind: "text",
+      renderObjectId: null,
+      type: CMD.TEXT,
+      x: 15,
+      y: 25,
+      width: 100,
+      height: 20,
+      color: 0,
+      cornerRadius: 0,
+      extra1: 0,
+      extra2: 0,
+      nodeId: childC.id,
+      text: "hello",
+      fontId: 0,
+      fontSize: 14,
+      lineHeight: 16,
+      maxWidth: 100,
+      textHeight: 20,
+      fontFamily: undefined,
+      fontWeight: undefined,
+      fontStyle: undefined,
+      clipBounds: null,
+    }
+
+    const buckets: LayerOpBucket[] = [
+      { key: "root", ops: [rootOp, containerBOp, childCOp], nodeId: 0 },
     ]
 
-    applyScrollOffsets(commands, s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps(buckets, s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
-    // Root scissor start: unshifted
-    expect(commands[0].x).toBe(0)
-    expect(commands[0].y).toBe(0)
+    // Root container A op: unshifted (containerA has no scroll parent)
+    expect(rootOp.x).toBe(0)
+    expect(rootOp.y).toBe(0)
 
-    // Nested scissor start: shifted by parent offset (-50)
-    expect(commands[1].x).toBe(10)
-    expect(commands[1].y).toBe(20 - 50) // -30
+    // Container B op: shifted by parent A offset (-50)
+    expect(containerBOp.x).toBe(10)
+    expect(containerBOp.y).toBe(20 - 50) // -30
 
-    // Child C command: shifted by compounded offset (-70)
-    expect(commands[2].x).toBe(15)
-    expect(commands[2].y).toBe(25 - 70) // -45
-
-    // Scissor end commands: unshifted
-    expect(commands[3].x).toBe(0)
-    expect(commands[3].y).toBe(0)
-    expect(commands[4].x).toBe(0)
-    expect(commands[4].y).toBe(0)
+    // Child C op: shifted by compounded offset (-70)
+    expect(childCOp.x).toBe(15)
+    expect(childCOp.y).toBe(25 - 70) // -45
   })
 
   test("getEffectivePosition integrates with compounded scroll offsets and routes scroll deltas", () => {
@@ -261,12 +311,12 @@ describe("compounded scroll map (Decision 8 Option C)", () => {
     s.nodeRefById.set(containerB.id, containerB)
     s.nodeRefById.set(childC.id, childC)
 
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     createScrollHandle("eff-a").scrollTo(-50)
     createScrollHandle("eff-b").scrollTo(-20)
 
-    applyScrollOffsets([], s, markLayerDirtyByKey)
+    applyScrollOffsetsToOps([], s.scrollContainers, s.nodeRefById, { scrollOffsets: s.scrollOffsets, markDirtyLayer: markLayerDirtyByKey })
 
     // getEffectivePosition checks:
     // Root container has no scroll container -> layout position

@@ -9,8 +9,9 @@ import {
   type TGEProps,
 } from "./node"
 import { syncAllLayoutProps, syncLayoutProp } from "./flex-sync"
-import { walkTree } from "../loop/walk-tree"
+import { walkTree, type WalkTreeState } from "../loop/walk-tree"
 import { createVexartLayoutCtx } from "../loop/layout-adapter"
+import { traverseFrame } from "../loop/pipeline-traverse"
 
 type FlexOnlyGridProps = TGEProps & {
   readonly flexBasis?: number
@@ -31,9 +32,9 @@ function syncTree(node: TGENode): void {
   for (const child of node.children) syncTree(child)
 }
 
-function frame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>) {
+function frame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>, width = 100, height = 20) {
   layout.beginLayout()
-  walkTree(root, {
+  const state: WalkTreeState = {
     scrollSpeedCap: { value: 0 },
     nodeCount: { value: 0 },
     rectNodes: [],
@@ -44,9 +45,27 @@ function frame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>) 
     nodeRefById: new Map(),
     rectNodeById: new Map(),
     layout,
-  })
-  const commands = layout.endLayout(root._flexNode)
-  return { commands, map: layout.getLastLayoutMap() }
+  }
+  walkTree(root, state)
+  const error = layout.calculateRoots(root._flexNode)
+
+  state.rectNodes.length = 0
+  state.textNodes.length = 0
+  state.boxNodes.length = 0
+  state.nodeRefById.clear()
+  state.rectNodeById.clear()
+  state.scrollContainers.length = 0
+  state.layerBoundaries.length = 0
+
+  if (error) {
+    return {
+      success: false,
+      error,
+    }
+  }
+
+  const result = traverseFrame(root, state, width, height)
+  return { success: result.success, result }
 }
 
 function gridRoot(extra: FlexOnlyGridProps = {}): TGENode {
@@ -73,8 +92,7 @@ describe("Grid/Flex boundary diagnostics", () => {
       path: "flexDirection",
       nodeId: root._flexNode!.getGridNodeId(),
     } as const
-    expect(result.commands).toEqual([])
-    expect(layout.getLastLayoutMap()).toBeNull()
+    expect(result.success).toBe(false)
     expect(getGridLayoutError(root)).toEqual(expected)
     expect(layout.getLastLayoutError()).toEqual(expected)
     layout.destroy()
@@ -86,9 +104,10 @@ describe("Grid/Flex boundary diagnostics", () => {
     const layout = createVexartLayoutCtx()
     layout.init(100, 20)
     const valid = frame(root, layout)
-    const previousMap = valid.map
-    expect(previousMap?.get(root.id)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(valid.success).toBe(true)
+    expect(root.layout).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
     expect(layout.getLastLayoutError()).toBeNull()
+    const previousRoot = { ...root.layout }
 
     root.props = { ...root.props, flexWrap: "wrap" } as FlexOnlyGridProps
     syncLayoutProp(root, "flexWrap", "wrap")
@@ -99,12 +118,13 @@ describe("Grid/Flex boundary diagnostics", () => {
       path: "flexWrap",
       nodeId: root._flexNode!.getGridNodeId(),
     })
-    expect(invalid.map).toBe(previousMap)
-    expect(invalid.map?.get(root.id)).toMatchObject({ x: 0, y: 0, width: 100, height: 20 })
+    expect(invalid.success).toBe(false)
+    expect(root.layout).toEqual(previousRoot)
 
     root.props = { ...root.props, flexWrap: undefined } as FlexOnlyGridProps
     syncLayoutProp(root, "flexWrap", undefined)
-    frame(root, layout)
+    const recovered = frame(root, layout)
+    expect(recovered.success).toBe(true)
     expect(layout.getLastLayoutError()).toBeNull()
     layout.destroy()
   })
@@ -122,8 +142,10 @@ describe("Grid/Flex boundary diagnostics", () => {
     const layout = createVexartLayoutCtx()
     layout.init(100, 20)
     const valid = frame(root, layout)
-    const previousMap = valid.map
+    expect(valid.success).toBe(true)
+    expect(child.layout).toMatchObject({ width: 30, height: 7 })
     expect(layout.getLastLayoutError()).toBeNull()
+    const previousChild = { ...child.layout }
 
     child.props = { ...child.props, alignY: "center" }
     syncLayoutProp(child, "alignY", "center")
@@ -134,8 +156,8 @@ describe("Grid/Flex boundary diagnostics", () => {
       path: "alignY",
       nodeId: child._flexNode!.getGridNodeId(),
     })
-    expect(invalid.map).toBe(previousMap)
-    expect(invalid.map?.get(child.id)).toMatchObject({ width: 30, height: 7 })
+    expect(invalid.success).toBe(false)
+    expect(child.layout).toEqual(previousChild)
     layout.destroy()
   })
 
@@ -148,18 +170,20 @@ describe("Grid/Flex boundary diagnostics", () => {
     const layout = createVexartLayoutCtx()
     layout.init(100, 20)
 
-    frame(root, layout)
+    const first = frame(root, layout)
+    expect(first.success).toBe(true)
     expect(layout.getLastLayoutError()).toBeNull()
-    expect(layout.getLastLayoutMap()?.get(child.id)).toMatchObject({ width: 100, height: 20 })
+    expect(child.layout).toMatchObject({ width: 100, height: 20 })
 
     child.props = { ...child.props, width: "fit", height: "fit" }
     child._widthSizing = parseSizing(child.props.width)
     child._heightSizing = parseSizing(child.props.height)
     syncLayoutProp(child, "width", child.props.width)
     syncLayoutProp(child, "height", child.props.height)
-    frame(root, layout)
+    const second = frame(root, layout)
+    expect(second.success).toBe(true)
     expect(layout.getLastLayoutError()).toBeNull()
-    expect(layout.getLastLayoutMap()?.get(child.id)).toMatchObject({ width: 30, height: 7 })
+    expect(child.layout).toMatchObject({ width: 30, height: 7 })
     layout.destroy()
   })
 

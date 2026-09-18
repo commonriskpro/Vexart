@@ -8,7 +8,6 @@
  */
 
 import type { TGENode } from "../ffi/node"
-import type { RenderCommand } from "../ffi/render-graph"
 import type { EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
 import type { PositionedCommand } from "./layout-adapter"
 import type { DamageRect } from "../ffi/damage"
@@ -134,17 +133,6 @@ export type WalkResult = {
   nodeRefById: Map<number, TGENode>
   /** Tier 2: count of nodes skipped by AABB viewport cull (Phase 3.3). */
   culledCount: number
-}
-
-/**
- * layout-adapter → layout map
- *
- * Produced after layout-adapter: flat RenderCommand array and
- * per-node positioned layout keyed by numeric node id.
- */
-export type LayoutResult = {
-  commands: RenderCommand[]
-  layoutMap: Map<number, PositionedCommand>
 }
 
 /**
