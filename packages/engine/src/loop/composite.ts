@@ -325,6 +325,10 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
     nodeRefById: s.nodeRefById,
     rectNodeById: s.rectNodeById,
     layout: s.layoutAdapter,
+    cullingEnabled: true,
+    viewportWidth: (s as any).width ?? s.viewportWidth,
+    viewportHeight: (s as any).height ?? s.viewportHeight,
+    ...((s.scrollOffsets ? { scrollOffsets: s.scrollOffsets } : {}) as any),
   }
 }
 
@@ -622,7 +626,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     // Single unified DFS traversal pass
     const layoutWritebackStart = profile ? performance.now() : 0
     const walkState = buildWalkState(s)
-    const traversalResult = traverseFrame(s.root, walkState, s.viewportWidth, s.viewportHeight)
+    const traversalResult = traverseFrame(s.root, walkState, s.viewportWidth, s.viewportHeight, s.scrollOffsets)
     if (!traversalResult.success) {
       if (profile) profile.layoutMs = performance.now() - layoutStart
       return

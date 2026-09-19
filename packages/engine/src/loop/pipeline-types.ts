@@ -23,13 +23,23 @@ export type FrameSnapshot = {
   data: Float64Array
 }
 
+export let _snapshotScratchBuffer: Float64Array = new Float64Array(1024)
+
 /**
  * Captures the current computed layout rects for all nodes into a flat Float64Array.
  * Stride is 4 floats per node: [x, y, width, height].
  */
 export function snapshotLayouts(nodes: TGENode[]): FrameSnapshot {
   const count = nodes.length
-  const data = new Float64Array(count * 4)
+  const needed = count * 4
+  if (needed > _snapshotScratchBuffer.length) {
+    let newCap = Math.max(1024, _snapshotScratchBuffer.length * 2)
+    while (newCap < needed) {
+      newCap *= 2
+    }
+    _snapshotScratchBuffer = new Float64Array(newCap)
+  }
+  const data = _snapshotScratchBuffer.subarray(0, needed)
   for (let i = 0; i < count; i++) {
     const layout = nodes[i].layout
     const offset = i * 4
@@ -210,9 +220,10 @@ export type PipelineContext = {
   scrollContainerId: number
   insideTransform: boolean
   dfsIndex: number
+  scrollOffsets?: Map<number, { x: number; y: number }>
 }
 
-export function createPipelineContext(): PipelineContext {
+export function createPipelineContext(scrollOffsets?: Map<number, { x: number; y: number }>): PipelineContext {
   return {
     clip: createClipContext(),
     layer: createLayerContext(),
@@ -221,5 +232,6 @@ export function createPipelineContext(): PipelineContext {
     scrollContainerId: 0,
     insideTransform: false,
     dfsIndex: 0,
+    scrollOffsets,
   }
 }

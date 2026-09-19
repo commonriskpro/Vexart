@@ -453,7 +453,9 @@ function collectAllNodes(node: TGENode, out: TGENode[] = []): TGENode[] {
 function registerCulledSubtree(node: TGENode, state: WalkTreeState): void {
   state.nodeRefById.set(node.id, node)
   for (let i = 0; i < node.children.length; i++) {
-    registerCulledSubtree(node.children[i], state)
+    const child = node.children[i]
+    child._scrollContainerId = node._scrollContainerId
+    registerCulledSubtree(child, state)
   }
 }
 
@@ -545,32 +547,6 @@ function visitNode(
     height: node.layout.height,
   }
 
-  const isScroll = !!(props.scrollX || props.scrollY)
-  const hasTransformProp = props.transform !== undefined && props.transform !== null
-
-  let isCulled = false
-  if (
-    state.cullingEnabled &&
-    !insideTransform &&
-    !hasTransformProp &&
-    !isScroll &&
-    node.children.length > 0 &&
-    state.viewportWidth !== undefined &&
-    state.viewportHeight !== undefined
-  ) {
-    if (prevLayout.width > 0 && prevLayout.height > 0) {
-      const fullyLeft = prevLayout.x + prevLayout.width <= 0
-      const fullyRight = prevLayout.x >= state.viewportWidth
-      const fullyAbove = prevLayout.y + prevLayout.height <= 0
-      const fullyBelow = prevLayout.y >= state.viewportHeight
-      if (fullyLeft || fullyRight || fullyAbove || fullyBelow) {
-        isCulled = true
-        if (state.culledCount) state.culledCount.value++
-        registerCulledSubtree(node, state)
-      }
-    }
-  }
-
   node.layout.x = absX
   node.layout.y = absY
   node.layout.width = width
@@ -587,6 +563,43 @@ function visitNode(
   node._depth = parentDepth
   node._scrollContainerId = parentScrollContainerId
   state.nodeRefById.set(node.id, node)
+
+  const isScroll = !!(props.scrollX || props.scrollY)
+  const hasTransformProp = props.transform !== undefined && props.transform !== null
+
+  let isCulled = false
+  if (
+    state.cullingEnabled &&
+    !insideTransform &&
+    !hasTransformProp &&
+    !isScroll &&
+    width > 0 &&
+    height > 0
+  ) {
+    const scrollOffset = parentScrollContainerId !== 0 ? ctx.scrollOffsets?.get(parentScrollContainerId) : undefined
+    const visualX = absX + (scrollOffset ? scrollOffset.x : 0)
+    const visualY = absY + (scrollOffset ? scrollOffset.y : 0)
+
+    const clipBounds = getCurrentClipBounds(ctx)
+    const vpW = state.viewportWidth ?? viewportW
+    const vpH = state.viewportHeight ?? viewportH
+    const clipLeft = clipBounds ? Math.max(0, clipBounds.x) : 0
+    const clipTop = clipBounds ? Math.max(0, clipBounds.y) : 0
+    const clipRight = clipBounds ? Math.min(vpW, clipBounds.x + clipBounds.width) : vpW
+    const clipBottom = clipBounds ? Math.min(vpH, clipBounds.y + clipBounds.height) : vpH
+
+    const fullyLeft = visualX + width <= clipLeft
+    const fullyRight = visualX >= clipRight
+    const fullyAbove = visualY + height <= clipTop
+    const fullyBelow = visualY >= clipBottom
+
+    if (clipRight <= clipLeft || clipBottom <= clipTop || fullyLeft || fullyRight || fullyAbove || fullyBelow) {
+      isCulled = true
+      if (state.culledCount) state.culledCount.value++
+      registerCulledSubtree(node, state)
+      return
+    }
+  }
 
   if (node.kind === "text") {
     state.textNodes.push(node)
@@ -1199,6 +1212,7 @@ export function traverseFrame(
   state: WalkTreeState,
   viewportW: number,
   viewportH: number,
+  scrollOffsets?: Map<number, { x: number; y: number }>,
 ): TraversalResult {
   const allNodes = collectAllNodes(root)
   const snapshot = snapshotLayouts(allNodes)
@@ -1206,7 +1220,7 @@ export function traverseFrame(
   effectPoolIdx = 0
   autoLayerCount = 0
 
-  const ctx = createPipelineContext()
+  const ctx = createPipelineContext(scrollOffsets ?? (state as any).scrollOffsets)
   const traversalContext = { hasAnyTransforms: false }
   const deferredRootFloats: TGENode[] = []
   const deferredElementFloats: TGENode[] = []
