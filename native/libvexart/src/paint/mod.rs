@@ -526,7 +526,13 @@ impl PaintContext {
                 let mut active_kind: Option<u16> = None;
                 for b in &self.prepared_batches {
                     if active_kind != Some(b.kind) {
-                        let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
+                        let pipeline = pipeline_for_kind(
+                            b.kind,
+                            &self.wgpu.pipelines,
+                            &self.wgpu.device,
+                            wgpu::TextureFormat::Rgba8Unorm,
+                            self.wgpu.pipeline_cache.as_ref(),
+                        );
                         pass.set_pipeline(pipeline);
                         if needs_fallback_bind_group(b.kind) {
                             pass.set_bind_group(0, &self.fallback_bind_group, &[]);
@@ -570,7 +576,13 @@ impl PaintContext {
             let mut active_kind: Option<u16> = None;
             for b in &self.prepared_batches {
                 if active_kind != Some(b.kind) {
-                    let pipeline = pipeline_for_kind(b.kind, &self.wgpu.pipelines);
+                    let pipeline = pipeline_for_kind(
+                        b.kind,
+                        &self.wgpu.pipelines,
+                        &self.wgpu.device,
+                        wgpu::TextureFormat::Rgba8Unorm,
+                        self.wgpu.pipeline_cache.as_ref(),
+                    );
                     pass.set_pipeline(pipeline);
                     if needs_fallback_bind_group(b.kind) {
                         pass.set_bind_group(0, &self.fallback_bind_group, &[]);
@@ -636,8 +648,6 @@ fn instance_stride_for_kind(kind: u16) -> usize {
         4 => size_of::<BridgePolygonInstance>(),
         5 => size_of::<BridgeBezierInstance>(),
         6 => size_of::<BridgeGlowInstance>(),
-        7 => size_of::<BridgeNebulaInstance>(),
-        8 => size_of::<BridgeStarfieldInstance>(),
         9 => size_of::<BridgeImageInstance>(),
         10 => size_of::<BridgeImageTransformInstance>(),
         12 => size_of::<BridgeLinearGradientInstance>(),
@@ -658,27 +668,28 @@ fn instance_stride_for_kind(kind: u16) -> usize {
 }
 
 /// Return a reference to the pipeline for the given cmd_kind.
-fn pipeline_for_kind(
+fn pipeline_for_kind<'a>(
     kind: u16,
-    reg: &pipelines::PipelineRegistry,
-) -> &wgpu::RenderPipeline {
+    reg: &'a pipelines::PipelineRegistry,
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    cache: Option<&wgpu::PipelineCache>,
+) -> &'a wgpu::RenderPipeline {
     match kind {
         // Slice 5a — ported pipelines
         0 => &reg.shape_rect,
         1 => &reg.shape_rect,
         2 => &reg.shape_rect_corners,
-        3 => &reg.circle,
-        4 => &reg.polygon,
-        5 => &reg.bezier,
+        3 => reg.get_circle(device, format, cache),
+        4 => reg.get_polygon(device, format, cache),
+        5 => reg.get_bezier(device, format, cache),
         6 => &reg.glow,
-        7 => &reg.nebula,
-        8 => &reg.starfield,
         9 => &reg.image,
         10 => &reg.image_transform,
         12 => &reg.gradient_linear,
         13 => &reg.gradient_radial,
         // Slice 5b — NEW GPU pipelines (DEC-012)
-        14 => &reg.gradient_conic,
+        14 => reg.get_gradient_conic(device, format, cache),
         15 => &reg.backdrop_blur,
         16 => &reg.backdrop_filter,
         17 => &reg.image_mask,

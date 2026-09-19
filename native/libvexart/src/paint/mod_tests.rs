@@ -575,3 +575,79 @@ fn test_persistent_render_pass_across_layer_dispatches() {
     assert_eq!(&pixels[left_pixel_idx..left_pixel_idx + 4], &[255, 0, 0, 255]);
     assert_eq!(&pixels[right_pixel_idx..right_pixel_idx + 4], &[0, 255, 0, 255]);
 }
+
+#[test]
+fn test_pruned_nebula_and_starfield_stride() {
+    // Kinds 7 (nebula) and 8 (starfield) have been pruned and must return stride 0.
+    assert_eq!(instance_stride_for_kind(7), 0);
+    assert_eq!(instance_stride_for_kind(8), 0);
+}
+
+#[test]
+fn test_lazy_pipelines_cold_start() {
+    let ctx = PaintContext::new();
+
+    // Verify that all 4 lazy pipelines are initially uncompiled (None)
+    assert!(ctx.wgpu.pipelines.circle.get().is_none());
+    assert!(ctx.wgpu.pipelines.polygon.get().is_none());
+    assert!(ctx.wgpu.pipelines.bezier.get().is_none());
+    assert!(ctx.wgpu.pipelines.gradient_conic.get().is_none());
+
+    // Access circle lazily
+    let circle_pipeline = ctx.wgpu.pipelines.get_circle(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(ctx.wgpu.pipelines.circle.get().is_some());
+
+    // Second access returns the same pointer
+    let circle_pipeline_again = ctx.wgpu.pipelines.get_circle(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(std::ptr::eq(circle_pipeline, circle_pipeline_again));
+
+    // Access polygon lazily
+    let poly_pipeline = ctx.wgpu.pipelines.get_polygon(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(ctx.wgpu.pipelines.polygon.get().is_some());
+    let poly_pipeline_again = ctx.wgpu.pipelines.get_polygon(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(std::ptr::eq(poly_pipeline, poly_pipeline_again));
+
+    // Access bezier lazily
+    let bezier_pipeline = ctx.wgpu.pipelines.get_bezier(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(ctx.wgpu.pipelines.bezier.get().is_some());
+    let bezier_pipeline_again = ctx.wgpu.pipelines.get_bezier(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(std::ptr::eq(bezier_pipeline, bezier_pipeline_again));
+
+    // Access gradient_conic lazily
+    let conic_pipeline = ctx.wgpu.pipelines.get_gradient_conic(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(ctx.wgpu.pipelines.gradient_conic.get().is_some());
+    let conic_pipeline_again = ctx.wgpu.pipelines.get_gradient_conic(
+        &ctx.wgpu.device,
+        wgpu::TextureFormat::Rgba8Unorm,
+        None,
+    );
+    assert!(std::ptr::eq(conic_pipeline, conic_pipeline_again));
+}

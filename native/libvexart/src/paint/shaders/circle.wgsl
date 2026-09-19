@@ -38,15 +38,24 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let stroke_norm = in.params.x;
   let has_fill = in.params.y;
   let has_stroke = in.params.z;
-  if (dist > 1.0) {
-    discard;
-  }
+
+  let delta = max(fwidth(dist), 0.0001);
+  let outer_alpha = 1.0 - smoothstep(1.0 - delta * 0.5, 1.0 + delta * 0.5, dist);
+
   let stroke_edge = max(0.0, 1.0 - stroke_norm);
-  if (has_stroke > 0.5 && dist >= stroke_edge) {
-    return in.stroke_color;
+  let inner_alpha = smoothstep(stroke_edge - delta * 0.5, stroke_edge + delta * 0.5, dist);
+
+  var color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+
+  if (has_stroke > 0.5 && has_fill > 0.5) {
+    let mixed = mix(in.fill_color, in.stroke_color, inner_alpha);
+    color = vec4<f32>(mixed.rgb, mixed.a * outer_alpha);
+  } else if (has_stroke > 0.5) {
+    let stroke_cov = outer_alpha * inner_alpha;
+    color = vec4<f32>(in.stroke_color.rgb, in.stroke_color.a * stroke_cov);
+  } else if (has_fill > 0.5) {
+    color = vec4<f32>(in.fill_color.rgb, in.fill_color.a * outer_alpha);
   }
-  if (has_fill > 0.5) {
-    return in.fill_color;
-  }
-  discard;
+
+  return color;
 }

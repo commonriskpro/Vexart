@@ -7,12 +7,6 @@ struct VSOut {
   @location(4) params: vec4<f32>,
 }
 
-fn quad_bezier(a: vec2<f32>, b: vec2<f32>, c: vec2<f32>, t: f32) -> vec2<f32> {
-  let ab = mix(a, b, t);
-  let bc = mix(b, c, t);
-  return mix(ab, bc, t);
-}
-
 fn segment_distance(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
   let ab = b - a;
   let denom = max(dot(ab, ab), 0.0001);
@@ -57,17 +51,39 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   let p1 = in.p1s.xy;
   let stroke_half = max(0.5, in.params.x * 0.5);
   let aa = max(0.75, in.params.y);
-  var min_dist = 1e9;
-  var prev = p0;
-  for (var i: u32 = 1u; i <= 32u; i = i + 1u) {
-    let t = f32(i) / 32.0;
-    let curr = quad_bezier(p0, c, p1, t);
-    min_dist = min(min_dist, segment_distance(p, prev, curr));
-    prev = curr;
+
+  let e0 = c - p0;
+  let e1 = p1 - p0;
+  let ep = p - p0;
+  let det = e0.x * e1.y - e0.y * e1.x;
+
+  var dist: f32;
+  if (abs(det) < 0.0001) {
+    // Collinear control points: fallback to line segment distance
+    dist = segment_distance(p, p0, p1);
+  } else {
+    // Loop-Blinn implicit formulation:
+    // Map p to canonical (u, v) affine coordinates where curve is u^2 - v = 0.
+    let w1 = (ep.x * e1.y - ep.y * e1.x) / det;
+    let w2 = (e0.x * ep.y - e0.y * ep.x) / det;
+
+    let u = 0.5 * w1 + w2;
+    let v = w2;
+
+    let f = u * u - v;
+    let grad = vec2<f32>(dpdx(f), dpdy(f));
+    let grad_len = max(length(grad), 0.0001);
+    let dist_curve = abs(f) / grad_len;
+
+    if (u < 0.0) {
+      dist = length(p - p0);
+    } else if (u > 1.0) {
+      dist = length(p - p1);
+    } else {
+      dist = dist_curve;
+    }
   }
-  if (min_dist > stroke_half + aa) {
-    discard;
-  }
-  let alpha = 1.0 - smoothstep(stroke_half, stroke_half + aa, min_dist);
+
+  let alpha = 1.0 - smoothstep(stroke_half, stroke_half + aa, dist);
   return vec4<f32>(in.color.rgb, in.color.a * alpha);
 }

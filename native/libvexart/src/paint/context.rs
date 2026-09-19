@@ -18,6 +18,8 @@ pub struct WgpuContext {
     pub cached_sampler: wgpu::Sampler,
     /// All render pipelines.
     pub pipelines: PipelineRegistry,
+    /// Optional pipeline cache handle for warm-start persistence.
+    pub pipeline_cache: Option<wgpu::PipelineCache>,
     /// Pipeline cache manager for fast warm-start persistence (REQ-2B-601).
     pub pipeline_cache_mgr: PipelineCacheManager,
 }
@@ -153,6 +155,7 @@ impl WgpuContext {
             image_bind_group_layout,
             cached_sampler,
             pipelines,
+            pipeline_cache: wgpu_pipeline_cache,
             pipeline_cache_mgr,
         }
     }

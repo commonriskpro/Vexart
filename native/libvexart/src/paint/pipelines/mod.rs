@@ -16,15 +16,14 @@ pub mod image;
 pub mod image_mask;
 pub mod image_transform;
 pub mod image_unpremultiply;
-pub mod nebula;
 pub mod polygon;
 pub mod rect_corners;
 pub mod shadow;
 pub mod shape_rect;
-pub mod starfield;
 pub mod unpremultiply_pack;
 
 use wgpu::{BindGroupLayout, ComputePipeline, Device, RenderPipeline, TextureFormat};
+use std::sync::OnceLock;
 
 /// Holds all render pipelines indexed by cmd_kind, plus internal image helpers.
 /// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4 + 5):
@@ -46,12 +45,10 @@ pub struct PipelineRegistry {
     // ── Slice 5a ──────────────────────────────────────────────────────────────
     pub shape_rect: RenderPipeline,
     pub shape_rect_corners: RenderPipeline,
-    pub circle: RenderPipeline,
-    pub polygon: RenderPipeline,
-    pub bezier: RenderPipeline,
+    pub circle: OnceLock<RenderPipeline>,
+    pub polygon: OnceLock<RenderPipeline>,
+    pub bezier: OnceLock<RenderPipeline>,
     pub glow: RenderPipeline,
-    pub nebula: RenderPipeline,
-    pub starfield: RenderPipeline,
     pub image: RenderPipeline,
     pub image_transform: RenderPipeline,
     pub image_transform_premultiplied: RenderPipeline,
@@ -59,7 +56,7 @@ pub struct PipelineRegistry {
     pub gradient_linear: RenderPipeline,
     pub gradient_radial: RenderPipeline,
     // ── Slice 5b ──────────────────────────────────────────────────────────────
-    pub gradient_conic: RenderPipeline,
+    pub gradient_conic: OnceLock<RenderPipeline>,
     pub backdrop_blur: RenderPipeline,
     pub backdrop_filter: RenderPipeline,
     pub image_mask: RenderPipeline,
@@ -90,12 +87,10 @@ impl PipelineRegistry {
             // Slice 5a
             shape_rect: shape_rect::create(device, format, cache),
             shape_rect_corners: rect_corners::create(device, format, cache),
-            circle: circle::create(device, format, cache),
-            polygon: polygon::create(device, format, cache),
-            bezier: bezier::create(device, format, cache),
+            circle: OnceLock::new(),
+            polygon: OnceLock::new(),
+            bezier: OnceLock::new(),
             glow: glow::create(device, format, cache),
-            nebula: nebula::create(device, format, cache),
-            starfield: starfield::create(device, format, cache),
             image: image::create(device, format, image_bgl, cache),
             image_transform: image_transform::create(device, format, image_bgl, cache),
             image_transform_premultiplied: image_transform::create_premultiplied(
@@ -105,7 +100,7 @@ impl PipelineRegistry {
             gradient_linear: gradient_linear::create(device, format, cache),
             gradient_radial: gradient_radial::create(device, format, cache),
             // Slice 5b
-            gradient_conic: gradient_conic::create(device, format, cache),
+            gradient_conic: OnceLock::new(),
             backdrop_blur: backdrop_blur::create(device, format, image_bgl, cache),
             backdrop_filter: backdrop_filter::create(device, format, image_bgl, cache),
             image_mask: image_mask::create(device, format, image_bgl, cache),
@@ -117,6 +112,46 @@ impl PipelineRegistry {
             unpremultiply_pack,
             unpremultiply_bgl,
         }
+    }
+
+    pub fn get_circle(
+        &self,
+        device: &Device,
+        format: TextureFormat,
+        cache: Option<&wgpu::PipelineCache>,
+    ) -> &RenderPipeline {
+        self.circle
+            .get_or_init(|| circle::create(device, format, cache))
+    }
+
+    pub fn get_polygon(
+        &self,
+        device: &Device,
+        format: TextureFormat,
+        cache: Option<&wgpu::PipelineCache>,
+    ) -> &RenderPipeline {
+        self.polygon
+            .get_or_init(|| polygon::create(device, format, cache))
+    }
+
+    pub fn get_bezier(
+        &self,
+        device: &Device,
+        format: TextureFormat,
+        cache: Option<&wgpu::PipelineCache>,
+    ) -> &RenderPipeline {
+        self.bezier
+            .get_or_init(|| bezier::create(device, format, cache))
+    }
+
+    pub fn get_gradient_conic(
+        &self,
+        device: &Device,
+        format: TextureFormat,
+        cache: Option<&wgpu::PipelineCache>,
+    ) -> &RenderPipeline {
+        self.gradient_conic
+            .get_or_init(|| gradient_conic::create(device, format, cache))
     }
 }
 
@@ -177,6 +212,10 @@ mod tests {
         });
 
         // Should not panic — all 19 pipelines compile successfully (13 Slice 5a + 4 Slice 5b + 2 Phase 2b).
-        let _registry = PipelineRegistry::new(&device, TextureFormat::Rgba8Unorm, &image_bgl, None);
+        let registry = PipelineRegistry::new(&device, TextureFormat::Rgba8Unorm, &image_bgl, None);
+        let _ = registry.get_circle(&device, TextureFormat::Rgba8Unorm, None);
+        let _ = registry.get_polygon(&device, TextureFormat::Rgba8Unorm, None);
+        let _ = registry.get_bezier(&device, TextureFormat::Rgba8Unorm, None);
+        let _ = registry.get_gradient_conic(&device, TextureFormat::Rgba8Unorm, None);
     }
 }

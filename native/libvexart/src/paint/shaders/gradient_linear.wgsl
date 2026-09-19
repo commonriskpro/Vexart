@@ -14,8 +14,8 @@ fn rounded_mask(local: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 {
   }
   let r = min(radius, min(size.x, size.y) * 0.5);
   let q = abs(local - size * 0.5) - (size * 0.5 - vec2<f32>(r, r));
-  let outside = length(max(q, vec2<f32>(0.0, 0.0))) - r;
-  return select(0.0, 1.0, outside <= 0.0);
+  let outside = length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+  return clamp(-outside, 0.0, 1.0);
 }
 
 @vertex
@@ -56,5 +56,6 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   }
   let centered = in.uv - vec2<f32>(0.5, 0.5);
   let t = clamp(dot(centered, in.dir) + 0.5, 0.0, 1.0);
-  return mix(in.from_color, in.to_color, t) * mask;
+  let color = mix(in.from_color, in.to_color, t);
+  return vec4<f32>(color.rgb, color.a * mask);
 }

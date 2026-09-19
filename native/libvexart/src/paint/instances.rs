@@ -320,76 +320,6 @@ pub struct BridgeShadowInstance {
     pub _pad2: f32,
 }
 
-/// Mirrors bridge NebulaInstance (32 floats).
-/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-pub struct BridgeNebulaInstance {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub seed: f32,
-    pub scale: f32,
-    pub octaves: f32,
-    pub gain: f32,
-    pub lacunarity: f32,
-    pub warp: f32,
-    pub detail: f32,
-    pub dust: f32,
-    pub stop0_pos: f32,
-    pub stop0_r: f32,
-    pub stop0_g: f32,
-    pub stop0_b: f32,
-    pub stop0_a: f32,
-    pub stop1_pos: f32,
-    pub stop1_r: f32,
-    pub stop1_g: f32,
-    pub stop1_b: f32,
-    pub stop1_a: f32,
-    pub stop2_pos: f32,
-    pub stop2_r: f32,
-    pub stop2_g: f32,
-    pub stop2_b: f32,
-    pub stop2_a: f32,
-    pub stop3_pos: f32,
-    pub stop3_r: f32,
-    pub stop3_g: f32,
-    pub stop3_b: f32,
-    pub stop3_a: f32,
-}
-
-/// Mirrors bridge StarfieldInstance (24 floats: x,y,w,h + params0(seed,count,cluster_count,cluster_stars) + warm(rgba) + neutral(rgba) + cool(rgba) + 4 pad).
-/// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
-pub struct BridgeStarfieldInstance {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub seed: f32,
-    pub count: f32,
-    pub cluster_count: f32,
-    pub cluster_stars: f32,
-    pub warm_r: f32,
-    pub warm_g: f32,
-    pub warm_b: f32,
-    pub warm_a: f32,
-    pub neutral_r: f32,
-    pub neutral_g: f32,
-    pub neutral_b: f32,
-    pub neutral_a: f32,
-    pub cool_r: f32,
-    pub cool_g: f32,
-    pub cool_b: f32,
-    pub cool_a: f32,
-    pub _pad0: f32,
-    pub _pad1: f32,
-    pub _pad2: f32,
-    pub _pad3: f32,
-}
-
 /// Mirrors bridge ImageInstance (8 floats: x,y,w,h + opacity + 3 pad).
 /// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
 #[repr(C)]
@@ -407,6 +337,7 @@ pub struct BridgeImageInstance {
 
 /// Mirrors bridge ImageTransformInstance (12 floats: p0(4 floats) + p1(4 floats)
 /// + opacity + signed object-fit crop/inset fractions + trailing pad).
+///
 /// Mirrors bridge layout for Slice 5a port; Slice 9 may reconcile with engine TS struct shape.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
