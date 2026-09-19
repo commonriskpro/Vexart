@@ -289,6 +289,11 @@ export function paintFrame(
     }
   }
 
+  // ── Step 2.5: Clean up orphan layers and invalidate absorbing slots ──
+  const cleanupStart = profile ? performance.now() : 0
+  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence, !!state.suppressNativeLayerDeletes)
+  if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
+
   // ── Step 3: Per-slot paint ──
   for (const prepared of preparedSlots) {
     const slot = prepared.slot
@@ -393,10 +398,7 @@ export function paintFrame(
     }
   }
 
-  // ── Step 4: Clean up orphan layers ──
-  const cleanupStart = profile ? performance.now() : 0
-  ioMs += cleanupOrphanLayers(preparedSlots, layerCache, activeSlotKeys, state.transmissionMode, imageIdForLayer, removeLayer, debugCadence, !!state.suppressNativeLayerDeletes)
-  if (profile) profile.paintLayerCleanupMs += performance.now() - cleanupStart
+  // ── Step 4: Layer stability counters ──
   updateLayerStabilityCounters(preparedSlots, slotBoundaryByKey, state.nodeRefById)
 
   // ── Step 5: Final-frame strategy ──

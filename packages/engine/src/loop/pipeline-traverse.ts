@@ -273,6 +273,7 @@ export function visitNode(
   node._dfsIndex = dfsIndex
   node._depth = parentDepth
   node._scrollContainerId = parentScrollContainerId
+  node._layerKey = currentLayerKey
   state.nodeRefById.set(node.id, node)
 
   const isScroll = !!(props.scrollX || props.scrollY)
@@ -382,10 +383,14 @@ export function visitNode(
   } else if (!insideIsolation && !insideScroll && (isInteractionLayer || hasSubtreeTransform)) {
     if (node._compositor) node._compositor.autoLayer = false
     shouldBoundary = true
-  } else if (node._compositor?.autoLayer === true && node._compositor.unstableFrames >= 3) {
-    node._compositor.autoLayer = false
-    node._compositor.stableFrames = 0
-    node._compositor.unstableFrames = 0
+  } else if (node._compositor?.autoLayer === true) {
+    if (node._compositor.unstableFrames >= 3) {
+      node._compositor.autoLayer = false
+      node._compositor.stableFrames = 0
+      node._compositor.unstableFrames = 0
+    } else {
+      shouldBoundary = true
+    }
   } else if (!insideIsolation && !insideScroll && !hasBackdrop && (node._compositor?.stableFrames ?? 0) >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
     ensureCompositorExtra(node).autoLayer = true
     autoLayerCount++
