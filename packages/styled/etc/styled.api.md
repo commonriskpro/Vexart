@@ -18,6 +18,15 @@ export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
 export type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT];
 
 // @public (undocumented)
+export type CodeTheme = {
+    bg: string | number;
+    fg: string | number;
+    lineNumberFg: string | number;
+    radius: number;
+    padding: number;
+};
+
+// @public (undocumented)
 export const colors: {
     readonly background: "#0a0a0a";
     readonly foreground: "#fafafa";
@@ -103,6 +112,15 @@ export function H3(props: TypographyProps): JSX.Element;
 // @public (undocumented)
 export function H4(props: TypographyProps): JSX.Element;
 
+// @public
+export type Highlighter = (content: string, language?: string) => Promise<HighlightToken[][]> | HighlightToken[][];
+
+// @public
+export type HighlightToken = {
+    text: string;
+    color: string | number;
+};
+
 // @public (undocumented)
 export function Large(props: TypographyProps): JSX.Element;
 
@@ -111,6 +129,28 @@ export function Lead(props: TypographyProps): JSX.Element;
 
 // @public (undocumented)
 export const lightTheme: Required<ThemeDefinition>;
+
+// @public (undocumented)
+export type MarkdownTheme = {
+    fg: string | number;
+    muted: string | number;
+    heading: string | number;
+    link: string | number;
+    bold: string | number;
+    italic: string | number;
+    codeFg: string | number;
+    codeBg: string | number;
+    codeBlockBg: string | number;
+    blockquoteBorder: string | number;
+    listBullet: string | number;
+    tableBg: string | number;
+    tableHeader: string | number;
+    hrColor: string | number;
+    del: string | number;
+};
+
+// @public
+export type MarkdownTokenizer = (src: string) => any[];
 
 // @public (undocumented)
 export function Muted(props: TypographyProps): JSX.Element;
@@ -470,6 +510,7 @@ export type VoidCodeProps = {
     height?: SizingUnit;
     lineNumbers?: boolean;
     streaming?: boolean;
+    theme?: Partial<CodeTheme>;
 };
 
 // @public (undocumented)
@@ -640,6 +681,8 @@ export type VoidMarkdownProps = {
     highlighter?: Highlighter;
     width?: SizingUnit;
     streaming?: boolean;
+    theme?: Partial<MarkdownTheme>;
+    tokenizer?: MarkdownTokenizer;
 };
 
 // @public (undocumented)
@@ -874,7 +917,6 @@ export const weight: {
 // Warnings were encountered during analysis:
 //
 // <repo>/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:13:5 - (ae-forgotten-export) The symbol "Highlighter" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:14:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/diff.d.ts:15:5 - (ae-forgotten-export) The symbol "DiffTheme" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/diff.d.ts:17:5 - (ae-forgotten-export) The symbol "DiffLine" needs to be exported by the entry point index.d.ts

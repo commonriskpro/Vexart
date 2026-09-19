@@ -71,6 +71,14 @@ const DIFF = `--- a/status.ts
 +return "ready"
 `
 
+const HEADLESS_CODE_THEME = {
+  bg: 0x1a1a2eff,
+  fg: 0xe0e0e0ff,
+  lineNumberFg: 0x555555ff,
+  radius: 4,
+  padding: 8,
+}
+
 const HEADLESS_DIFF_THEME = {
   fg: 0xe0e0e0ff,
   muted: 0x888888ff,
@@ -88,6 +96,24 @@ const HEADLESS_DIFF_THEME = {
   linePadding: 4,
 }
 
+const HEADLESS_MARKDOWN_THEME = {
+  fg: 0xe0e0e0ff,
+  muted: 0x888888ff,
+  heading: 0x56d4c8ff,
+  link: 0x61afefff,
+  bold: 0xffffffff,
+  italic: 0xc0a0e0ff,
+  codeFg: 0xe5c07bff,
+  codeBg: 0x2c313aff,
+  codeBlockBg: 0x1a1a2eff,
+  blockquoteBorder: 0x7c6eaeff,
+  listBullet: 0x4eaed0ff,
+  tableBg: 0x1a1a2eff,
+  tableHeader: 0x56d4c8ff,
+  hrColor: 0x333333ff,
+  del: 0x666666ff,
+}
+
 function PanelTitle(props: { children: string }) {
   return <text color={0xffd166ff} fontSize={14}>{props.children}</text>
 }
@@ -97,13 +123,13 @@ function HeadlessColumn() {
     <box width={560} direction="column" gap={10}>
       <PanelTitle>HEADLESS PUBLIC</PanelTitle>
       <box width={560} height={170} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <Code content={CODE} language="typescript" highlighter={demoHighlighter} width={540} lineNumbers />
+        <Code content={CODE} language="typescript" highlighter={demoHighlighter} width={540} lineNumbers theme={HEADLESS_CODE_THEME} />
       </box>
       <box width={560} height={155} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
         <Diff diff={DIFF} showLineNumbers width={540} theme={HEADLESS_DIFF_THEME} />
       </box>
       <box width={560} height={410} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <Markdown content={MARKDOWN} highlighter={demoHighlighter} width={540} />
+        <Markdown content={MARKDOWN} highlighter={demoHighlighter} width={540} theme={HEADLESS_MARKDOWN_THEME} />
       </box>
     </box>
   )

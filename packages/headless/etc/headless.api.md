@@ -53,6 +53,9 @@ export type CheckboxRenderContext = ToggleRenderContext;
 export function Code(props: CodeProps): JSX.Element;
 
 // @public (undocumented)
+export const CODE_DEFAULTS: CodeTheme;
+
+// @public (undocumented)
 export type CodeProps = {
     content: string;
     language?: string;
@@ -113,6 +116,24 @@ export type ComboboxProps = {
     renderOption: (option: ComboboxOption, ctx: ComboboxOptionContext) => JSX.Element;
     renderContent?: (children: JSX.Element) => JSX.Element;
     renderEmpty?: () => JSX.Element;
+};
+
+// @public
+export function createCode(options: CreateCodeOptions | string | (() => string)): CreateCodeResult;
+
+// @public
+export type CreateCodeOptions = {
+    content: string | (() => string);
+    language?: string | (() => string | undefined);
+    highlighter?: Highlighter | (() => Highlighter | undefined);
+    defaultFg?: string | number | (() => string | number);
+    streaming?: boolean | (() => boolean | undefined);
+};
+
+// @public
+export type CreateCodeResult = {
+    tokens: Accessor<HighlightToken[][]>;
+    lineCount: Accessor<number>;
 };
 
 // @public (undocumented)
@@ -424,8 +445,9 @@ export function Markdown(props: MarkdownProps): JSX.Element;
 // @public (undocumented)
 export type MarkdownProps = {
     content: string;
+    tokenizer?: MarkdownTokenizer;
     highlighter?: Highlighter;
-    color?: number;
+    color?: string | number;
     width?: SizingUnit;
     streaming?: boolean;
     theme?: Partial<MarkdownTheme>;
@@ -449,6 +471,21 @@ export type MarkdownTheme = {
     hrColor: string | number;
     del: string | number;
 };
+
+// @public
+export type MarkdownToken = {
+    type: string;
+    raw?: string;
+    text?: string;
+    tokens?: any[];
+    [key: string]: any;
+};
+
+// @public
+export type MarkdownTokenizer = (src: string) => any[];
+
+// @public (undocumented)
+export const MD_DEFAULTS: MarkdownTheme;
 
 // @public (undocumented)
 export type Modifiers = {
@@ -479,6 +516,12 @@ export type OverlayRootProps = {
 
 // @public (undocumented)
 export function parseDiff(diff: string): DiffLine[];
+
+// @public (undocumented)
+export const parseFallbackMarkdown: typeof parseMarkdown;
+
+// @public
+export function parseMarkdown(src: string): any[];
 
 // @public (undocumented)
 export function Popover(props: PopoverProps): JSX.Element;
@@ -917,6 +960,9 @@ export type TooltipProps = {
 };
 
 // @public (undocumented)
+export const useCodeTokens: typeof createCode;
+
+// @public (undocumented)
 export const useDiff: typeof createDiff;
 
 // @public (undocumented)
@@ -953,7 +999,7 @@ export type VisualCursor = {
 
 // Warnings were encountered during analysis:
 //
-// <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:53:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:89:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -4,8 +4,7 @@
  * @public
  */
 
-import { Code } from "@vexart/headless"
-import type { Highlighter } from "@vexart/headless"
+import { Code, type CodeTheme, type Highlighter } from "@vexart/headless"
 import type { SizingUnit } from "@vexart/engine"
 import { radius, space } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
@@ -20,10 +19,21 @@ export type VoidCodeProps = {
   height?: SizingUnit
   lineNumbers?: boolean
   streaming?: boolean
+  /** Visual theme overrides. */
+  theme?: Partial<CodeTheme>
 }
 
 /** @public */
 export function VoidCode(props: VoidCodeProps) {
+  const voidTheme = () => ({
+    bg: themeColors.card,
+    fg: themeColors.foreground,
+    lineNumberFg: themeColors.mutedForeground,
+    radius: radius.md,
+    padding: space[3],
+    ...props.theme,
+  })
+
   return (
     <Code
       content={props.content}
@@ -33,12 +43,7 @@ export function VoidCode(props: VoidCodeProps) {
       height={props.height}
       lineNumbers={props.lineNumbers}
       streaming={props.streaming}
-      theme={{
-        bg: themeColors.card,
-        lineNumberFg: themeColors.mutedForeground,
-        radius: radius.md,
-        padding: space[3],
-      }}
+      theme={voidTheme()}
     />
   )
 }

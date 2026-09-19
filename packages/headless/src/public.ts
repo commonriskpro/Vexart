@@ -53,11 +53,24 @@ export type {
 
 // ── Display ───────────────────────────────────────────────────────────────────
 
-export { Code } from "./display/code"
-export type { CodeTheme, CodeProps, HighlightToken, Token, Highlighter } from "./display/code"
+export { Code, createCode, useCodeTokens, CODE_DEFAULTS } from "./display/code"
+export type {
+  CodeTheme,
+  CodeProps,
+  HighlightToken,
+  Token,
+  Highlighter,
+  CreateCodeOptions,
+  CreateCodeResult,
+} from "./display/code"
 
-export { Markdown } from "./display/markdown"
-export type { MarkdownTheme, MarkdownProps } from "./display/markdown"
+export { Markdown, parseMarkdown, parseFallbackMarkdown, MD_DEFAULTS } from "./display/markdown"
+export type {
+  MarkdownTheme,
+  MarkdownProps,
+  MarkdownToken,
+  MarkdownTokenizer,
+} from "./display/markdown"
 
 export { ProgressBar } from "./display/progress-bar"
 export type { ProgressBarRenderContext, ProgressBarProps } from "./display/progress-bar"

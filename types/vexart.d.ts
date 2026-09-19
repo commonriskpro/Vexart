@@ -348,6 +348,9 @@ export declare type CliResult = {
 export declare function Code(props: CodeProps): JSX.Element;
 
 /** @public */
+export declare const CODE_DEFAULTS: CodeTheme;
+
+/** @public */
 export declare type CodeProps = {
     content: string;
     language?: string;
@@ -508,6 +511,40 @@ export declare type CreateAppRouterOptions = {
     defaultFocusId?: string | null;
     restoreFocus?: boolean;
     onFocus?: AppRouterFocusRestorer;
+};
+
+/**
+ * Reactive syntax highlighting helper.
+ *
+ * Accepts source code options and returns reactive line tokens and line count.
+ * Handles synchronous and asynchronous highlighters, streaming debouncing,
+ * and fallback token generation.
+ *
+ * @public
+ */
+export declare function createCode(options: CreateCodeOptions | string | (() => string)): CreateCodeResult;
+
+/**
+ * Options for `createCode` reactive helper.
+ *
+ * @public
+ */
+export declare type CreateCodeOptions = {
+    content: string | (() => string);
+    language?: string | (() => string | undefined);
+    highlighter?: Highlighter | (() => Highlighter | undefined);
+    defaultFg?: string | number | (() => string | number);
+    streaming?: boolean | (() => boolean | undefined);
+};
+
+/**
+ * Result of `createCode` reactive helper.
+ *
+ * @public
+ */
+export declare type CreateCodeResult = {
+    tokens: Accessor<HighlightToken[][]>;
+    lineCount: Accessor<number>;
 };
 
 export { createComponent }
@@ -1505,10 +1542,12 @@ export declare function Markdown(props: MarkdownProps): JSX.Element;
 /** @public */
 export declare type MarkdownProps = {
     content: string;
+    /** Optional pluggable tokenizer (e.g. marked.Lexer.lex). Defaults to built-in fallback parser. */
+    tokenizer?: MarkdownTokenizer;
     /** Optional pluggable syntax highlighter for code blocks. */
     highlighter?: Highlighter;
     /** Default text color (shorthand — overrides theme.fg). */
-    color?: number;
+    color?: string | number;
     width?: SizingUnit;
     streaming?: boolean;
     /** Visual theme — all styling comes from here. */
@@ -1549,10 +1588,36 @@ export declare type MarkdownTheme = {
     del: string | number;
 };
 
+/**
+ * Generic markdown token interface.
+ *
+ * @public
+ */
+export declare type MarkdownToken = {
+    type: string;
+    raw?: string;
+    text?: string;
+    tokens?: any[];
+    [key: string]: any;
+};
+
+/**
+ * Pluggable markdown tokenizer function contract.
+ *
+ * Accepts markdown source and returns an array of block tokens.
+ * Compatible with `marked.Lexer.lex(src)`.
+ *
+ * @public
+ */
+export declare type MarkdownTokenizer = (src: string) => any[];
+
 export { Match }
 
 /** @public */
 export declare function matchRoute(routes: AppRouteDefinition[], path: string): AppRouteMatch | null;
+
+/** @public */
+export declare const MD_DEFAULTS: MarkdownTheme;
 
 /** Measure text dimensions (width and height) for a single line (no wrapping). */
 /** @public */
@@ -1795,6 +1860,18 @@ export declare type PageProps = TGEProps & {
 
 /** @public */
 export declare function parseDiff(diff: string): DiffLine[];
+
+/** @public */
+export declare const parseFallbackMarkdown: typeof parseMarkdown;
+
+/**
+ * Built-in lightweight zero-dependency markdown block parser.
+ *
+ * Parses headings, code blocks, blockquotes, lists, tables, hr, and paragraphs.
+ *
+ * @public
+ */
+export declare function parseMarkdown(src: string): any[];
 
 /** @public */
 declare type ParticleConfig = {
@@ -3207,6 +3284,9 @@ export { untrack }
 /** @public */
 export declare function useAppTerminal(): Terminal;
 
+/** @public */
+export declare const useCodeTokens: typeof createCode;
+
 export { useContext }
 
 /** @public */
@@ -3512,6 +3592,8 @@ export declare type VoidCodeProps = {
     height?: SizingUnit;
     lineNumbers?: boolean;
     streaming?: boolean;
+    /** Visual theme overrides. */
+    theme?: Partial<CodeTheme>;
 };
 
 /** @public */
@@ -3688,6 +3770,10 @@ export declare type VoidMarkdownProps = {
     highlighter?: Highlighter;
     width?: SizingUnit;
     streaming?: boolean;
+    /** Optional visual theme overrides. */
+    theme?: Partial<MarkdownTheme>;
+    /** Optional custom tokenizer override (defaults to marked Lexer). */
+    tokenizer?: MarkdownTokenizer;
 };
 
 /** @public */

@@ -166,12 +166,6 @@ export function createParticleSystem(config: ParticleConfig): ParticleSystem;
 export function createScrollHandle(scrollId: string): ScrollHandle;
 
 // @public (undocumented)
-export function createSlot(slotName: string, registry: SlotRegistry): () => JSX.Element | null;
-
-// @public (undocumented)
-export function createSlotRegistry(): SlotRegistry;
-
-// @public (undocumented)
 export function createSpring(initial: number, config?: SpringConfig): AnimationSignal;
 
 // @public
@@ -850,31 +844,6 @@ export type ResizeEvent = {
 export type ResizeHandler = (size: TerminalSize) => void;
 
 // @public (undocumented)
-export class RGBA {
-    constructor(r: number, g: number, b: number, a?: number);
-    // (undocumented)
-    readonly a: number;
-    // (undocumented)
-    readonly b: number;
-    // (undocumented)
-    static fromHex(hex: string): RGBA;
-    // (undocumented)
-    static fromInts(r: number, g: number, b: number, a?: number): RGBA;
-    // (undocumented)
-    static fromValues(r: number, g: number, b: number, a?: number): RGBA;
-    // (undocumented)
-    readonly g: number;
-    // (undocumented)
-    readonly r: number;
-    // (undocumented)
-    toString(): string;
-    // (undocumented)
-    toU32(): number;
-    // (undocumented)
-    valueOf(): number;
-}
-
-// @public (undocumented)
 export type ScrollHandle = {
     readonly scrollX: number;
     readonly scrollY: number;
@@ -1194,7 +1163,7 @@ export type TGEProps = {
     fontId?: number;
     lineHeight?: number;
     wordBreak?: "normal" | "keep-all";
-    whiteSpace?: "normal" | "pre-wrap";
+    whiteSpace?: "normal" | "pre-wrap" | "nowrap";
     fontFamily?: string;
     fontWeight?: number;
     fontStyle?: "normal" | "italic";

@@ -5,6 +5,9 @@
   "sideEffects": false,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "dependencies": {
+    "marked": "^18.0.0"
+  },
   "peerDependencies": {
     "@vexart/engine": "workspace:*",
     "@vexart/headless": "workspace:*"

@@ -145,9 +145,11 @@ export type { VoidTextareaProps } from "./components/textarea"
 
 export { VoidCode } from "./components/code"
 export type { VoidCodeProps } from "./components/code"
+export type { CodeTheme, Highlighter, HighlightToken } from "@vexart/headless"
 
 export { VoidMarkdown } from "./components/markdown"
 export type { VoidMarkdownProps } from "./components/markdown"
+export type { MarkdownTheme, MarkdownTokenizer } from "@vexart/headless"
 
 export { VoidList } from "./components/list"
 export type { VoidListProps } from "./components/list"

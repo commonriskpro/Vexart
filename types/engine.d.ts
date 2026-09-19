@@ -206,13 +206,6 @@ export declare function createParticleSystem(config: ParticleConfig): ParticleSy
 export declare function createScrollHandle(scrollId: string): ScrollHandle;
 
 /** @public */
-export declare function createSlot(slotName: string, registry: SlotRegistry): () => JSX.Element | null;
-
-/** Create a new slot registry. */
-/** @public */
-export declare function createSlotRegistry(): SlotRegistry;
-
-/** @public */
 export declare function createSpring(initial: number, config?: SpringConfig): AnimationSignal;
 
 /**
@@ -1060,21 +1053,6 @@ export declare type ResizeEvent = {
 /** @public */
 export declare type ResizeHandler = (size: TerminalSize) => void;
 
-/** @public */
-export declare class RGBA {
-    readonly r: number;
-    readonly g: number;
-    readonly b: number;
-    readonly a: number;
-    constructor(r: number, g: number, b: number, a?: number);
-    static fromInts(r: number, g: number, b: number, a?: number): RGBA;
-    static fromHex(hex: string): RGBA;
-    static fromValues(r: number, g: number, b: number, a?: number): RGBA;
-    toU32(): number;
-    valueOf(): number;
-    toString(): string;
-}
-
 /**
  * scroll.ts — programmatic scroll state
  *
@@ -1544,7 +1522,7 @@ export declare type TGEProps = {
     fontId?: number;
     lineHeight?: number;
     wordBreak?: "normal" | "keep-all";
-    whiteSpace?: "normal" | "pre-wrap";
+    whiteSpace?: "normal" | "pre-wrap" | "nowrap";
     fontFamily?: string;
     fontWeight?: number;
     fontStyle?: "normal" | "italic";

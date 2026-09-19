@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createSignal, createEffect, onCleanup, Index } from "solid-js"
+import { createSignal, createComputed, createMemo, onCleanup, Index, type Accessor } from "solid-js"
 import type { JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
 
@@ -61,54 +61,124 @@ export type CodeTheme = {
   padding: number
 }
 
-const CODE_DEFAULTS: CodeTheme = {
-  bg: 0x1a1a2eff,
-  fg: 0xe0e0e0ff,
-  lineNumberFg: 0x555555ff,
-  radius: 4,
-  padding: 8,
+/** @public */
+export const CODE_DEFAULTS: CodeTheme = {
+  bg: "transparent",
+  fg: "currentColor",
+  lineNumberFg: "currentColor",
+  radius: 0,
+  padding: 0,
 }
 
-// ── Component Props ──
+// ── Reactive Helper ──
 
-/** @public */
-export type CodeProps = {
-  content: string
-  language?: string
-  /** Pluggable syntax highlighter. When omitted, renders plain monospaced lines. */
-  highlighter?: Highlighter
-  width?: SizingUnit
-  height?: SizingUnit
-  /** Visual theme — all styling comes from here. */
-  theme?: Partial<CodeTheme>
-  lineNumbers?: boolean
-  streaming?: boolean
+/**
+ * Options for `createCode` reactive helper.
+ *
+ * @public
+ */
+export type CreateCodeOptions = {
+  content: string | (() => string)
+  language?: string | (() => string | undefined)
+  highlighter?: Highlighter | (() => Highlighter | undefined)
+  defaultFg?: string | number | (() => string | number)
+  streaming?: boolean | (() => boolean | undefined)
 }
 
-/** @public */
-export function Code(props: CodeProps) {
-  const t = () => ({ ...CODE_DEFAULTS, ...props.theme })
-  const [tokens, setTokens] = createSignal<HighlightToken[][]>([])
+/**
+ * Result of `createCode` reactive helper.
+ *
+ * @public
+ */
+export type CreateCodeResult = {
+  tokens: Accessor<HighlightToken[][]>
+  lineCount: Accessor<number>
+}
 
-  const showLineNumbers = () => props.lineNumbers ?? false
+/**
+ * Reactive syntax highlighting helper.
+ *
+ * Accepts source code options and returns reactive line tokens and line count.
+ * Handles synchronous and asynchronous highlighters, streaming debouncing,
+ * and fallback token generation.
+ *
+ * @public
+ */
+export function createCode(
+  options: CreateCodeOptions | string | (() => string),
+): CreateCodeResult {
+  const opts: CreateCodeOptions =
+    typeof options === "string" || typeof options === "function"
+      ? { content: options }
+      : options
+
+  const getContent = (): string => {
+    if (typeof opts.content === "function") {
+      const res = opts.content()
+      return typeof res === "string" ? res : ""
+    }
+    return typeof opts.content === "string" ? opts.content : ""
+  }
+  const getLanguage = (): string | undefined => {
+    if (typeof opts.language === "function") return opts.language()
+    return opts.language
+  }
+  const getHighlighter = (): Highlighter | undefined => {
+    if (typeof opts.highlighter !== "function") return undefined
+    if (opts.highlighter.length === 0) {
+      const res = (opts.highlighter as () => unknown)()
+      if (typeof res === "function") return res as Highlighter
+      return undefined
+    }
+    return opts.highlighter as Highlighter
+  }
+  const getDefaultFg = (): string | number => {
+    if (typeof opts.defaultFg === "function") return opts.defaultFg()
+    return opts.defaultFg ?? "currentColor"
+  }
+  const getStreaming = (): boolean => {
+    if (typeof opts.streaming === "function") return !!opts.streaming()
+    return !!opts.streaming
+  }
+
+  const getFallback = (): HighlightToken[][] => {
+    const content = getContent() ?? ""
+    const defaultFg = getDefaultFg()
+    return content.split("\n").map((line) => [{ text: line, color: defaultFg }])
+  }
+
+  const getInitialTokens = (): HighlightToken[][] => {
+    const highlighter = getHighlighter()
+    const content = getContent() ?? ""
+    const language = getLanguage()
+    if (highlighter) {
+      try {
+        const res = highlighter(content, language)
+        if (Array.isArray(res)) return res
+      } catch {
+        // Fall back
+      }
+    }
+    return getFallback()
+  }
+
+  const [tokens, setTokens] = createSignal<HighlightToken[][]>(getInitialTokens())
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
-  createEffect(() => {
-    const content = props.content
-    const language = props.language
-    const highlighter = props.highlighter
-    const isStreaming = props.streaming ?? false
 
-    const defaultFg = t().fg
+  createComputed(() => {
+    const content = getContent() ?? ""
+    const language = getLanguage()
+    const highlighter = getHighlighter()
+    const isStreaming = getStreaming()
+    const defaultFg = getDefaultFg()
+
     const fallback: HighlightToken[][] = content.split("\n").map((line) => [{ text: line, color: defaultFg }])
 
     if (!highlighter) {
       setTokens(fallback)
       return
     }
-
-    // Set immediate fallback so content is visible right away
-    setTokens(fallback)
 
     let cancelled = false
     const doHighlight = () => {
@@ -136,6 +206,7 @@ export function Code(props: CodeProps) {
     }
 
     if (isStreaming) {
+      setTokens(fallback)
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(doHighlight, 150)
     } else {
@@ -150,6 +221,43 @@ export function Code(props: CodeProps) {
       }
     })
   })
+
+  const lineCount = createMemo(() => tokens().length)
+
+  return { tokens, lineCount }
+}
+
+/** @public */
+export const useCodeTokens = createCode
+
+// ── Component Props ──
+
+/** @public */
+export type CodeProps = {
+  content: string
+  language?: string
+  /** Pluggable syntax highlighter. When omitted, renders plain monospaced lines. */
+  highlighter?: Highlighter
+  width?: SizingUnit
+  height?: SizingUnit
+  /** Visual theme — all styling comes from here. */
+  theme?: Partial<CodeTheme>
+  lineNumbers?: boolean
+  streaming?: boolean
+}
+
+/** @public */
+export function Code(props: CodeProps) {
+  const t = () => ({ ...CODE_DEFAULTS, ...props.theme })
+  const { tokens } = createCode({
+    content: () => props.content,
+    language: () => props.language,
+    highlighter: () => props.highlighter,
+    defaultFg: () => t().fg,
+    streaming: () => props.streaming,
+  })
+
+  const showLineNumbers = () => props.lineNumbers ?? false
 
   const gutterWidth = () => {
     if (!showLineNumbers()) return 0
