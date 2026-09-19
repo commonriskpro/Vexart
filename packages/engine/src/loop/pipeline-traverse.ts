@@ -17,7 +17,6 @@ import {
   type TGEProps,
   resolveProps,
   parseColor,
-  ensureTransformExtra,
   ensureCompositorExtra,
   ensureImageExtra,
   ensureCanvasExtra,
@@ -25,7 +24,6 @@ import {
 } from "../ffi/node"
 import {
   CMD,
-  type RenderGraphOp,
   type RectangleRenderOp,
   type TextRenderOp,
   type BorderRenderOp,
@@ -35,22 +33,14 @@ import {
   type EffectConfig,
   type ImagePaintConfig,
   type CanvasPaintConfig,
-  type BackdropRenderMetadata,
-  type BackdropFilterParams,
-  type BackdropFilterKind,
-  BACKDROP_FILTER_KIND,
-  type RenderBounds,
-  setRenderOpClipStack,
 } from "../ffi/render-graph"
-import { type DamageRect, unionRect } from "../ffi/damage"
 import {
-  type Matrix3,
-  fromConfig,
-  isIdentity,
-  invert,
-  multiply,
-  translate,
-} from "../ffi/matrix"
+  hashString,
+  getTransformStateId,
+  getEffectStateId,
+} from "./effect-hash"
+export { hashString } from "./effect-hash"
+import { type Matrix3 } from "../ffi/matrix"
 import {
   CanvasContext,
   serializeCanvasDisplayList,
@@ -61,13 +51,9 @@ import { type WalkTreeState, collectText } from "./walk-tree"
 import {
   type PipelineContext,
   type LayerOpBucket,
-  type ClipEntry,
-  type ClipBounds,
   createPipelineContext,
   snapshotLayouts,
   restoreLayouts,
-  pushClip,
-  popClip,
   getCurrentClipBounds,
   pushLayer,
   popLayer,
@@ -81,7 +67,29 @@ import {
 } from "./predicates"
 import { AUTO_LAYER_BUDGET, shouldPromoteToLayer } from "./layer-boundary"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
-import { ATTACH_POINT, ATTACH_TO } from "./layout-adapter"
+import { ATTACH_POINT } from "./layout-adapter"
+import { createScrollHandle } from "./scroll"
+
+import {
+  attachClipStackToOp,
+  createBackdropMetadata,
+  createClipStateId,
+  pushScrollClip,
+  popScrollClip,
+} from "./pipeline-clip"
+import {
+  applyNodeTransform,
+  applyRootTransform,
+} from "./pipeline-transform"
+import {
+  accumulateNodeDamage,
+  evaluateAABBCull,
+  isolatesSubtree,
+  collectAllNodes,
+  damageRectForLayoutTransition,
+} from "./pipeline-damage"
+
+export { damageRectForLayoutTransition } from "./pipeline-damage"
 
 // ── Traversal Result ────────────────────────────────────────────────────────
 
@@ -95,23 +103,11 @@ export type TraversalResult = {
 // ── Module Constants & Singletons ──────────────────────────────────────────
 
 const AUTO_LAYER_MIN_AREA = 64 * 64
-
-const BACKDROP_PARAM_KEYS = [
-  "blur", "brightness", "contrast", "saturate",
-  "grayscale", "invert", "sepia", "hueRotate",
-] as const
-
 const warnedRawTextNodes = new Set<number>()
 
 const effectPool: EffectConfig[] = []
 let effectPoolIdx = 0
 let autoLayerCount = 0
-
-const transformHashF64 = new Float64Array(9)
-const transformHashU8 = new Uint8Array(transformHashF64.buffer)
-const effectHashBuf = new ArrayBuffer(512)
-const effectHashView = new DataView(effectHashBuf)
-const effectHashU8 = new Uint8Array(effectHashBuf)
 
 function claimEffect(): EffectConfig {
   const effect = effectPool[effectPoolIdx] ?? { color: 0 }
@@ -134,243 +130,6 @@ function claimEffect(): EffectConfig {
   effect._node = undefined
   effect._stateHash = undefined
   return effect
-}
-
-// ── Hashing & Metadata Utilities ────────────────────────────────────────────
-
-function fnv1a(data: ArrayLike<number>): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < data.length; i++) {
-    h ^= data[i]
-    h = Math.imul(h, 0x01000193)
-  }
-  return h >>> 0
-}
-
-export function hashString(s: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return h >>> 0
-}
-
-function hashU32Scratch(a: number, b: number, c: number, d: number, e: number): number {
-  let h = 0x811c9dc5
-  const mix = (input: number) => {
-    let value = input >>> 0
-    for (let i = 0; i < 4; i++) {
-      h ^= value & 0xff
-      h = Math.imul(h, 0x01000193)
-      value >>>= 8
-    }
-  }
-  mix(a); mix(b); mix(c); mix(d); mix(e)
-  return h >>> 0
-}
-
-function createClipStateId(stack: ClipEntry[]): number {
-  if (stack.length === 0) return 0
-  let h = 0x811c9dc5
-  for (let i = 0; i < stack.length; i++) {
-    const entry = stack[i]
-    let value = hashU32Scratch(i, entry.x, entry.y, entry.width, entry.height)
-    for (let b = 0; b < 4; b++) {
-      h ^= value & 0xff
-      h = Math.imul(h, 0x01000193)
-      value >>>= 8
-    }
-  }
-  return h >>> 0
-}
-
-function getTransformMatrix(effect: EffectConfig): Matrix3 | Float64Array | null {
-  const node = effect._node
-  if (node?._transforms) {
-    if (node._transforms.acc) return node._transforms.acc
-    if (node._transforms.local) return node._transforms.local
-  }
-  if (effect.transform) return effect.transform
-  return null
-}
-
-function getTransformStateId(effect: EffectConfig): number {
-  const matrix = getTransformMatrix(effect)
-  if (!matrix) return 0
-  for (let i = 0; i < 9; i++) {
-    transformHashF64[i] = Number.isFinite(matrix[i]) ? matrix[i] : 0
-  }
-  return fnv1a(transformHashU8)
-}
-
-function getBackdropFilterParams(effect: EffectConfig): BackdropFilterParams {
-  const params = {} as BackdropFilterParams
-  for (let i = 0; i < BACKDROP_FIELDS.length; i++) {
-    params[BACKDROP_PARAM_KEYS[i]] = effect[BACKDROP_FIELDS[i]] ?? null
-  }
-  return params
-}
-
-function getBackdropFilterKind(params: BackdropFilterParams): BackdropFilterKind {
-  const hasBlur = params.blur !== null && params.blur > 0
-  const hasColor =
-    params.brightness !== null ||
-    params.contrast !== null ||
-    params.saturate !== null ||
-    params.grayscale !== null ||
-    params.invert !== null ||
-    params.sepia !== null ||
-    params.hueRotate !== null
-  if (hasBlur && hasColor) return BACKDROP_FILTER_KIND.BLUR_COLOR
-  if (hasBlur) return BACKDROP_FILTER_KIND.BLUR
-  return BACKDROP_FILTER_KIND.COLOR
-}
-
-function getEffectStateId(effect: EffectConfig, radius = 0): number {
-  if (effect._stateHash !== undefined && effect._node?._vpDirty === false) return effect._stateHash
-  let offset = 0
-  const writeU32 = (value: number) => { effectHashView.setUint32(offset, value >>> 0, true); offset += 4 }
-  const writeF64 = (value: number) => { effectHashView.setFloat64(offset, Number.isFinite(value) ? value : 0, true); offset += 8 }
-  writeU32(effect.color)
-  writeF64(radius)
-  if (Array.isArray(effect.shadow)) {
-    for (let i = 0; i < effect.shadow.length; i++) {
-      const entry = effect.shadow[i]
-      writeF64(entry.x)
-      writeF64(entry.y)
-      writeF64(entry.blur)
-      writeU32(entry.color)
-    }
-  } else if (effect.shadow) {
-    writeF64(effect.shadow.x)
-    writeF64(effect.shadow.y)
-    writeF64(effect.shadow.blur)
-    writeU32(effect.shadow.color)
-  }
-  if (effect.glow) {
-    writeF64(effect.glow.radius)
-    writeU32(effect.glow.color)
-    writeF64(effect.glow.intensity)
-  }
-  if (effect.gradient) {
-    writeU32(effect.gradient.type === "linear" ? 1 : 2)
-    writeU32(effect.gradient.from)
-    writeU32(effect.gradient.to)
-    writeF64(effect.gradient.type === "linear" ? effect.gradient.angle : 0)
-  }
-  const params = getBackdropFilterParams(effect)
-  writeF64(params.blur ?? -1)
-  writeF64(params.brightness ?? -1)
-  writeF64(params.contrast ?? -1)
-  writeF64(params.saturate ?? -1)
-  writeF64(params.grayscale ?? -1)
-  writeF64(params.invert ?? -1)
-  writeF64(params.sepia ?? -1)
-  writeF64(params.hueRotate ?? -1)
-  const selfFilter = effect.filter
-  writeF64(selfFilter?.blur ?? -1)
-  writeF64(selfFilter?.brightness ?? -1)
-  writeF64(selfFilter?.contrast ?? -1)
-  writeF64(selfFilter?.saturate ?? -1)
-  writeF64(selfFilter?.grayscale ?? -1)
-  writeF64(selfFilter?.invert ?? -1)
-  writeF64(selfFilter?.sepia ?? -1)
-  writeF64(selfFilter?.hueRotate ?? -1)
-  writeF64(effect.opacity ?? -1)
-  if (effect.cornerRadii) {
-    writeF64(effect.cornerRadii.tl)
-    writeF64(effect.cornerRadii.tr)
-    writeF64(effect.cornerRadii.br)
-    writeF64(effect.cornerRadii.bl)
-  }
-  const hash = fnv1a(effectHashU8.subarray(0, offset))
-  effect._stateHash = hash
-  return hash
-}
-
-function createBackdropSourceKey(effect: EffectConfig, clipStateId: number, transformStateId: number): string {
-  const node = effect._node
-  const parentId = node?.parent?.id ?? 0
-  const layerId = node?.props.layer ? node.id : parentId
-  return "backdrop-source:layer:" + layerId + ":parent:" + parentId + ":" + clipStateId + ":" + transformStateId
-}
-
-function intersectBounds(a: RenderBounds, b: { x: number; y: number; width: number; height: number }): RenderBounds | null {
-  const left = Math.max(a.x, b.x)
-  const top = Math.max(a.y, b.y)
-  const right = Math.min(a.x + a.width, b.x + b.width)
-  const bottom = Math.min(a.y + a.height, b.y + b.height)
-  if (right <= left || bottom <= top) return null
-  return {
-    x: Math.round(left),
-    y: Math.round(top),
-    width: Math.max(0, Math.round(right - left)),
-    height: Math.max(0, Math.round(bottom - top)),
-  }
-}
-
-function createBackdropMetadata(
-  effect: EffectConfig,
-  absX: number,
-  absY: number,
-  width: number,
-  height: number,
-  cornerRadius: number,
-  clipBounds: ClipBounds | null,
-  clipStack: ClipEntry[],
-): BackdropRenderMetadata | null {
-  if (!hasBackdropEffect(effect)) return null
-  const inputBounds: RenderBounds = {
-    x: Math.round(absX),
-    y: Math.round(absY),
-    width: Math.max(0, Math.round(width)),
-    height: Math.max(0, Math.round(height)),
-  }
-  const stackClipBounds = clipBounds
-  const bounds = stackClipBounds
-    ? intersectBounds(inputBounds, stackClipBounds) ?? {
-        x: Math.max(stackClipBounds.x, inputBounds.x),
-        y: Math.max(stackClipBounds.y, inputBounds.y),
-        width: 0,
-        height: 0,
-      }
-    : inputBounds
-  const outputBounds = bounds
-  const blurPad = effect.backdropBlur ? Math.ceil(effect.backdropBlur) : 0
-  const sampleBounds: RenderBounds = {
-    x: Math.round(outputBounds.x - blurPad),
-    y: Math.round(outputBounds.y - blurPad),
-    width: Math.max(0, Math.round(outputBounds.width + blurPad * 2)),
-    height: Math.max(0, Math.round(outputBounds.height + blurPad * 2)),
-  }
-  const filterParams = getBackdropFilterParams(effect)
-  const transformStateId = getTransformStateId(effect)
-  const clipStateId = createClipStateId(clipStack)
-  const effectStateId = getEffectStateId(effect, Math.round(cornerRadius))
-  return {
-    backdropSourceKey: createBackdropSourceKey(effect, clipStateId, transformStateId),
-    filterKind: getBackdropFilterKind(filterParams),
-    filterParams,
-    inputBounds,
-    sampleBounds,
-    outputBounds,
-    clipBounds: bounds,
-    transformStateId,
-    clipStateId,
-    effectStateId,
-  }
-}
-
-function attachClipStackToOp(op: RenderGraphOp, ctx: PipelineContext): void {
-  const stack = ctx.clip.stack
-  if (stack.length === 0) return
-  const clipEntries = stack.map((entry, depth) => ({
-    bounds: { x: entry.x, y: entry.y, width: entry.width, height: entry.height },
-    id: hashU32Scratch(depth, entry.x, entry.y, entry.width, entry.height),
-    nodeId: entry.nodeId,
-  }))
-  setRenderOpClipStack(op, clipEntries)
 }
 
 // ── Geometric & Traversal Helpers ───────────────────────────────────────────
@@ -403,27 +162,6 @@ function maxInteractiveBorder(props: TGEProps): number {
   )
 }
 
-function isNonEmptyLayoutRect(rect: { width: number; height: number }): boolean {
-  return rect.width > 0 && rect.height > 0
-}
-
-export function damageRectForLayoutTransition(
-  prev: { x: number; y: number; width: number; height: number },
-  next: { x: number; y: number; width: number; height: number },
-): DamageRect | null {
-  if (prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height) return null
-  const prevRect = isNonEmptyLayoutRect(prev)
-    ? { x: prev.x, y: prev.y, width: prev.width, height: prev.height }
-    : null
-  const nextRect = isNonEmptyLayoutRect(next)
-    ? { x: next.x, y: next.y, width: next.width, height: next.height }
-    : null
-  if (!prevRect && !nextRect) return null
-  if (!prevRect) return nextRect
-  if (!nextRect) return prevRect
-  return unionRect(prevRect, nextRect)
-}
-
 export function sortChildrenByStackingOrder(children: TGENode[]): TGENode[] {
   let hasFloating = false
   for (let i = 0; i < children.length; i++) {
@@ -442,33 +180,9 @@ export function sortChildrenByStackingOrder(children: TGENode[]): TGENode[] {
   })
 }
 
-function collectAllNodes(node: TGENode, out: TGENode[] = []): TGENode[] {
-  out.push(node)
-  for (let i = 0; i < node.children.length; i++) {
-    collectAllNodes(node.children[i], out)
-  }
-  return out
-}
-
-function registerCulledSubtree(node: TGENode, state: WalkTreeState): void {
-  state.nodeRefById.set(node.id, node)
-  for (let i = 0; i < node.children.length; i++) {
-    const child = node.children[i]
-    child._scrollContainerId = node._scrollContainerId
-    registerCulledSubtree(child, state)
-  }
-}
-
-function isolatesSubtree(node: TGENode, props: TGEProps): boolean {
-  return node.kind !== "text" && node.children.length > 0 && (
-    props.filter !== undefined ||
-    (typeof props.opacity === "number" && props.opacity < 1)
-  )
-}
-
 // ── Core Pre-Order DFS Node Visitor ─────────────────────────────────────────
 
-function visitNode(
+export function visitNode(
   node: TGENode,
   parentAbsX: number,
   parentAbsY: number,
@@ -552,10 +266,7 @@ function visitNode(
   node.layout.width = width
   node.layout.height = height
 
-  const damage = damageRectForLayoutTransition(prevLayout, node.layout)
-  if (damage && (state as any).pendingNodeDamageRects) {
-    (state as any).pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
-  }
+  accumulateNodeDamage(node, prevLayout, state)
 
   const dfsIndex = ctx.dfsIndex++
   if (state.nodeCount) state.nodeCount.value++
@@ -567,38 +278,24 @@ function visitNode(
   const isScroll = !!(props.scrollX || props.scrollY)
   const hasTransformProp = props.transform !== undefined && props.transform !== null
 
-  let isCulled = false
   if (
-    state.cullingEnabled &&
-    !insideTransform &&
-    !hasTransformProp &&
-    !isScroll &&
-    width > 0 &&
-    height > 0
+    evaluateAABBCull(
+      node,
+      absX,
+      absY,
+      width,
+      height,
+      parentScrollContainerId,
+      insideTransform,
+      hasTransformProp,
+      isScroll,
+      ctx,
+      state,
+      viewportW,
+      viewportH,
+    )
   ) {
-    const scrollOffset = parentScrollContainerId !== 0 ? ctx.scrollOffsets?.get(parentScrollContainerId) : undefined
-    const visualX = absX + (scrollOffset ? scrollOffset.x : 0)
-    const visualY = absY + (scrollOffset ? scrollOffset.y : 0)
-
-    const clipBounds = getCurrentClipBounds(ctx)
-    const vpW = state.viewportWidth ?? viewportW
-    const vpH = state.viewportHeight ?? viewportH
-    const clipLeft = clipBounds ? Math.max(0, clipBounds.x) : 0
-    const clipTop = clipBounds ? Math.max(0, clipBounds.y) : 0
-    const clipRight = clipBounds ? Math.min(vpW, clipBounds.x + clipBounds.width) : vpW
-    const clipBottom = clipBounds ? Math.min(vpH, clipBounds.y + clipBounds.height) : vpH
-
-    const fullyLeft = visualX + width <= clipLeft
-    const fullyRight = visualX >= clipRight
-    const fullyAbove = visualY + height <= clipTop
-    const fullyBelow = visualY >= clipBottom
-
-    if (clipRight <= clipLeft || clipBottom <= clipTop || fullyLeft || fullyRight || fullyAbove || fullyBelow) {
-      isCulled = true
-      if (state.culledCount) state.culledCount.value++
-      registerCulledSubtree(node, state)
-      return
-    }
+    return
   }
 
   if (node.kind === "text") {
@@ -610,6 +307,14 @@ function visitNode(
       if (props.scrollSpeed && state.scrollSpeedCap) {
         state.scrollSpeedCap.value = props.scrollSpeed
       }
+      const sid = props.scrollId ?? `tge-scroll-${node.id}`
+      const handle = createScrollHandle(sid)
+      const ox = props.scrollX ? handle.scrollX : 0
+      const oy = props.scrollY ? handle.scrollY : 0
+      const parentOffset = parentScrollContainerId !== 0 ? ctx.scrollOffsets?.get(parentScrollContainerId) : undefined
+      const totalX = (parentOffset?.x ?? 0) + ox
+      const totalY = (parentOffset?.y ?? 0) + oy
+      ctx.scrollOffsets?.set(node.id, { x: totalX, y: totalY })
     }
   }
 
@@ -650,63 +355,17 @@ function visitNode(
     }
   }
 
-  let nodeAbsForward = parentAbsForward
-  let nodeLocalTransform: Matrix3 | null = null
-  let nodeLocalInverse: Matrix3 | null = null
-
-  if (hasTransformProp && props.transform && node.kind !== "text") {
-    traversalContext.hasAnyTransforms = true
-    state.hasAnyTransforms = true
-    if (state.layout) (state.layout as any).hasAnyTransforms = true
-
-    const originProp = props.transformOrigin
-    let ox = width / 2
-    let oy = height / 2
-    if (originProp === "top-left") { ox = 0; oy = 0 }
-    else if (originProp === "top-right") { ox = width; oy = 0 }
-    else if (originProp === "bottom-left") { ox = 0; oy = height }
-    else if (originProp === "bottom-right") { ox = width; oy = height }
-    else if (originProp && typeof originProp === "object") {
-      ox = originProp.x * width
-      oy = originProp.y * height
-    }
-
-    const matrix = fromConfig(props.transform, ox, oy)
-    if (!isIdentity(matrix)) {
-      nodeLocalTransform = matrix
-      nodeLocalInverse = invert(matrix)
-    }
-  }
-
-  if (nodeLocalTransform || parentAbsForward) {
-    const t = ensureTransformExtra(node)
-    t.local = nodeLocalTransform
-    t.localInverse = nodeLocalInverse
-
-    if (nodeLocalTransform) {
-      const mNodeAbs = multiply(multiply(translate(absX, absY), nodeLocalTransform), translate(-absX, -absY))
-      if (parentAbsForward) {
-        nodeAbsForward = multiply(parentAbsForward, mNodeAbs)
-        const forwardLocal = multiply(multiply(translate(-absX, -absY), nodeAbsForward), translate(absX, absY))
-        t.acc = forwardLocal
-        t.accInverse = invert(forwardLocal)
-      } else {
-        nodeAbsForward = mNodeAbs
-        t.acc = nodeLocalTransform
-        t.accInverse = nodeLocalInverse
-      }
-    } else {
-      nodeAbsForward = parentAbsForward
-      const forwardLocal = multiply(multiply(translate(-absX, -absY), nodeAbsForward!), translate(absX, absY))
-      t.acc = forwardLocal
-      t.accInverse = invert(forwardLocal)
-    }
-  } else {
-    nodeAbsForward = null
-    if (node._transforms) {
-      node._transforms = null
-    }
-  }
+  const { nodeAbsForward } = applyNodeTransform(
+    node,
+    props,
+    absX,
+    absY,
+    width,
+    height,
+    parentAbsForward,
+    traversalContext,
+    state,
+  )
 
   const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
   const transformedInsideScroll = insideScroll && hasSubtreeTransform
@@ -761,7 +420,7 @@ function visitNode(
     if (node.parent && node.parent.kind === "box" && node.text.length > 0 && process.env.NODE_ENV !== "production") {
       if (!warnedRawTextNodes.has(node.id)) {
         warnedRawTextNodes.add(node.id)
-        console.warn("[Vexart] Warning: Raw text string \"" + content.slice(0, 30) + "\" placed directly inside <box>. Wrap text in <text>...</text> to ensure proper typography and layout.")
+        console.warn('[Vexart] Warning: Raw text string "' + content.slice(0, 30) + '" placed directly inside <box>. Wrap text in <text>...</text> to ensure proper typography and layout.')
       }
     }
 
@@ -1104,54 +763,52 @@ function visitNode(
     }
   }
 
-  if (!isCulled) {
-    if (isScroll) {
-      pushClip(ctx, { x: absX, y: absY, width, height, nodeId: node.id })
+  if (isScroll) {
+    pushScrollClip(ctx, absX, absY, width, height, node.id)
+  }
+
+  const childScrollContainerId = isScroll ? node.id : parentScrollContainerId
+  const childInsideScroll = insideScroll || isScroll
+  const childInsideTransform = insideTransform || hasTransformProp
+  const childInsideIsolation = insideIsolation || isolatesSubtree(node, props)
+
+  const sortedChildren = sortChildrenByStackingOrder(node.children)
+  for (let i = 0; i < sortedChildren.length; i++) {
+    const child = sortedChildren[i]
+    if (child.props.floating === "root") {
+      deferredRootFloats.push(child)
+      continue
     }
-
-    const childScrollContainerId = isScroll ? node.id : parentScrollContainerId
-    const childInsideScroll = insideScroll || isScroll
-    const childInsideTransform = insideTransform || hasTransformProp
-    const childInsideIsolation = insideIsolation || isolatesSubtree(node, props)
-
-    const sortedChildren = sortChildrenByStackingOrder(node.children)
-    for (let i = 0; i < sortedChildren.length; i++) {
-      const child = sortedChildren[i]
-      if (child.props.floating === "root") {
-        deferredRootFloats.push(child)
+    if (typeof child.props.floating === "object" && child.props.floating.attachTo) {
+      const target = findElementTarget(child.props.floating.attachTo, state)
+      if (!target) {
+        deferredElementFloats.push(child)
         continue
       }
-      if (typeof child.props.floating === "object" && child.props.floating.attachTo) {
-        const target = findElementTarget(child.props.floating.attachTo, state)
-        if (!target) {
-          deferredElementFloats.push(child)
-          continue
-        }
-      }
-      visitNode(
-        child,
-        absX,
-        absY,
-        nodeAbsForward,
-        parentDepth + 1,
-        childScrollContainerId,
-        childInsideScroll,
-        childInsideTransform,
-        childInsideIsolation,
-        activeLayerKey,
-        ctx,
-        state,
-        viewportW,
-        viewportH,
-        deferredRootFloats,
-        deferredElementFloats,
-        traversalContext,
-      )
     }
+    visitNode(
+      child,
+      absX,
+      absY,
+      nodeAbsForward,
+      parentDepth + 1,
+      childScrollContainerId,
+      childInsideScroll,
+      childInsideTransform,
+      childInsideIsolation,
+      activeLayerKey,
+      ctx,
+      state,
+      viewportW,
+      viewportH,
+      deferredRootFloats,
+      deferredElementFloats,
+      traversalContext,
+    )
+  }
 
-    if (isScroll) {
-      popClip(ctx)
-    }
+  if (isScroll) {
+    popScrollClip(ctx)
   }
 
   const paintBorderWidth = props.borderWidth ?? 0
@@ -1220,7 +877,8 @@ export function traverseFrame(
   effectPoolIdx = 0
   autoLayerCount = 0
 
-  const ctx = createPipelineContext(scrollOffsets ?? (state as any).scrollOffsets)
+  const activeScrollOffsets = scrollOffsets ?? (state as any).scrollOffsets ?? new Map<number, { x: number; y: number }>()
+  const ctx = createPipelineContext(activeScrollOffsets)
   const traversalContext = { hasAnyTransforms: false }
   const deferredRootFloats: TGENode[] = []
   const deferredElementFloats: TGENode[] = []
@@ -1239,46 +897,15 @@ export function traverseFrame(
     state.boxNodes.push(root)
 
     const rootProps = resolveProps(root)
-    let rootAbsForward: Matrix3 | null = null
-    let rootLocalTransform: Matrix3 | null = null
-    let rootLocalInverse: Matrix3 | null = null
-
-    if (rootProps.transform && root.kind !== "text") {
-      traversalContext.hasAnyTransforms = true
-      state.hasAnyTransforms = true
-      if (state.layout) (state.layout as any).hasAnyTransforms = true
-
-      const originProp = rootProps.transformOrigin
-      let ox = viewportW / 2
-      let oy = viewportH / 2
-      if (originProp === "top-left") { ox = 0; oy = 0 }
-      else if (originProp === "top-right") { ox = viewportW; oy = 0 }
-      else if (originProp === "bottom-left") { ox = 0; oy = viewportH }
-      else if (originProp === "bottom-right") { ox = viewportW; oy = viewportH }
-      else if (originProp && typeof originProp === "object") {
-        ox = originProp.x * viewportW
-        oy = originProp.y * viewportH
-      }
-
-      const matrix = fromConfig(rootProps.transform, ox, oy)
-      if (!isIdentity(matrix)) {
-        rootLocalTransform = matrix
-        rootLocalInverse = invert(matrix)
-      }
-    }
-
-    if (rootLocalTransform) {
-      const t = ensureTransformExtra(root)
-      t.local = rootLocalTransform
-      t.localInverse = rootLocalInverse
-      rootAbsForward = rootLocalTransform
-      t.acc = rootLocalTransform
-      t.accInverse = rootLocalInverse
-    } else {
-      if (root._transforms) {
-        root._transforms = null
-      }
-    }
+    const rootAbsForward = applyRootTransform(
+      root,
+      rootProps,
+      viewportW,
+      viewportH,
+      traversalContext,
+      state,
+    )
+    const rootHasTransform = rootAbsForward !== null
 
     const rootBg = rootProps.backgroundColor !== undefined ? (parseColor(rootProps.backgroundColor) >>> 0) : 0
     const rootRadius = rootProps.cornerRadius ?? rootProps.borderRadius ?? 0
@@ -1314,7 +941,12 @@ export function traverseFrame(
       if (rootProps.scrollSpeed && state.scrollSpeedCap) {
         state.scrollSpeedCap.value = rootProps.scrollSpeed
       }
-      pushClip(ctx, { x: 0, y: 0, width: viewportW, height: viewportH, nodeId: root.id })
+      const sid = rootProps.scrollId ?? `tge-scroll-${root.id}`
+      const handle = createScrollHandle(sid)
+      const ox = rootProps.scrollX ? handle.scrollX : 0
+      const oy = rootProps.scrollY ? handle.scrollY : 0
+      ctx.scrollOffsets?.set(root.id, { x: ox, y: oy })
+      pushScrollClip(ctx, 0, 0, viewportW, viewportH, root.id)
     }
 
     const sortedChildren = sortChildrenByStackingOrder(root.children)
@@ -1339,7 +971,7 @@ export function traverseFrame(
         1,
         rootIsScroll ? root.id : 0,
         rootIsScroll,
-        rootLocalTransform !== null,
+        rootHasTransform,
         false,
         "root",
         ctx,
@@ -1353,7 +985,7 @@ export function traverseFrame(
     }
 
     if (rootIsScroll) {
-      popClip(ctx)
+      popScrollClip(ctx)
     }
 
     let elemIdx = 0
