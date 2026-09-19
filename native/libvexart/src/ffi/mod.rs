@@ -1,3 +1,9 @@
 pub mod buffer;
+pub mod composite;
+pub mod context;
 pub mod error;
+pub mod font;
+pub mod kitty;
+pub mod paint;
 pub mod panic;
+pub mod resource;
