@@ -2,7 +2,8 @@
 // Real GPU→CPU buffer transfer using compute unpremultiply shader + wgpu map_async.
 // Phase 2b Slice 1, task 1.4. Per design decision "Readback uses blocking map_async + pollster".
 
-/// Straight-alpha normalization helper for CPU buffers (e.g. region readback fallback).
+/// Straight-alpha normalization reference helper for unit test verification.
+#[cfg(test)]
 #[inline]
 fn unpremultiply(pixels: &mut [u8]) {
     for pixel in pixels.chunks_exact_mut(4) {
@@ -243,10 +244,11 @@ impl<B: BufferUnmap> Drop for UnmapGuard<'_, B> {
     }
 }
 
-/// Region GPU→CPU readback.
+/// Region GPU→CPU readback using compute unpremultiply+pack shader.
 ///
-/// Copies a (x, y, w, h) sub-region of the target texture to `dst`.
-/// Creates a temporary texture + buffer for the region copy.
+/// Dispatches the `unpremultiply_pack` compute shader with `(origin_x, origin_y)` offsets,
+/// writes tightly packed straight-alpha RGBA pixels (without row padding) to a storage buffer,
+/// copies it to a staging buffer, and copies directly into `dst`.
 ///
 /// Returns the number of bytes written to `dst`, or 0 on failure.
 ///
@@ -255,6 +257,8 @@ impl<B: BufferUnmap> Drop for UnmapGuard<'_, B> {
 pub fn readback_region(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    pipeline: &wgpu::ComputePipeline,
+    bgl: &wgpu::BindGroupLayout,
     texture: &wgpu::Texture,
     target_width: u32,
     target_height: u32,
@@ -275,76 +279,93 @@ pub fn readback_region(
         return 0;
     }
 
-    let needed = match w.checked_mul(h).and_then(|px| px.checked_mul(4)) {
-        Some(size) => size,
-        None => return 0,
-    };
-    if dst_cap < needed || dst.is_null() {
+    if w.checked_mul(4).and_then(|b| b.checked_add(255)).is_none() {
         return 0;
     }
-
-    let padded_bytes_per_row = match w.checked_mul(4).and_then(|b| b.checked_add(255)) {
-        Some(b) => b & !255,
-        None => return 0,
-    };
-    let buf_size = match (padded_bytes_per_row as u64).checked_mul(h as u64) {
+    let needed = match (w as usize).checked_mul(h as usize).and_then(|px| px.checked_mul(4)) {
         Some(size) => size,
         None => return 0,
     };
+    let needed_u32 = match u32::try_from(needed) {
+        Ok(size) => size,
+        Err(_) => return 0,
+    };
+    if dst_cap < needed_u32 || dst.is_null() {
+        return 0;
+    }
+    let needed_u64 = needed as u64;
 
-    let region_buf = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("vexart-region-readback-buf"),
-        size: buf_size,
+    use wgpu::util::DeviceExt;
+    let uniforms: [u32; 4] = [w, h, x, y];
+    let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("vexart-region-unpremultiply-uniform-buffer"),
+        contents: bytemuck::cast_slice(&uniforms),
+        usage: wgpu::BufferUsages::UNIFORM,
+    });
+
+    let storage_buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("vexart-region-unpremultiply-storage-buffer"),
+        size: needed_u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+
+    let staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("vexart-region-readback-staging-buffer"),
+        size: needed_u64,
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
+    });
+
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vexart-region-unpremultiply-bind-group"),
+        layout: bgl,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: storage_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: uniform_buf.as_entire_binding(),
+            },
+        ],
     });
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("vexart-region-readback-encoder"),
     });
 
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d { x, y, z: 0 },
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &region_buf,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(h),
-            },
-        },
-        wgpu::Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        },
-    );
+    {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("vexart-region-unpremultiply-compute-pass"),
+            timestamp_writes: None,
+        });
+        cpass.set_pipeline(pipeline);
+        cpass.set_bind_group(0, &bind_group, &[]);
+        let workgroups_x = w.div_ceil(16);
+        let workgroups_y = h.div_ceil(16);
+        cpass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+    }
 
+    encoder.copy_buffer_to_buffer(&storage_buf, 0, &staging_buf, 0, needed_u64);
     queue.submit(std::iter::once(encoder.finish()));
 
-    let copied = map_readback(device, &region_buf, |mapped| {
-        if mapped.len() < buf_size as usize {
+    let copied = map_readback(device, &staging_buf, |mapped| {
+        if mapped.len() < needed {
             return 0;
         }
-        let unpadded_bytes_per_row = (w * 4) as usize;
-        let padded = padded_bytes_per_row as usize;
-        let dst_slice: &mut [u8] =
+        let dst_slice: &mut [u8] = 
             // SAFETY: caller guarantees dst is valid for dst_cap bytes.
             unsafe { std::slice::from_raw_parts_mut(dst, dst_cap as usize) };
-
-        for row in 0..h as usize {
-            let src_start = row * padded;
-            let dst_start = row * unpadded_bytes_per_row;
-            dst_slice[dst_start..dst_start + unpadded_bytes_per_row]
-                .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
-        }
-        unpremultiply(&mut dst_slice[..needed as usize]);
-        needed
+        dst_slice[..needed].copy_from_slice(&mapped[..needed]);
+        needed_u32
     });
     copied.unwrap_or(0)
 }
@@ -421,7 +442,8 @@ mod tests {
             &bind_group, &storage, &readback, 64, 1, |bytes| bytes.to_vec());
         assert_eq!(callback, Some(full));
         let mut region = [0; 4];
-        assert_eq!(readback_region(&ctx.device, &ctx.queue, &texture, 64, 1, 3, 0, 1, 1,
+        assert_eq!(readback_region(&ctx.device, &ctx.queue, &ctx.pipelines.unpremultiply_pack,
+            &ctx.pipelines.unpremultiply_bgl, &texture, 64, 1, 3, 0, 1, 1,
             region.as_mut_ptr(), 4), 4);
         assert_eq!(region, [255, 128, 0, 128]);
     }
@@ -603,6 +625,8 @@ mod tests {
         let res1 = readback_region(
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &pctx.wgpu.pipelines.unpremultiply_bgl,
             &pctx.target_texture,
             u32::MAX,
             u32::MAX,
@@ -619,6 +643,8 @@ mod tests {
         let res2 = readback_region(
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &pctx.wgpu.pipelines.unpremultiply_bgl,
             &pctx.target_texture,
             1 << 30,
             1,
@@ -636,6 +662,8 @@ mod tests {
         let res3 = readback_region(
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &pctx.wgpu.pipelines.unpremultiply_bgl,
             &pctx.target_texture,
             w_padded_overflow,
             1,
@@ -661,6 +689,8 @@ mod tests {
         let res = readback_region(
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &pctx.wgpu.pipelines.unpremultiply_bgl,
             &pctx.target_texture,
             64,
             64,
@@ -677,6 +707,8 @@ mod tests {
         let res_null = readback_region(
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &pctx.wgpu.pipelines.unpremultiply_bgl,
             &pctx.target_texture,
             64,
             64,
@@ -688,6 +720,50 @@ mod tests {
             400,
         );
         assert_eq!(res_null, 0, "readback_region must return 0 when dst is null");
+    }
+
+    #[test]
+    fn readback_region_gpu_unpremultiply_accurate() {
+        let pctx = crate::paint::PaintContext::new();
+        let width = 64;
+        let height = 4;
+        let row_pixels = [128, 64, 0, 128].repeat(width as usize);
+        let pixels: Vec<u8> = row_pixels.repeat(height as usize);
+        let texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test-unpremul-region-tex"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        pctx.wgpu.queue.write_texture(
+            texture.as_image_copy(), &pixels,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+
+        // Read a 2x2 sub-region starting at (2, 1)
+        let mut region_out = [0u8; 2 * 2 * 4];
+        let written = readback_region(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &pctx.wgpu.pipelines.unpremultiply_bgl,
+            &texture,
+            width,
+            height,
+            2,
+            1,
+            2,
+            2,
+            region_out.as_mut_ptr(),
+            region_out.len() as u32,
+        );
+        assert_eq!(written, 16);
+        assert_eq!(region_out, [255, 128, 0, 128].repeat(4).as_slice());
     }
 
     #[cfg(feature = "gpu-tests")]

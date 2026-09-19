@@ -998,6 +998,8 @@ pub fn readback_region_rgba(
     let written = readback::readback_region(
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
+        &pctx.wgpu.pipelines.unpremultiply_pack,
+        &pctx.wgpu.pipelines.unpremultiply_bgl,
         // SAFETY: texture_ptr stable in pctx.targets; device/queue are disjoint fields.
         unsafe { &*texture_ptr },
         tw,

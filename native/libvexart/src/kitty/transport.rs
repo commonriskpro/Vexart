@@ -755,6 +755,8 @@ pub unsafe fn emit_region_target_with_stats(
     let written = crate::composite::readback::readback_region(
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
+        &pctx.wgpu.pipelines.unpremultiply_pack,
+        &pctx.wgpu.pipelines.unpremultiply_bgl,
         unsafe { &*texture_ptr },
         width,
         height,

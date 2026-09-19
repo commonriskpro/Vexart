@@ -311,7 +311,7 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 
 ### Fase 3: Transport & GPU (impacto en performance real)
 
-- [ ] GPU un-premultiply (shader pass en composite, no CPU loop)
+- [x] GPU un-premultiply (shader pass en composite, no CPU loop)
 - [ ] Activar `ShmRingBuffer` existente en vez de alloc per-frame
 - [x] Texture pooling para offscreen targets
 - [x] Shader unificado para imagen con radius (eliminar 3-stage copy)

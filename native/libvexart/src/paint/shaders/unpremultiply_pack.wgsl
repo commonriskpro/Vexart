@@ -1,10 +1,12 @@
 // unpremultiply_pack.wgsl
-// GPU compute shader: read premultiplied RGBA target, convert to straight-alpha RGBA,
-// pack into little-endian u32 pixels, and write to a contiguous 1D output buffer.
+// GPU compute shader: read premultiplied RGBA target (with optional regional origin offset),
+// convert to straight-alpha RGBA, pack into little-endian u32 pixels, and write to a contiguous 1D output buffer.
 
 struct Uniforms {
     width: u32,
     height: u32,
+    origin_x: u32,
+    origin_y: u32,
 }
 
 @group(0) @binding(0) var t_input: texture_2d<f32>;
@@ -17,7 +19,8 @@ fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
 
-    let pixel = textureLoad(t_input, vec2<i32>(id.xy), 0);
+    let coord = vec2<i32>(i32(id.x + uniforms.origin_x), i32(id.y + uniforms.origin_y));
+    let pixel = textureLoad(t_input, coord, 0);
     let a = pixel.a;
     let rgb = select(
         vec3<f32>(0.0),
@@ -33,4 +36,3 @@ fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {
     let packed = r | (g << 8u) | (b << 16u) | (a_u32 << 24u);
     output_buffer[id.y * uniforms.width + id.x] = packed;
 }
-
