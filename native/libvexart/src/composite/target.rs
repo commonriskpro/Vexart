@@ -71,6 +71,47 @@ impl TargetRecord {
         }
     }
 
+    /// Construct a TargetRecord using an acquired pooled texture and view.
+    pub fn new_with_texture(
+        texture: wgpu::Texture,
+        view: wgpu::TextureView,
+        width: u32,
+        height: u32,
+    ) -> Option<Self> {
+        let padded_bytes_per_row = (width.checked_mul(4)?.checked_add(255)?) & !255;
+        Some(Self::new(
+            texture,
+            view,
+            None,
+            width,
+            height,
+            padded_bytes_per_row,
+        ))
+    }
+
+    /// Deconstructs the TargetRecord, releasing internal passes and unmapping staging buffers,
+    /// and returns the texture, view, width, and height for reuse in the texture pool.
+    pub fn into_texture_and_view(mut self) -> (wgpu::Texture, wgpu::TextureView, u32, u32) {
+        if let Some(mut layer) = self.active_layer.take() {
+            layer.finish_pass();
+        }
+        self.compute_bind_group = None;
+        self.unmap_all_staging();
+        let width = self.width;
+        let height = self.height;
+        let mut this = std::mem::ManuallyDrop::new(self);
+        // SAFETY: this is ManuallyDrop so TargetRecord::drop will not be called.
+        // We extract texture and view, and explicitly drop all other fields that have Drop implementations.
+        unsafe {
+            let texture = std::ptr::read(&this.texture);
+            let view = std::ptr::read(&this.view);
+            std::ptr::drop_in_place(&mut this.storage_buffer);
+            std::ptr::drop_in_place(&mut this.staging_buffers);
+            std::ptr::drop_in_place(&mut this.uniform_buffer);
+            (texture, view, width, height)
+        }
+    }
+
     /// Safely unmap a staging buffer slot if it is currently mapped.
     pub fn unmap_staging(&mut self, slot: usize) {
         if slot < 2 && self.staging_mapped[slot] {
@@ -333,7 +374,8 @@ impl TargetRegistry {
             format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::TEXTURE_BINDING,
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
@@ -352,14 +394,33 @@ impl TargetRegistry {
         ))
     }
 
+    /// Create a TargetRecord using provided texture and view.
+    pub fn create_with_texture(
+        &self,
+        width: u32,
+        height: u32,
+        texture: wgpu::Texture,
+        view: wgpu::TextureView,
+        out_handle: &mut u64,
+    ) -> Option<TargetRecord> {
+        let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
+        *out_handle = handle;
+        TargetRecord::new_with_texture(texture, view, width, height)
+    }
+
     /// Insert a TargetRecord that was created via `create()`.
     pub fn insert(&mut self, handle: u64, record: TargetRecord) {
         self.targets.insert(handle, record);
     }
 
+    /// Remove a target and return the TargetRecord if it existed.
+    pub fn remove(&mut self, handle: u64) -> Option<TargetRecord> {
+        self.targets.remove(&handle)
+    }
+
     /// Remove and drop a target. Returns true if the handle existed.
     pub fn destroy(&mut self, handle: u64) -> bool {
-        self.targets.remove(&handle).is_some()
+        self.remove(handle).is_some()
     }
 
     /// Immutable lookup.

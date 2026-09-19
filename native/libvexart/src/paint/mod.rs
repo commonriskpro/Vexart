@@ -56,6 +56,8 @@ pub struct PaintContext {
     /// Target registry: handle → TargetRecord. Embeds registry per design decision
     /// "Target registry lives inside SHARED_PAINT singleton".
     pub targets: crate::composite::target::TargetRegistry,
+    /// Pooled GPU textures for offscreen targets and intermediate effect passes.
+    pub texture_pool: crate::composite::pool::TexturePool,
     /// MSDF atlas registry: font_id (1-15) → AtlasRecord (GPU texture + metrics).
     /// Phase 2b Slice 4 addition per REQ-2B-202.
     pub atlases: crate::text::atlas::AtlasRegistry,
@@ -167,6 +169,7 @@ impl PaintContext {
             wgpu,
             images: HashMap::new(),
             targets: crate::composite::target::TargetRegistry::new(),
+            texture_pool: crate::composite::pool::TexturePool::new(),
             atlases: crate::text::atlas::AtlasRegistry::new(),
             target_texture,
             target_view,

@@ -2,6 +2,7 @@
 // Real composite operations: image layer rendering, region copy, full/region readback.
 // Phase 2b Slice 1, tasks 1.2 and 1.4. Per REQ-2B-003/004/005.
 
+pub mod pool;
 pub mod readback;
 pub mod target;
 
@@ -30,16 +31,16 @@ pub fn target_create(
         return ERR_INVALID_ARG;
     }
 
-    // Extract device pointer before borrowing pctx.targets mutably.
-    // SAFETY: device is owned by pctx.wgpu which is stable for the duration of this call.
-    let device_ptr: *const wgpu::Device = &pctx.wgpu.device as *const wgpu::Device;
+    let current_frame = crate::current_frame();
+    let (texture, view) = pctx
+        .texture_pool
+        .acquire(&pctx.wgpu.device, width, height, current_frame);
 
     // SAFETY: out_handle is non-null (checked above) and valid (caller contract).
     let handle_ref = unsafe { &mut *out_handle };
-    // SAFETY: device_ptr is valid — it points to pctx.wgpu.device which is alive.
     let rec = match pctx
         .targets
-        .create(unsafe { &*device_ptr }, width, height, handle_ref)
+        .create_with_texture(width, height, texture, view, handle_ref)
     {
         Some(r) => r,
         None => return ERR_INVALID_ARG,
@@ -54,7 +55,16 @@ pub fn target_destroy(pctx: &mut PaintContext, handle: u64) -> i32 {
     if handle == 0 {
         return ERR_INVALID_ARG;
     }
-    if pctx.targets.destroy(handle) {
+    if let Some(rec) = pctx.targets.remove(handle) {
+        let (texture, view, width, height) = rec.into_texture_and_view();
+        let current_frame = crate::current_frame();
+        pctx.texture_pool.release(
+            texture,
+            view,
+            width,
+            height,
+            current_frame,
+        );
         OK
     } else {
         ERR_INVALID_HANDLE
@@ -1027,29 +1037,14 @@ fn source_image_size(pctx: &PaintContext, image: u64) -> Result<(u32, u32), i32>
 }
 
 fn create_effect_destination(
-    pctx: &PaintContext,
-    label: &'static str,
+    pctx: &mut PaintContext,
+    _label: &'static str,
     width: u32,
     height: u32,
 ) -> (wgpu::Texture, wgpu::TextureView) {
-    let texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some(label),
-        size: wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    (texture, view)
+    let current_frame = crate::current_frame();
+    pctx.texture_pool
+        .acquire(&pctx.wgpu.device, width, height, current_frame)
 }
 
 fn register_effect_output(
@@ -1089,7 +1084,27 @@ fn register_effect_output(
 }
 
 fn remove_temp_image(pctx: &mut PaintContext, handle: u64) {
-    let _ = pctx.images.remove(&handle);
+    if let Some(img) = pctx.images.remove(&handle) {
+        let size = img.texture.size();
+        let required_usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST;
+        if img.texture.format() == wgpu::TextureFormat::Rgba8Unorm
+            && img.texture.usage().contains(required_usage)
+            && size.depth_or_array_layers == 1
+        {
+            drop(img.bind_group);
+            let current_frame = crate::current_frame();
+            pctx.texture_pool.release(
+                img.texture,
+                img.view,
+                size.width,
+                size.height,
+                current_frame,
+            );
+        }
+    }
 }
 
 fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> Result<u64, i32> {
@@ -1097,7 +1112,7 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
     use bytemuck::bytes_of;
 
     let (src_w, src_h) = source_image_size(pctx, image)?;
-    let (_mid_texture, mid_view) =
+    let (mid_texture, mid_view) =
         create_effect_destination(pctx, "vexart-blur-horizontal", src_w, src_h);
     let (dst_texture, dst_view) =
         create_effect_destination(pctx, "vexart-blur-vertical", src_w, src_h);
@@ -1231,6 +1246,10 @@ fn render_blur_image(pctx: &mut PaintContext, image: u64, blur_radius: f32) -> R
     }
 
     pctx.wgpu.queue.submit(std::iter::once(encoder.finish()));
+    drop(mid_bind_group);
+    let current_frame = crate::current_frame();
+    pctx.texture_pool
+        .release(mid_texture, mid_view, src_w, src_h, current_frame);
     Ok(register_effect_output(
         pctx,
         "vexart-blur-bind-group",
@@ -1493,23 +1512,8 @@ fn image_mask_rounded_rect_impl(
     };
 
     // Create destination texture.
-    let dst_texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("vexart-mask-dst"),
-        size: wgpu::Extent3d {
-            width: src_w,
-            height: src_h,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-            | wgpu::TextureUsages::TEXTURE_BINDING
-            | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
-    });
-    let dst_view = dst_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let (dst_texture, dst_view) =
+        create_effect_destination(pctx, "vexart-mask-dst", src_w, src_h);
 
     // Build mask instance (full-NDC quad, mask fills same region).
     let instance = ImageMaskInstance {
@@ -2109,5 +2113,53 @@ mod tests {
         assert_eq!(status, OK);
 
         assert_eq!(target_destroy(&mut pctx, handle), OK);
+    }
+
+    #[test]
+    fn test_target_create_destroy_pool_reuse() {
+        let mut pctx = PaintContext::new();
+        assert_eq!(pctx.texture_pool.available_count(), 0);
+
+        let mut handle1 = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle1);
+        assert_eq!(rc, OK);
+        assert_eq!(pctx.texture_pool.available_count(), 0);
+
+        let rc = target_destroy(&mut pctx, handle1);
+        assert_eq!(rc, OK);
+        assert_eq!(pctx.texture_pool.available_count(), 1);
+        assert_eq!(pctx.texture_pool.count_for_key(64, 64), 1);
+
+        let mut handle2 = 0u64;
+        let rc = target_create(&mut pctx, 64, 64, &mut handle2);
+        assert_eq!(rc, OK);
+        // Should have reused the pooled texture:
+        assert_eq!(pctx.texture_pool.available_count(), 0);
+
+        let rc = target_destroy(&mut pctx, handle2);
+        assert_eq!(rc, OK);
+        assert_eq!(pctx.texture_pool.available_count(), 1);
+    }
+
+    #[test]
+    fn test_blur_intermediate_texture_pooled() {
+        let mut pctx = PaintContext::new();
+        let rgba = vec![255u8; 32 * 32 * 4];
+        let handle = crate::paint::alloc_image_handle();
+        assert!(crate::upload_image_record(&mut pctx, handle, &rgba, 32, 32));
+
+        assert_eq!(pctx.texture_pool.available_count(), 0);
+
+        let blur_result = render_blur_image(&mut pctx, handle, 2.0);
+        assert!(blur_result.is_ok());
+
+        // The horizontal pass mid_texture should have been released back to the pool:
+        assert_eq!(pctx.texture_pool.available_count(), 1);
+        assert_eq!(pctx.texture_pool.count_for_key(32, 32), 1);
+
+        // When removing the blurred image result, it should also return its texture to the pool:
+        let blur_handle = blur_result.unwrap();
+        remove_temp_image(&mut pctx, blur_handle);
+        assert_eq!(pctx.texture_pool.available_count(), 2);
     }
 }

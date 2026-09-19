@@ -160,6 +160,10 @@ fn get_or_init_resource() -> &'static Mutex<resource::ResourceManager> {
 
 static FRAME_COUNT: AtomicU64 = AtomicU64::new(1);
 
+pub fn current_frame() -> u64 {
+    FRAME_COUNT.load(Ordering::Relaxed)
+}
+
 fn advance_presentation_frame() -> u64 {
     let frame_count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
     let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
@@ -221,9 +225,12 @@ pub unsafe extern "C" fn vexart_context_create(
 pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     ffi_guard!({
         let _ = ctx;
-        // 1. Drain SHARED_PAINT (releases WGPU device, queue, pipeline caches, render targets + scissor state, images, atlases)
+        // 1. Drain SHARED_PAINT (releases WGPU device, queue, pipeline caches, render targets + scissor state, images, atlases, texture pool)
         {
             let mut guard = lock_or_recover(&SHARED_PAINT);
+            if let Some(pctx) = guard.as_mut() {
+                pctx.texture_pool.clear();
+            }
             let _ = guard.take();
         }
         // 2. Symmetrically reset/drain SHARED_RESOURCE
@@ -357,7 +364,27 @@ pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
         }
         let mut guard = get_or_init_paint();
         if let Some(pctx) = guard.as_mut() {
-            pctx.images.remove(&image);
+            if let Some(img) = pctx.images.remove(&image) {
+                let size = img.texture.size();
+                let required_usage = wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST;
+                if img.texture.format() == wgpu::TextureFormat::Rgba8Unorm
+                    && img.texture.usage().contains(required_usage)
+                    && size.depth_or_array_layers == 1
+                {
+                    drop(img.bind_group);
+                    let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
+                    pctx.texture_pool.release(
+                        img.texture,
+                        img.view,
+                        size.width,
+                        size.height,
+                        current_frame,
+                    );
+                }
+            }
         }
         let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
         res_guard.remove(image);
@@ -941,7 +968,8 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_with_stats(
         };
         let rc = kitty::transport::emit_frame_with_stats(pctx, target, image_id, stats_out);
         if rc == OK {
-            advance_presentation_frame();
+            let frame = advance_presentation_frame();
+            pctx.texture_pool.trim_unused(frame);
         }
         rc
     })
@@ -969,7 +997,8 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_owned(
         };
         let rc = kitty::transport::emit_frame_shm_owned(pctx, target, image_id, &mut *out_handle, stats_out);
         if rc == OK {
-            advance_presentation_frame();
+            let frame = advance_presentation_frame();
+            pctx.texture_pool.trim_unused(frame);
         }
         rc
     })
@@ -995,7 +1024,8 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_ring(
         };
         let rc = kitty::transport::emit_frame_shm_ring(pctx, target, image_id, stats_out);
         if rc == OK {
-            advance_presentation_frame();
+            let frame = advance_presentation_frame();
+            pctx.texture_pool.trim_unused(frame);
         }
         rc
     })
@@ -1119,7 +1149,8 @@ pub unsafe extern "C" fn vexart_kitty_emit_placeholder_shm_ring(
             stats_out,
         );
         if rc == OK {
-            advance_presentation_frame();
+            let frame = advance_presentation_frame();
+            pctx.texture_pool.trim_unused(frame);
         }
         rc
     })
