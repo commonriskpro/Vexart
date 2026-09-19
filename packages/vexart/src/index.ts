@@ -262,6 +262,10 @@ export {
   createToaster,
   Tooltip, Popover,
   Diff,
+  parseDiff,
+  createDiff,
+  useDiff,
+  LINE_TYPE,
   createForm,
 } from "@vexart/headless"
 
@@ -334,6 +338,9 @@ export type {
   PopoverProps,
   DiffTheme,
   DiffProps,
+  DiffLine,
+  LineType,
+  DiffStats,
   FieldValidator,
   AsyncFieldValidator,
   FormOptions,

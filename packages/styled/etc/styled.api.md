@@ -529,13 +529,15 @@ export type VoidDialogTitleProps = {
 };
 
 // @public (undocumented)
-export function VoidDiff(props: VoidDiffProps): JSX;
+export function VoidDiff(props: VoidDiffProps): JSX.Element;
 
 // @public (undocumented)
 export type VoidDiffProps = {
     diff: string;
     showLineNumbers?: boolean;
     width?: SizingUnit;
+    theme?: Partial<DiffTheme>;
+    children?: (line: DiffLine) => JSX.Element;
 };
 
 // Warning: (ae-forgotten-export) The symbol "VoidDropdownMenuRoot" needs to be exported by the entry point index.d.ts
@@ -874,6 +876,8 @@ export const weight: {
 // <repo>/.api-extractor-temp/packages/headless/src/overlays/toast.d.ts:31:5 - (ae-forgotten-export) The symbol "ToastVariant" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:13:5 - (ae-forgotten-export) The symbol "Highlighter" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:14:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/diff.d.ts:15:5 - (ae-forgotten-export) The symbol "DiffTheme" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/diff.d.ts:17:5 - (ae-forgotten-export) The symbol "DiffLine" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:14:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts

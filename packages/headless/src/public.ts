@@ -116,8 +116,8 @@ export type {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-export { Diff } from "./navigation/diff"
-export type { DiffTheme, DiffProps } from "./navigation/diff"
+export { Diff, parseDiff, createDiff, useDiff, getDiffStats, LINE_TYPE } from "./navigation/diff"
+export type { DiffTheme, DiffProps, DiffLine, LineType, DiffStats } from "./navigation/diff"
 
 // ── Re-exported engine contracts referenced by headless public types ─────────
 

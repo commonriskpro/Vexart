@@ -514,6 +514,12 @@ export { createComponent }
 
 export { createContext }
 
+/** @public */
+export declare function createDiff(diffText: string | (() => string)): {
+    lines: Accessor<DiffLine[]>;
+    stats: Accessor<DiffStats>;
+};
+
 export { createEffect }
 
 /** Options for creating an extmark */
@@ -660,12 +666,29 @@ declare function DialogRoot(props: DialogProps): JSX.Element;
 export declare function Diff(props: DiffProps): JSX.Element;
 
 /** @public */
+export declare type DiffLine = {
+    type: LineType;
+    content: string;
+    oldLineNum: number | null;
+    newLineNum: number | null;
+};
+
+/** @public */
 export declare type DiffProps = {
     diff: string;
     showLineNumbers?: boolean;
     width?: SizingUnit;
     /** Visual theme — all styling comes from here. */
     theme?: Partial<DiffTheme>;
+    /** Custom line renderer. */
+    children?: (line: DiffLine) => JSX.Element;
+};
+
+/** @public */
+export declare type DiffStats = {
+    added: number;
+    removed: number;
+    total: number;
 };
 
 /** @public */
@@ -1411,6 +1434,14 @@ export declare function Lead(props: TypographyProps): JSX.Element;
 export declare const lightTheme: Required<ThemeDefinition>;
 
 /** @public */
+export declare const LINE_TYPE: {
+    readonly CONTEXT: "context";
+    readonly ADDED: "added";
+    readonly REMOVED: "removed";
+    readonly HEADER: "header";
+};
+
+/** @public */
 declare type LinearGradientCmd = {
     kind: "linearGradient";
     x: number;
@@ -1436,6 +1467,9 @@ declare type LineCmd = {
     color: number;
     width: number;
 };
+
+/** @public */
+export declare type LineType = (typeof LINE_TYPE)[keyof typeof LINE_TYPE];
 
 /** @public */
 export declare function List(props: ListProps): JSX.Element;
@@ -1760,6 +1794,9 @@ export declare type PageProps = TGEProps & {
 };
 
 /** @public */
+export declare function parseDiff(diff: string): DiffLine[];
+
+/** @public */
 declare type ParticleConfig = {
     /** Number of particles. */
     count: number;
@@ -2047,21 +2084,6 @@ declare type ResizeHandler = (size: TerminalSize) => void;
 
 /** @public */
 export declare function resolveClassName(className: string | undefined | null, options?: ClassNameResolveOptions): ClassNameResolveResult;
-
-/** @public */
-export declare class RGBA {
-    readonly r: number;
-    readonly g: number;
-    readonly b: number;
-    readonly a: number;
-    constructor(r: number, g: number, b: number, a?: number);
-    static fromInts(r: number, g: number, b: number, a?: number): RGBA;
-    static fromHex(hex: string): RGBA;
-    static fromValues(r: number, g: number, b: number, a?: number): RGBA;
-    toU32(): number;
-    valueOf(): number;
-    toString(): string;
-}
 
 /** @public */
 export declare const ROUTE_FILE_KIND: {
@@ -2958,7 +2980,7 @@ declare type TGEProps = {
     fontId?: number;
     lineHeight?: number;
     wordBreak?: "normal" | "keep-all";
-    whiteSpace?: "normal" | "pre-wrap";
+    whiteSpace?: "normal" | "pre-wrap" | "nowrap";
     fontFamily?: string;
     fontWeight?: number;
     fontStyle?: "normal" | "italic";
@@ -3186,6 +3208,9 @@ export { untrack }
 export declare function useAppTerminal(): Terminal;
 
 export { useContext }
+
+/** @public */
+export declare const useDiff: typeof createDiff;
 
 /** @public */
 export declare function useDrag(opts: DragOptions): DragState;
@@ -3556,6 +3581,10 @@ export declare type VoidDiffProps = {
     diff: string;
     showLineNumbers?: boolean;
     width?: SizingUnit;
+    /** Visual theme overrides. */
+    theme?: Partial<DiffTheme>;
+    /** Custom line renderer. */
+    children?: (line: DiffLine) => JSX.Element;
 };
 
 /** @public */

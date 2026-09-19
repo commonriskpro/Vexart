@@ -4,6 +4,7 @@
 
 ```ts
 
+import { Accessor } from 'solid-js';
 import { JSX } from 'solid-js';
 
 // @public (undocumented)
@@ -115,6 +116,12 @@ export type ComboboxProps = {
 };
 
 // @public (undocumented)
+export function createDiff(diffText: string | (() => string)): {
+    lines: Accessor<DiffLine[]>;
+    stats: Accessor<DiffStats>;
+};
+
+// @public (undocumented)
 export type CreateExtmarkOptions = Omit<Extmark, "id">;
 
 // @public (undocumented)
@@ -174,11 +181,27 @@ export type DialogProps = {
 export function Diff(props: DiffProps): JSX.Element;
 
 // @public (undocumented)
+export type DiffLine = {
+    type: LineType;
+    content: string;
+    oldLineNum: number | null;
+    newLineNum: number | null;
+};
+
+// @public (undocumented)
 export type DiffProps = {
     diff: string;
     showLineNumbers?: boolean;
     width?: SizingUnit;
     theme?: Partial<DiffTheme>;
+    children?: (line: DiffLine) => JSX.Element;
+};
+
+// @public (undocumented)
+export type DiffStats = {
+    added: number;
+    removed: number;
+    total: number;
 };
 
 // @public (undocumented)
@@ -278,6 +301,9 @@ export type FormOptions<T extends Record<string, any>> = {
     validateOnChange?: boolean;
 };
 
+// @public (undocumented)
+export function getDiffStats(lines: DiffLine[]): DiffStats;
+
 // @public
 export type Highlighter = (content: string, language?: string) => Promise<HighlightToken[][]> | HighlightToken[][];
 
@@ -355,6 +381,17 @@ export type KeyEvent = {
     char: string;
     mods: Modifiers;
 };
+
+// @public (undocumented)
+export const LINE_TYPE: {
+    readonly CONTEXT: "context";
+    readonly ADDED: "added";
+    readonly REMOVED: "removed";
+    readonly HEADER: "header";
+};
+
+// @public (undocumented)
+export type LineType = (typeof LINE_TYPE)[keyof typeof LINE_TYPE];
 
 // @public (undocumented)
 export function List(props: ListProps): JSX.Element;
@@ -439,6 +476,9 @@ export type OverlayRootProps = {
     children?: JSX.Element;
     zIndex?: number;
 };
+
+// @public (undocumented)
+export function parseDiff(diff: string): DiffLine[];
 
 // @public (undocumented)
 export function Popover(props: PopoverProps): JSX.Element;
@@ -875,6 +915,9 @@ export type TooltipProps = {
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
 };
+
+// @public (undocumented)
+export const useDiff: typeof createDiff;
 
 // @public (undocumented)
 export function VirtualList<T>(props: VirtualListProps<T>): JSX.Element;

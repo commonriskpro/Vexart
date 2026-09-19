@@ -6,7 +6,7 @@
  * @public
  */
 
-import { createMemo, Index, Show } from "solid-js"
+import { createMemo, Index, Show, type Accessor } from "solid-js"
 import type { JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
 
@@ -47,21 +47,21 @@ export type DiffTheme = {
   linePadding: number
 }
 
-const DIFF_DEFAULTS: DiffTheme = {
-  fg: 0xe0e0e0ff,
-  muted: 0x888888ff,
-  bg: 0x1a1a2eff,
-  radius: 4,
-  addedBg: 0x1a3a1aff,
-  removedBg: 0x3a1a1aff,
-  contextBg: 0x00000000,
-  addedSign: 0x4ec94eff,
-  removedSign: 0xe05050ff,
-  lineNumberFg: 0x555555ff,
-  lineNumberBg: 0x0d0d14ff,
-  headerBg: 0x1a1a2eff,
-  headerFg: 0x8888ccff,
-  linePadding: 4,
+export const DIFF_DEFAULTS: DiffTheme = {
+  fg: "currentColor",
+  muted: "transparent",
+  bg: "transparent",
+  radius: 0,
+  addedBg: "transparent",
+  removedBg: "transparent",
+  contextBg: "transparent",
+  addedSign: "currentColor",
+  removedSign: "currentColor",
+  lineNumberFg: "transparent",
+  lineNumberBg: "transparent",
+  headerBg: "transparent",
+  headerFg: "currentColor",
+  linePadding: 0,
 }
 
 // ── Types ──
@@ -73,29 +73,68 @@ export type DiffProps = {
   width?: SizingUnit
   /** Visual theme — all styling comes from here. */
   theme?: Partial<DiffTheme>
+  /** Custom line renderer. */
+  children?: (line: DiffLine) => JSX.Element
 }
 
 // ── Diff line types ──
 
-const LINE_TYPE = {
+/** @public */
+export const LINE_TYPE = {
   CONTEXT: "context",
   ADDED: "added",
   REMOVED: "removed",
   HEADER: "header",
 } as const
 
-type LineType = (typeof LINE_TYPE)[keyof typeof LINE_TYPE]
+/** @public */
+export type LineType = (typeof LINE_TYPE)[keyof typeof LINE_TYPE]
 
-type DiffLine = {
+/** @public */
+export type DiffLine = {
   type: LineType
   content: string
   oldLineNum: number | null
   newLineNum: number | null
 }
 
-// ── Parser ──
+// ── Parser & Stats ──
 
-function parseDiff(diff: string): DiffLine[] {
+/** @public */
+export type DiffStats = {
+  added: number
+  removed: number
+  total: number
+}
+
+/** @public */
+export function getDiffStats(lines: DiffLine[]): DiffStats {
+  let added = 0
+  let removed = 0
+  for (const line of lines) {
+    if (line.type === LINE_TYPE.ADDED) added++
+    else if (line.type === LINE_TYPE.REMOVED) removed++
+  }
+  return { added, removed, total: added + removed }
+}
+
+/** @public */
+export function createDiff(diffText: string | (() => string)): {
+  lines: Accessor<DiffLine[]>
+  stats: Accessor<DiffStats>
+} {
+  const textAccessor = typeof diffText === "function" ? diffText : () => diffText
+  const lines = createMemo(() => parseDiff(textAccessor()))
+  const stats = createMemo(() => getDiffStats(lines()))
+  return { lines, stats }
+}
+
+/** @public */
+export const useDiff = createDiff
+
+/** @public */
+export function parseDiff(diff: string): DiffLine[] {
+  if (!diff || !diff.trim()) return []
   const rawLines = diff.split("\n")
   const result: DiffLine[] = []
   let oldLine = 0
@@ -115,7 +154,9 @@ function parseDiff(diff: string): DiffLine[] {
     } else if (raw.startsWith(" ")) {
       result.push({ type: LINE_TYPE.CONTEXT, content: raw.slice(1), oldLineNum: oldLine, newLineNum: newLine }); oldLine++; newLine++
     } else if (raw === "") {
-      result.push({ type: LINE_TYPE.CONTEXT, content: "", oldLineNum: oldLine, newLineNum: newLine }); oldLine++; newLine++
+      if (oldLine > 0 || newLine > 0) {
+        result.push({ type: LINE_TYPE.CONTEXT, content: "", oldLineNum: oldLine, newLineNum: newLine }); oldLine++; newLine++
+      }
     }
   }
 
@@ -129,7 +170,7 @@ export function Diff(props: DiffProps) {
   const th = () => ({ ...DIFF_DEFAULTS, ...props.theme })
   const showLineNumbers = () => props.showLineNumbers ?? true
 
-  const diffLines = createMemo(() => parseDiff(props.diff))
+  const { lines: diffLines } = createDiff(() => props.diff)
 
   const maxLineDigits = createMemo(() => {
     const maxLine = diffLines().reduce((max, l) => Math.max(max, l.oldLineNum ?? 0, l.newLineNum ?? 0), 0)
@@ -170,6 +211,10 @@ export function Diff(props: DiffProps) {
       <Index each={diffLines()}>
         {(line) => (
           <Show
+            when={!props.children}
+            fallback={typeof props.children === "function" ? props.children(line()) : null}
+          >
+          <Show
             when={line().type === LINE_TYPE.HEADER}
             fallback={
               <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bgForType(line().type)}>
@@ -183,14 +228,14 @@ export function Diff(props: DiffProps) {
                   </box>
                 ) : null}
                 <box width={CHAR_WIDTH * 2} alignX="center">
-                  {(() => {
-                    const sign = signForType(line().type)
-                    return sign ? (
-                      <text color={sign.color} fontSize={14} whiteSpace="pre-wrap">{sign.char}</text>
-                    ) : (
-                      <text color={th().muted} fontSize={14} whiteSpace="pre-wrap"> </text>
-                    )
-                  })()}
+                  <Show
+                    when={signForType(line().type)}
+                    fallback={<text color={th().muted} fontSize={14} whiteSpace="pre-wrap"> </text>}
+                  >
+                    {(sign) => (
+                      <text color={sign().color} fontSize={14} whiteSpace="pre-wrap">{sign().char}</text>
+                    )}
+                  </Show>
                 </box>
                 <text color={th().fg} fontSize={14} whiteSpace="pre-wrap">{line().content}</text>
               </box>
@@ -199,6 +244,7 @@ export function Diff(props: DiffProps) {
             <box height={LINE_HEIGHT} width="100%" direction="row" backgroundColor={bgForType(line().type)} paddingX={th().linePadding}>
               <text color={th().headerFg} fontSize={14} whiteSpace="pre-wrap">{line().content}</text>
             </box>
+          </Show>
           </Show>
         )}
       </Index>

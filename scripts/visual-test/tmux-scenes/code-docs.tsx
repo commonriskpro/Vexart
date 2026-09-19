@@ -71,6 +71,23 @@ const DIFF = `--- a/status.ts
 +return "ready"
 `
 
+const HEADLESS_DIFF_THEME = {
+  fg: 0xe0e0e0ff,
+  muted: 0x888888ff,
+  bg: 0x1a1a2eff,
+  radius: 4,
+  addedBg: 0x1a3a1aff,
+  removedBg: 0x3a1a1aff,
+  contextBg: 0x00000000,
+  addedSign: 0x4ec94eff,
+  removedSign: 0xe05050ff,
+  lineNumberFg: 0x555555ff,
+  lineNumberBg: 0x0d0d14ff,
+  headerBg: 0x1a1a2eff,
+  headerFg: 0x8888ccff,
+  linePadding: 4,
+}
+
 function PanelTitle(props: { children: string }) {
   return <text color={0xffd166ff} fontSize={14}>{props.children}</text>
 }
@@ -83,7 +100,7 @@ function HeadlessColumn() {
         <Code content={CODE} language="typescript" highlighter={demoHighlighter} width={540} lineNumbers />
       </box>
       <box width={560} height={155} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
-        <Diff diff={DIFF} showLineNumbers width={540} />
+        <Diff diff={DIFF} showLineNumbers width={540} theme={HEADLESS_DIFF_THEME} />
       </box>
       <box width={560} height={410} backgroundColor={0x111827ff} padding={10} cornerRadius={8}>
         <Markdown content={MARKDOWN} highlighter={demoHighlighter} width={540} />
@@ -317,7 +334,7 @@ export function verify(frame: RenderToBufferResult) {
   // overflowed text fragments. The right half of the first context gutter
   // must contain its new-line number in the same 17px row.
   assert.ok(inkCount(frame, 48, 356, 72, 372, [13, 13, 20]) > 2, "headless diff gutter numbers stacked vertically")
-  assert.ok(inkCount(frame, 626, 356, 650, 372, [38, 38, 38]) > 2, "styled diff gutter numbers stacked vertically")
+  assert.ok(inkCount(frame, 626, 356, 650, 372, [23, 23, 23]) > 2, "styled diff gutter numbers stacked vertically")
   assert.equal(inkCount(frame, 28, 427, 72, 449, [17, 24, 39]), 0, "headless diff gutter overflowed its rows")
   assert.equal(inkCount(frame, 606, 427, 650, 449, [17, 24, 39]), 0, "styled diff gutter overflowed its rows")
 }
