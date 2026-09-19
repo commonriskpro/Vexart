@@ -34,7 +34,7 @@ Flexily is a pure-JavaScript flexbox layout engine with a Yoga-compatible API. T
          constants.ts                 - Yoga-compatible enum values
          logger.ts                    - Optional debug logging (conditional)
          testing.ts                   - Layout inspection + differential oracles
-         classic/                     - Allocating algorithm (debugging reference)
+         classic/                     - [Pruned] Allocating reference algorithm removed (zero-alloc is sole engine)
 ```
 
 **Key design decisions:**
@@ -60,7 +60,7 @@ Flexily is a pure-JavaScript flexbox layout engine with a Yoga-compatible API. T
 | `constants.ts`         | 82    | Yoga-compatible numeric constants                                    | No                             |
 | `logger.ts`            | 67    | Conditional debug logger (`log.debug?.()`)                           | No (conditional)               |
 | `testing.ts`           | 209   | `getLayout`, `diffLayouts`, `expectRelayoutMatchesFresh`             | No (test only)                 |
-| `classic/`             | ~2900 | Allocating reference algorithm                                       | No (debugging only)            |
+| `classic/` (pruned)    | —     | Allocating reference algorithm (pruned; zero-alloc is sole engine)   | Removed                        |
 
 ## Layout Algorithm Phases
 

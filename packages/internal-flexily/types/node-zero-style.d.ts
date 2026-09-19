@@ -1,247 +1,17 @@
 /**
- * Flexily Node
+ * Flexily Node Style
  *
- * Yoga-compatible Node class for flexbox layout.
+ * Yoga-compatible style getters and setters for flexbox layout.
  */
-import { type BaselineFunc, type Layout, type MeasureFunc, type Style, type Value } from "../types.js";
+import { type Style, type Value } from "./types.js";
 /**
- * A layout node in the flexbox tree.
+ * Abstract base class providing style properties, setters, and getters.
  */
-export declare class Node {
-    private _parent;
-    private _children;
-    private _style;
-    private _measureFunc;
-    private _baselineFunc;
-    private _layout;
-    private _isDirty;
-    private _hasNewLayout;
-    /**
-     * Create a new layout node.
-     *
-     * @returns A new Node instance
-     * @example
-     * ```typescript
-     * const root = Node.create();
-     * root.setWidth(100);
-     * root.setHeight(200);
-     * ```
-     */
-    static create(): Node;
-    /**
-     * Get the number of child nodes.
-     *
-     * @returns The number of children
-     */
-    getChildCount(): number;
-    /**
-     * Get a child node by index.
-     *
-     * @param index - Zero-based child index
-     * @returns The child node at the given index, or undefined if index is out of bounds
-     */
-    getChild(index: number): Node | undefined;
-    /**
-     * Get the parent node.
-     *
-     * @returns The parent node, or null if this is a root node
-     */
-    getParent(): Node | null;
-    /**
-     * Insert a child node at the specified index.
-     * If the child already has a parent, it will be removed from that parent first.
-     * Marks the node as dirty to trigger layout recalculation.
-     *
-     * @param child - The child node to insert
-     * @param index - The index at which to insert the child
-     * @example
-     * ```typescript
-     * const parent = Node.create();
-     * const child1 = Node.create();
-     * const child2 = Node.create();
-     * parent.insertChild(child1, 0);
-     * parent.insertChild(child2, 1);
-     * ```
-     */
-    insertChild(child: Node, index: number): void;
-    /**
-     * Remove a child node from this node.
-     * The child's parent reference will be cleared.
-     * Marks the node as dirty to trigger layout recalculation.
-     *
-     * @param child - The child node to remove
-     */
-    removeChild(child: Node): void;
-    /**
-     * Free this node and clean up all references.
-     * Removes the node from its parent, clears all children, and removes the measure function.
-     * This does not recursively free child nodes.
-     */
-    free(): void;
-    /**
-     * Reset this node to a clean initial state for reuse.
-     */
-    reset(): void;
-    /**
-     * Free this node and all descendants recursively.
-     * Each node is detached from its parent and cleaned up.
-     */
-    freeRecursive(): void;
-    /**
-     * Dispose the node (calls free)
-     */
-    [Symbol.dispose](): void;
-    /**
-     * Set a measure function for intrinsic sizing.
-     * The measure function is called during layout to determine the node's natural size.
-     * Typically used for text nodes or other content that has an intrinsic size.
-     * Marks the node as dirty to trigger layout recalculation.
-     *
-     * @param measureFunc - Function that returns width and height given available space and constraints
-     * @example
-     * ```typescript
-     * const textNode = Node.create();
-     * textNode.setMeasureFunc((width, widthMode, height, heightMode) => {
-     *   // Measure text and return dimensions
-     *   return { width: 50, height: 20 };
-     * });
-     * ```
-     */
-    setMeasureFunc(measureFunc: MeasureFunc): void;
-    /**
-     * Remove the measure function from this node.
-     * Marks the node as dirty to trigger layout recalculation.
-     */
-    unsetMeasureFunc(): void;
-    /**
-     * Check if this node has a measure function.
-     *
-     * @returns True if a measure function is set
-     */
-    hasMeasureFunc(): boolean;
-    /**
-     * Set a baseline function to determine where this node's text baseline is.
-     * Used for ALIGN_BASELINE to align text across siblings with different heights.
-     *
-     * @param baselineFunc - Function that returns baseline offset from top given width and height
-     * @example
-     * ```typescript
-     * textNode.setBaselineFunc((width, height) => {
-     *   // For a text node, baseline might be at 80% of height
-     *   return height * 0.8;
-     * });
-     * ```
-     */
-    setBaselineFunc(baselineFunc: BaselineFunc): void;
-    /**
-     * Remove the baseline function from this node.
-     * Marks the node as dirty to trigger layout recalculation.
-     */
-    unsetBaselineFunc(): void;
-    /**
-     * Check if this node has a baseline function.
-     *
-     * @returns True if a baseline function is set
-     */
-    hasBaselineFunc(): boolean;
-    /**
-     * Check if this node needs layout recalculation.
-     *
-     * @returns True if the node is dirty and needs layout
-     */
-    isDirty(): boolean;
-    /**
-     * Mark this node and all ancestors as dirty.
-     * A dirty node needs layout recalculation.
-     * This is automatically called by all style setters and tree operations.
-     */
-    markDirty(): void;
-    /**
-     * Check if this node has new layout results since the last check.
-     *
-     * @returns True if layout was recalculated since the last call to markLayoutSeen
-     */
-    hasNewLayout(): boolean;
-    /**
-     * Mark that the current layout has been seen/processed.
-     * Clears the hasNewLayout flag.
-     */
-    markLayoutSeen(): void;
-    /**
-     * Calculate layout for this node and all descendants.
-     * This runs the flexbox layout algorithm to compute positions and sizes.
-     * Only recalculates if the node is marked as dirty.
-     *
-     * @param width - Available width for layout
-     * @param height - Available height for layout
-     * @param _direction - Text direction (LTR or RTL), defaults to LTR
-     * @example
-     * ```typescript
-     * const root = Node.create();
-     * root.setFlexDirection(FLEX_DIRECTION_ROW);
-     * root.setWidth(100);
-     * root.setHeight(50);
-     *
-     * const child = Node.create();
-     * child.setFlexGrow(1);
-     * root.insertChild(child, 0);
-     *
-     * root.calculateLayout(100, 50, DIRECTION_LTR);
-     *
-     * // Now you can read computed layout
-     * console.log(child.getComputedWidth());
-     * ```
-     */
-    calculateLayout(width?: number, height?: number, _direction?: number): void;
-    /**
-     * Get the computed left position after layout.
-     *
-     * @returns The left position in points
-     */
-    getComputedLeft(): number;
-    /**
-     * Get the computed top position after layout.
-     *
-     * @returns The top position in points
-     */
-    getComputedTop(): number;
-    /**
-     * Get the computed width after layout.
-     *
-     * @returns The width in points
-     */
-    getComputedWidth(): number;
-    /**
-     * Get the computed height after layout.
-     *
-     * @returns The height in points
-     */
-    getComputedHeight(): number;
-    /**
-     * Get the computed right edge position after layout (left + width).
-     */
-    getComputedRight(): number;
-    /**
-     * Get the computed bottom edge position after layout (top + height).
-     */
-    getComputedBottom(): number;
-    /**
-     * Get the computed padding for a specific edge after layout.
-     */
-    getComputedPadding(edge: number): number;
-    /**
-     * Get the computed margin for a specific edge after layout.
-     */
-    getComputedMargin(edge: number): number;
-    /**
-     * Get the computed border width for a specific edge after layout.
-     */
-    getComputedBorder(edge: number): number;
-    get children(): readonly Node[];
+export declare abstract class NodeStyle {
+    protected _style: Style;
+    abstract markDirty(): void;
     get style(): Style;
-    get layout(): Layout;
-    get measureFunc(): MeasureFunc | null;
-    get baselineFunc(): BaselineFunc | null;
+    resetStyle(): void;
     /**
      * Set the width to a fixed value in points.
      *
@@ -259,6 +29,26 @@ export declare class Node {
      */
     setWidthAuto(): void;
     /**
+     * Set the width to fit-content mode.
+     *
+     * CSS fit-content = min(max-content, max(min-content, available-width)).
+     * For terminals: min(max-content, available-width) since min-content
+     * floor is rarely relevant.
+     *
+     * The layout algorithm measures unconstrained content width (max-content),
+     * then clamps to the available width from the parent.
+     */
+    setWidthFitContent(): void;
+    /**
+     * Set the width to snug-content mode.
+     *
+     * Like fit-content but signals that the consumer wants the tightest
+     * possible width (binary-search shrinkwrap). The layout engine treats
+     * this identically to fit-content for sizing; the consuming framework
+     * (e.g., silvery) can further tighten via its own binary search.
+     */
+    setWidthSnugContent(): void;
+    /**
      * Set the height to a fixed value in points.
      *
      * @param value - Height in points
@@ -274,6 +64,8 @@ export declare class Node {
      * Set the height to auto (determined by layout algorithm).
      */
     setHeightAuto(): void;
+    /** Set height to the internal fit-content unit used by Grid item sizing. */
+    setHeightFitContent(): void;
     /**
      * Set the minimum width in points.
      *
@@ -336,11 +128,6 @@ export declare class Node {
      * Determines how much the node will grow relative to siblings when there is extra space.
      *
      * @param value - Flex grow factor (typically 0 or 1+)
-     * @example
-     * ```typescript
-     * const child = Node.create();
-     * child.setFlexGrow(1); // Will grow to fill available space
-     * ```
      */
     setFlexGrow(value: number): void;
     /**
@@ -371,11 +158,6 @@ export declare class Node {
      * Set the flex direction (main axis direction).
      *
      * @param direction - FLEX_DIRECTION_ROW, FLEX_DIRECTION_COLUMN, FLEX_DIRECTION_ROW_REVERSE, or FLEX_DIRECTION_COLUMN_REVERSE
-     * @example
-     * ```typescript
-     * const container = Node.create();
-     * container.setFlexDirection(FLEX_DIRECTION_ROW); // Lay out children horizontally
-     * ```
      */
     setFlexDirection(direction: number): void;
     /**
@@ -388,12 +170,6 @@ export declare class Node {
      * Set how children are aligned along the cross axis.
      *
      * @param align - ALIGN_FLEX_START, ALIGN_CENTER, ALIGN_FLEX_END, ALIGN_STRETCH, or ALIGN_BASELINE
-     * @example
-     * ```typescript
-     * const container = Node.create();
-     * container.setFlexDirection(FLEX_DIRECTION_ROW);
-     * container.setAlignItems(ALIGN_CENTER); // Center children vertically
-     * ```
      */
     setAlignItems(align: number): void;
     /**
@@ -414,11 +190,6 @@ export declare class Node {
      * Set how children are distributed along the main axis.
      *
      * @param justify - JUSTIFY_FLEX_START, JUSTIFY_CENTER, JUSTIFY_FLEX_END, JUSTIFY_SPACE_BETWEEN, JUSTIFY_SPACE_AROUND, or JUSTIFY_SPACE_EVENLY
-     * @example
-     * ```typescript
-     * const container = Node.create();
-     * container.setJustifyContent(JUSTIFY_SPACE_BETWEEN); // Space children evenly with edges at start/end
-     * ```
      */
     setJustifyContent(justify: number): void;
     /**
@@ -426,11 +197,6 @@ export declare class Node {
      *
      * @param edge - EDGE_LEFT, EDGE_TOP, EDGE_RIGHT, EDGE_BOTTOM, EDGE_HORIZONTAL, EDGE_VERTICAL, or EDGE_ALL
      * @param value - Padding in points
-     * @example
-     * ```typescript
-     * node.setPadding(EDGE_ALL, 10); // Set 10pt padding on all edges
-     * node.setPadding(EDGE_HORIZONTAL, 5); // Set 5pt padding on left and right
-     * ```
      */
     setPadding(edge: number, value: number): void;
     /**
@@ -446,11 +212,6 @@ export declare class Node {
      *
      * @param edge - EDGE_LEFT, EDGE_TOP, EDGE_RIGHT, EDGE_BOTTOM, EDGE_HORIZONTAL, EDGE_VERTICAL, or EDGE_ALL
      * @param value - Margin in points
-     * @example
-     * ```typescript
-     * node.setMargin(EDGE_ALL, 5); // Set 5pt margin on all edges
-     * node.setMargin(EDGE_TOP, 10); // Set 10pt margin on top only
-     * ```
      */
     setMargin(edge: number, value: number): void;
     /**
@@ -478,23 +239,12 @@ export declare class Node {
      *
      * @param gutter - GUTTER_COLUMN (horizontal gap), GUTTER_ROW (vertical gap), or GUTTER_ALL (both)
      * @param value - Gap size in points
-     * @example
-     * ```typescript
-     * container.setGap(GUTTER_ALL, 8); // Set 8pt gap between all items
-     * container.setGap(GUTTER_COLUMN, 10); // Set 10pt horizontal gap only
-     * ```
      */
     setGap(gutter: number, value: number): void;
     /**
      * Set the position type.
      *
      * @param positionType - POSITION_TYPE_STATIC, POSITION_TYPE_RELATIVE, or POSITION_TYPE_ABSOLUTE
-     * @example
-     * ```typescript
-     * node.setPositionType(POSITION_TYPE_ABSOLUTE);
-     * node.setPosition(EDGE_LEFT, 10);
-     * node.setPosition(EDGE_TOP, 20);
-     * ```
      */
     setPositionType(positionType: number): void;
     /**
@@ -673,4 +423,27 @@ export declare class Node {
      * @returns Gap size in points
      */
     getGap(gutter: number): number;
+    /**
+     * Get the computed padding for a specific edge after layout.
+     * Returns the resolved padding value (percentage and logical edges resolved).
+     *
+     * @param edge - EDGE_LEFT, EDGE_TOP, EDGE_RIGHT, or EDGE_BOTTOM
+     * @returns Padding value in points
+     */
+    getComputedPadding(edge: number): number;
+    /**
+     * Get the computed margin for a specific edge after layout.
+     * Returns the resolved margin value (percentage and logical edges resolved).
+     *
+     * @param edge - EDGE_LEFT, EDGE_TOP, EDGE_RIGHT, or EDGE_BOTTOM
+     * @returns Margin value in points
+     */
+    getComputedMargin(edge: number): number;
+    /**
+     * Get the computed border width for a specific edge after layout.
+     *
+     * @param edge - EDGE_LEFT, EDGE_TOP, EDGE_RIGHT, or EDGE_BOTTOM
+     * @returns Border width in points
+     */
+    getComputedBorder(edge: number): number;
 }
