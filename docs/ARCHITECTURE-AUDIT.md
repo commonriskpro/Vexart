@@ -322,7 +322,7 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 
 - [x] Mover `Code`/`Markdown`/`Diff` a `@vexart/styled`; headless queda zero-dep
 - [x] Extraer `useListNavigation` hook compartido (7 componentes)
- - [x] Mover `DropdownMenu` headless a `@vexart/headless`
+- [x] Mover `DropdownMenu` headless a `@vexart/headless`
 - [x] Arreglar theme reactivity en styled wrappers (getters reactivos)
 - [x] Eliminar wrapper boxes redundantes en Button/Checkbox/Switch
 - [x] Fix stale `<For>` index closures en List/Table
