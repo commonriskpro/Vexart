@@ -113,6 +113,26 @@ export function cleanupOrphanLayers(
     if (activeSlotKeys.has(key)) continue
     removeLayer(layer)
     layerCache.delete(key)
+
+    let parentSlot: PreparedLayerSlot | undefined
+    if (layer.width > 0 && layer.height > 0) {
+      const layerBounds: DamageRect = { x: layer.x, y: layer.y, width: layer.width, height: layer.height }
+      for (const prepared of preparedSlots) {
+        if (prepared.isBackground || prepared.slot.key === "root") continue
+        if (intersectRect(prepared.bounds, layerBounds)) {
+          parentSlot = prepared
+          break
+        }
+      }
+    }
+    if (!parentSlot) {
+      parentSlot = preparedSlots.find(p => p.slot.key === "root" || p.isBackground)
+    }
+    if (parentSlot) {
+      parentSlot.layer.dirty = true
+      parentSlot.layer.damageRect = { ...parentSlot.bounds }
+      parentSlot.dirtyRect = { ...parentSlot.bounds }
+    }
   }
   return ioMs
 }
@@ -127,7 +147,7 @@ export function updateLayerStabilityCounters(
       const dirty = prepared.dirtyRect
       for (const [, node] of nodeRefById) {
         if (node.destroyed || node.kind === "text" || node.kind === "root") continue
-        if (node._layerKey && node._layerKey !== "bg" && node._layerKey !== "root") continue
+        if (node._layerKey === undefined || node._scrollContainerId !== 0 || (node._layerKey && node._layerKey !== "bg" && node._layerKey !== "root")) continue
         const nodeDirty = dirty !== null && (
           !node.layout ||
           (node.layout.width > 0 && node.layout.height > 0 && intersectRect(node.layout, dirty) !== null)
@@ -175,8 +195,23 @@ export function computeSlotBounds(
   let maxY = -Infinity
   let hasScissor = false
 
+  if (boundary?.isScroll) {
+    hasScissor = true
+    const boundaryNode = nodeRefById.get(boundary.nodeId)
+    if (boundaryNode) {
+      minX = boundaryNode.layout.x
+      minY = boundaryNode.layout.y
+      maxX = boundaryNode.layout.x + boundaryNode.layout.width
+      maxY = boundaryNode.layout.y + boundaryNode.layout.height
+    }
+  }
+
   if (bucket) {
     for (const op of bucket.ops) {
+      if (op.clipBounds) {
+        hasScissor = true
+      }
+      if (!boundary?.isScroll) {
       let opMinX = op.x
       let opMinY = op.y
       let opMaxX = op.x + op.width
@@ -195,6 +230,7 @@ export function computeSlotBounds(
       minY = Math.min(minY, opMinY)
       maxX = Math.max(maxX, opMaxX)
       maxY = Math.max(maxY, opMaxY)
+      }
     }
   } else {
     let scissorX = 0
@@ -347,6 +383,13 @@ export function prepareLayerSlots(params: {
     let ly = isBg ? 0 : Math.floor(minY)
     let lw = isBg ? viewportWidth : (Math.ceil(maxX) - lx)
     let lh = isBg ? viewportHeight : (Math.ceil(maxY) - ly)
+
+    if (boundary?.isScroll && boundaryNode) {
+      lx = Math.floor(boundaryNode.layout.x)
+      ly = Math.floor(boundaryNode.layout.y)
+      lw = Math.ceil(boundaryNode.layout.width)
+      lh = Math.ceil(boundaryNode.layout.height)
+    }
 
     const freezeWhileInteracting = useLayerCompositing && shouldFreezeInteractionLayer(boundaryNode)
     const debugName = boundaryNode?.props.debugName ?? slot.key

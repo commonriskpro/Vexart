@@ -386,7 +386,7 @@ export function visitNode(
     node._compositor.autoLayer = false
     node._compositor.stableFrames = 0
     node._compositor.unstableFrames = 0
-  } else if (!insideIsolation && !hasBackdrop && (node._compositor?.stableFrames ?? 0) >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+  } else if (!insideIsolation && !insideScroll && !hasBackdrop && (node._compositor?.stableFrames ?? 0) >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
     ensureCompositorExtra(node).autoLayer = true
     autoLayerCount++
     shouldBoundary = true

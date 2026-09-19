@@ -68,6 +68,7 @@ export function registerCulledSubtree(node: TGENode, state: WalkTreeState): void
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i]
     child._scrollContainerId = node._scrollContainerId
+    child._layerKey = node._layerKey
     registerCulledSubtree(child, state)
   }
 }
