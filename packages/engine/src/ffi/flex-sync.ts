@@ -168,9 +168,13 @@ function collectText(node: TGENode): string {
 }
 
 export function syncAllLayoutProps(node: TGENode): void {
+  if (node.kind === "text" && !node._flexNode && node.parent?.kind !== "text") {
+    createTextFlexNode(node)
+  }
   const flex = node._flexNode
   if (!flex) return
   if (node.kind === "text") {
+    flex.markDirty()
     if (node.parent?.props.layout === "grid") syncGridItem(node)
     syncGridTextIntrinsic(node)
     return
@@ -222,6 +226,9 @@ function syncFlexLayout(node: TGENode): void {
 }
 
 export function syncLayoutProp(node: TGENode, key: string, _value: unknown): void {
+  if (node.kind === "text" && !node._flexNode && node.parent?.kind !== "text") {
+    createTextFlexNode(node)
+  }
   const flex = node._flexNode
   if (!flex) return
   if (node.kind === "text") {
@@ -762,6 +769,7 @@ function syncGridLayoutProp(node: TGENode, key: string): void {
 
 export function createTextFlexNode(node: TGENode): void {
   if (node._flexNode) return
+  if (node.parent?.kind === "text") return
   const flex = acquireFlexNode()
   node._flexNode = flex
   setWidthFitContent(flex)

@@ -375,10 +375,7 @@ function ensureFlexSubtree(node: TGENode): void {
   let recreated = false
   if (!node._flexNode) {
     if (node.kind === "text") {
-      // Keep the existing lazy text path for a newly-created node. A text
-      // node needs recreation here only when it was previously materialized
-      // and released by removeChild.
-      if (node.destroyed) {
+      if (node.parent?.kind !== "text") {
         recreated = true
         createTextFlexNode(node)
       }
@@ -392,6 +389,10 @@ function ensureFlexSubtree(node: TGENode): void {
 
   const parentFlex = node._flexNode
   if (!parentFlex) return
+  if (node.kind === "text") {
+    syncAllLayoutProps(node)
+    return
+  }
   for (const child of node.children) {
     ensureFlexSubtree(child)
     const childFlex = child._flexNode
@@ -458,6 +459,13 @@ function assertCanInsert(parent: TGENode, child: TGENode): void {
 }
 
 function insertFlexChild(parent: TGENode, child: TGENode, index: number): void {
+  if (parent.kind === "text") {
+    parent._flexNode?.markDirty()
+    return
+  }
+  if (child.kind === "text" && !child._flexNode) {
+    createTextFlexNode(child)
+  }
   const parentFlex = parent._flexNode
   const childFlex = child._flexNode
   if (!parentFlex || !childFlex) return
@@ -479,6 +487,31 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
     if (!detachChild(previousParent, child)) child.parent = null
   }
 
+  if (parent.kind === "text") {
+    child.parent = parent
+    child.destroyed = false
+    let insertIndex = parent.children.length
+    if (anchor) {
+      const idx = parent.children.indexOf(anchor)
+      if (idx >= 0) {
+        parent.children.splice(idx, 0, child)
+        insertIndex = idx
+        child._siblingIndex = insertIndex
+        updateSiblingIndices(parent, insertIndex)
+        adjustFocusableAncestors(parent, child._focusableCount)
+        setSubtreeDestroyed(child, false)
+        parent._flexNode?.markDirty()
+        return
+      }
+    }
+    parent.children.push(child)
+    child._siblingIndex = insertIndex
+    adjustFocusableAncestors(parent, child._focusableCount)
+    setSubtreeDestroyed(child, false)
+    parent._flexNode?.markDirty()
+    return
+  }
+
   // A subtree removed earlier has no retained Flexily nodes.  Recreate the
   // complete subtree before linking it to the destination parent.
   ensureFlexSubtree(child)
@@ -490,6 +523,7 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
     if (idx >= 0) {
       parent.children.splice(idx, 0, child)
       insertIndex = idx
+      child._siblingIndex = insertIndex
       insertFlexChild(parent, child, insertIndex)
       updateSiblingIndices(parent, insertIndex)
       adjustFocusableAncestors(parent, child._focusableCount)

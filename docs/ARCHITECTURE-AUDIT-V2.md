@@ -11,7 +11,7 @@
 | ID | Eje / Módulo | Hallazgo Arquitectónico | Impacto Estimado | Prioridad |
 | :--- | :--- | :--- | :--- | :---: |
 | **1.1** | **Native / GPU** | RegionalReadbackPool con doble búfer y zero-copy emission (Completado) | Eliminada alocación y CPU stall en daño regional | ✅ **Hecho** |
-| **2.1** | **Engine Loop** | Doble recorrido DFS por frame (`walkTreeOnce` + `traverseFrame`) | Recorrido y resolución de props redundante | **Alta** |
+| **2.1** | **Engine Loop** | Doble recorrido DFS por frame (`walkTreeOnce` + `traverseFrame`) (Completado) | Eliminada primera pasada DFS y unificado ciclo en `traverseFrame` | ✅ **Hecho** |
 | **2.2** | **Engine / Native** | MSDF Text sin batchear (1 llamada FFI + 1 draw call por cada texto) | Sobrecarga masiva de draw calls y mutexes | **Alta** |
 | **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) | Memory leak en procesos largos | **Alta** |
 | **4.1** | **Headless** | `Popover` no tiene trampa de foco (`pushFocusScope`) ni escucha `Escape` | Violación de accesibilidad / fuga de foco | **Alta** |
@@ -77,16 +77,20 @@
 
 ## 2. Render Loop y Pipeline en TypeScript (`packages/engine/src/loop/`)
 
-### Hallazgo 2.1: Doble Recorrido DFS por Frame (`walkTreeOnce` + `traverseFrame`)
-* **Prioridad:** **Alta**
+### Hallazgo 2.1: Doble Recorrido DFS por Frame (`walkTreeOnce` + `traverseFrame`) (✅ Completado)
+* **Prioridad:** **Alta** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/engine/src/loop/composite.ts:620–645`
-  * `packages/engine/src/loop/walk-tree.ts:145–290`
-  * `packages/engine/src/loop/pipeline-traverse.ts:1197–1250`
+  * `packages/engine/src/loop/composite.ts`
+  * `packages/engine/src/ffi/node.ts`
+  * `packages/engine/src/ffi/flex-sync.ts`
+  * `packages/engine/src/loop/image.ts`
+  * `packages/engine/src/loop/walk-tree.ts` (mantenida exportación legacy para tests)
 * **Problema:**
-  `composite.ts` ejecuta `walkTreeOnce(s)` para poblar listas temporales de nodos (`rectNodes`, `boxNodes`, `textNodes`). Luego vacía esas listas completamente y llama a `traverseFrame`, que vuelve a recorrer todo el árbol en pre-order, resolviendo de nuevo `resolveProps` y repoblando las mismas colecciones.
-* **Solución Arquitectónica:**
-  Eliminar `walkTreeOnce` de `composite.ts`. Reactivar la creación de flex nodes de texto de forma granular en mutación y ejecutar `layoutAdapter.calculateRoots` directamente. `traverseFrame` debe ser el único recorrido DFS del árbol.
+  `composite.ts` ejecutaba `walkTreeOnce(s)` para poblar listas temporales de nodos (`rectNodes`, `boxNodes`, `textNodes`) y materializar flex nodes de texto. Luego vaciaba esas listas completamente y llamaba a `traverseFrame`, que volvía a recorrer todo el árbol en pre-order, resolviendo de nuevo `resolveProps` y repoblando las mismas colecciones.
+* **Solución Arquitectónica Implementada:**
+  1. **Materialización Reactiva de Flex Nodes de Texto**: En `packages/engine/src/ffi/node.ts` (`ensureFlexSubtree`, `insertChild`, `insertFlexChild`) y `flex-sync.ts` (`createTextFlexNode`, `syncAllLayoutProps`, `syncLayoutProp`), los flex nodes de texto se materializan inmediatamente en el árbol retained de Flexily al insertarse o sincronizarse, garantizando que queden insertados en el orden de `_siblingIndex` con su función de medida `setMeasureFunc`. En mutaciones de texto (`reconciler.ts:replaceText` o cambios de props tipográficas), `_flexNode.markDirty()` y `markLayoutDirty()` invalidan el layout inmediatamente.
+  2. **Intrinsic Sizing de Imágenes Asíncronas**: En `packages/engine/src/loop/image.ts:publish`, al completarse la decodificación de imagen, si el nodo no posee ancho/alto explícito en sus props de layout, se asignan las dimensiones intrínsecas a `_flexNode` (`setWidth`/`setHeight`), marcando `_flexNode.markDirty()` y `markLayoutDirty()` antes de renderizar el siguiente frame.
+  3. **Eliminación de `walkTreeOnce` y Unificación en `traverseFrame`**: En `composite.ts`, se eliminó la pasada redundante `walkTreeOnce(s)` y el vaciado intermedio de las 7 listas acumuladoras (`s.rectNodes.length = 0`, etc.). `traverseFrame` es la única pasada DFS que recorre el árbol, resuelve props, escribe la geometría final y emite las operaciones al render graph.
 
 ### Hallazgo 2.2: MSDF Text Rendering sin Batchear (1 FFI + 1 Draw Call por Texto)
 * **Prioridad:** **Alta**

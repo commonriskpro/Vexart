@@ -20,7 +20,7 @@
 
 import { ensureImageExtra, type TGENode } from "../ffi/node"
 import { nativeImageAssetRegister, nativeImageAssetRelease, syncNativeImageHandle, releaseNodeImage } from "../ffi/native-image-assets"
-import { markDirty } from "../reconciler/dirty"
+import { markDirty, markLayoutDirty } from "../reconciler/dirty"
 import { markLayerDirtyByKey } from "./composite"
 
 // ── Cache ──
@@ -95,6 +95,22 @@ export function decodeImageForNode(node: TGENode) {
     extra.buffer = image
     syncNativeImageHandle(node, image?.nativeHandle ?? null)
     extra.state = image ? "loaded" : "error"
+    if (image) {
+      const isGridItem = node.parent?.props.layout === "grid"
+      let layoutNeedsUpdate = false
+      if (!node._widthSizing && !isGridItem && node._flexNode) {
+        node._flexNode.setWidth(image.width)
+        layoutNeedsUpdate = true
+      }
+      if (!node._heightSizing && !isGridItem && node._flexNode) {
+        node._flexNode.setHeight(image.height)
+        layoutNeedsUpdate = true
+      }
+      if (layoutNeedsUpdate) {
+        node._flexNode?.markDirty()
+        markLayoutDirty()
+      }
+    }
     if (node._layerKey) {
       markLayerDirtyByKey(node._layerKey)
     }
@@ -288,4 +304,3 @@ export function getImageCacheStats() {
     scaledBytes: 0,
   }
 }
-

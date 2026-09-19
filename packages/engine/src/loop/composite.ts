@@ -7,7 +7,7 @@
  * Owns the full per-frame pipeline:
  *   1. Feed scroll + pointer state & check compositor-only fast path
  *   2. updateInteractiveStates
- *   3. walkTree → layoutAdapter → endLayout → writeLayoutBack (single unified layout pass)
+ *   3. calculateRoots → traverseFrame (single unified DFS layout & render pass)
  *   4. findLayerBoundaries + assignLayersSpatial
  *   5. beginSync → paintFrame → endSync + debug stats
  *
@@ -31,8 +31,6 @@ import { setActiveScrollOffsets } from "../reconciler/hit-test"
 import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle, InteractionLatencyTracking } from "./types"
 export type { FrameProfile } from "./types"
 import {
-  collectText,
-  walkTree as _walkTree,
   type WalkTreeState,
 } from "./walk-tree"
 import {
@@ -330,12 +328,6 @@ function buildWalkState(s: CompositeFrameState): WalkTreeState {
   }
 }
 
-function walkTreeOnce(s: CompositeFrameState) {
-  const state = buildWalkState(s)
-  _walkTree(s.root, state)
-  s.walkCounters.scrollSpeedCap = state.scrollSpeedCap.value
-}
-
 function resetWalkAccumulators(s: CompositeFrameState) {
   s.walkCounters.scrollSpeedCap = 0
   s.rectNodes.length = 0
@@ -617,9 +609,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   } else {
     resetWalkAccumulators(s)
     s.layoutAdapter.beginLayout()
-    const walkStart = profile ? performance.now() : 0
-    walkTreeOnce(s)
-    if (profile) profile.walkTreeMs = performance.now() - walkStart
+    if (profile) profile.walkTreeMs = 0
     const layoutComputeStart = profile ? performance.now() : 0
     s.layoutAdapter.calculateRoots(s.root._flexNode)
     if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
@@ -629,25 +619,18 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       return
     }
 
-    // Step 2: Clear arrays that traverseFrame will repopulate
-    s.rectNodes.length = 0
-    s.textNodes.length = 0
-    s.boxNodes.length = 0
-    s.nodeRefById.clear()
-    s.rectNodeById.clear()
-    s.scrollContainers.length = 0
-    s.layerBoundaries.length = 0
-
-    // Step 3: Run the new pipeline pass 1
+    // Single unified DFS traversal pass
     const layoutWritebackStart = profile ? performance.now() : 0
-    const traversalResult = traverseFrame(s.root, buildWalkState(s), s.viewportWidth, s.viewportHeight)
+    const walkState = buildWalkState(s)
+    const traversalResult = traverseFrame(s.root, walkState, s.viewportWidth, s.viewportHeight)
     if (!traversalResult.success) {
       if (profile) profile.layoutMs = performance.now() - layoutStart
       return
     }
+    s.walkCounters.scrollSpeedCap = walkState.scrollSpeedCap.value
     s.hasAnyTransforms = traversalResult.hasAnyTransforms
 
-    // Step 4: Run the new pipeline pass 2 (scroll offsets on ops)
+    // Step 3: Run the new pipeline pass 2 (scroll offsets on ops)
     const newScrollOffsets = applyScrollOffsetsToOps(
       traversalResult.layerBuckets,
       s.scrollContainers,
@@ -658,7 +641,7 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
     if (profile) profile.layoutMs = performance.now() - layoutStart
 
-    // Step 5: Clear layout dirty flags
+    // Step 4: Clear layout dirty flags
     clearLayoutDirty()
     if (typeof (s.dirty as any).clearLayoutDirty === "function") {
       (s.dirty as any).clearLayoutDirty()
