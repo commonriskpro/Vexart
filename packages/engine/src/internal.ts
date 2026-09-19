@@ -213,7 +213,7 @@ export { NO_MODS, decodeMods } from "./input/types"
 export { MOUSE_ACTION } from "./input/types"
 
 export { updateScrollContainerGeometry, releaseScrollHandle, resetScrollHandles } from "./loop/scroll"
-export { createScaledImageCache, decodeImageForNode, scaleImage, clearImageCache, getImageCacheStats } from "./loop/image"
+export { createScaledImageCache, decodeImageForNode, clearImageCache, getImageCacheStats } from "./loop/image"
 export type { RawImage, ScaledImageCache, DecodedImage } from "./loop/image"
 export { boostWindowFor, hasRecentInteraction } from "./loop/frame-scheduler"
 export type { InteractionKind, FrameSchedulerBoosts } from "./loop/frame-scheduler"

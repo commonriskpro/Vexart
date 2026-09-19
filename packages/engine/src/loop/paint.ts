@@ -10,88 +10,56 @@
  *   - paintFrame()      — orchestrates layer prep, paint dispatch, and cleanup
  */
 
-import { CMD } from "../ffi/render-graph"
-import type { RenderCommand, RenderGraphOp, RenderGraphFrame } from "../ffi/render-graph"
+import type { RenderCommand, RenderGraphFrame } from "../ffi/render-graph"
 import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import {
-  intersectRect,
   rectArea,
   sumOverlapArea,
   type DamageRect,
-  type TransformQuad,
 } from "../ffi/damage"
 import {
   getRendererBackend,
   type RendererBackend,
   type RendererBackendFrameContext,
   type RendererBackendLayerContext,
-  type RendererBackendPaintResult,
 } from "../ffi/renderer-backend"
 import { summarizeRendererResourceStats } from "../ffi/resource-stats"
 import { getLatestInteractionTrace } from "./input"
-import { shouldFreezeInteractionLayer } from "../reconciler/interaction"
-import { multiply, translate, transformPoint } from "../ffi/matrix"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
-import type { FrameProfile, LayerBoundary, LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking } from "./types"
-import { resolveProps, type TGENode } from "../ffi/node"
+import type { LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking } from "./types"
+import type { TGENode } from "../ffi/node"
 
 import { isNativePresentationCapable } from "../ffi/native-presentation-flags"
 import type { NativePresentationStats } from "../ffi/native-presentation-stats"
 import type { LayerOpBucket } from "./pipeline-types"
 
+import {
+  type PaintProfiler,
+  selectLayerRepaintRect,
+  selectLayerDirtyRect,
+  hasDirtySubtreeTransforms,
+  canUseRegionalRepaint,
+  applyBackendProfile,
+} from "./paint-regional"
 
+import {
+  type PreparedLayerSlot,
+  EMPTY_COMMANDS,
+  collectLayerCommands,
+  cleanupOrphanLayers,
+  updateLayerStabilityCounters,
+  findBucketForSlot,
+  prepareLayerSlots,
+} from "./paint-layer"
 
-// ── PreparedLayerSlot ─────────────────────────────────────────────────────
-
-/** Per-slot metadata computed during the layer prep pass. */
-export type PreparedLayerSlot = {
-  slot: LayerSlot
-  layer: Layer
-  debugName: string
-  bounds: DamageRect
-  dirtyRect: DamageRect | null
-  clippedDamage: DamageRect | null
-  isBackground: boolean
-  subtreeTransform: TransformQuad | null
-  /** Source-space origin for a viewport-bounded translated layer. */
-  paintOffsetX?: number
-  paintOffsetY?: number
-  allowRegionalRepaint: boolean
-  useRegionalRepaint: boolean
-  freezeWhileInteracting: boolean
-}
-
-export type PaintProfiler = Pick<FrameProfile,
-  | "paintNativeSnapshotMs" | "paintLayerPrepMs" | "paintFrameContextMs"
-  | "paintBackendBeginMs" | "paintReuseMs" | "paintRenderGraphMs"
-  | "paintBackendPaintMs" | "paintBackendCompositeMs" | "paintBackendReadbackMs"
-  | "paintBackendNativeEmitMs" | "paintBackendNativeReadbackMs"
-  | "paintBackendNativeCompressMs" | "paintBackendNativeShmPrepareMs"
-  | "paintBackendNativeWriteMs" | "paintBackendNativeRawBytes"
-  | "paintBackendNativePayloadBytes" | "paintBackendUniformMs"
-  | "paintLayerCleanupMs" | "paintBackendEndMs" | "paintPresentationMs"
-  | "paintInteractionStatsMs"
->
-
-function cleanupOrphanLayers(
-  preparedSlots: PreparedLayerSlot[],
-  layerCache: Map<string, Layer>,
-  activeSlotKeys: Set<string>,
-  transmissionMode: "direct" | "shm",
-  imageIdForLayer: (layer: Layer) => number,
-  removeLayer: (layer: Layer) => void,
-  debugCadence: boolean,
-  suppressNativeLayerDeletes: boolean,
-) {
-  let ioMs = 0
-  activeSlotKeys.clear()
-  for (const prepared of preparedSlots) activeSlotKeys.add(prepared.slot.key)
-  for (const [key, layer] of layerCache) {
-    if (activeSlotKeys.has(key)) continue
-    removeLayer(layer)
-    layerCache.delete(key)
-  }
-  return ioMs
+export type { PreparedLayerSlot }
+export type { PaintProfiler }
+export {
+  collectLayerCommands,
+  selectLayerRepaintRect,
+  selectLayerDirtyRect,
+  hasDirtySubtreeTransforms,
+  canUseRegionalRepaint,
 }
 
 // ── PaintFrameState ───────────────────────────────────────────────────────
@@ -146,245 +114,6 @@ export type PaintFrameState = {
   interaction: InteractionLatencyTracking
 
   debug?: unknown
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-
-export function collectLayerCommands(commands: RenderCommand[], cmdIndices: number[]) {
-  const layerCommands: RenderCommand[] = []
-  for (const idx of cmdIndices) {
-    const cmd = commands[idx]
-    if (!cmd) continue
-    layerCommands.push(cmd)
-  }
-  return layerCommands
-}
-
-const EMPTY_COMMANDS: RenderCommand[] = []
-
-export function selectLayerRepaintRect(
-  effectiveUseRegionalRepaint: boolean,
-  clippedDamage: { x: number; y: number; width: number; height: number } | null,
-) {
-  return effectiveUseRegionalRepaint ? clippedDamage : null
-}
-
-export function selectLayerDirtyRect(
-  layerDirty: boolean,
-  damageRect: DamageRect | null,
-  bounds: DamageRect,
-) {
-  if (damageRect) return damageRect
-  return layerDirty ? bounds : null
-}
-
-export function hasDirtySubtreeTransforms(preparedSlots: PreparedLayerSlot[], forceLayerRepaint: boolean) {
-  return preparedSlots.some((prepared) => {
-    if (!prepared.subtreeTransform) return false
-    if (forceLayerRepaint) return true
-    return !!prepared.dirtyRect
-  })
-}
-
-export function canUseRegionalRepaint(boundaryNode: TGENode | null, hasScissor: boolean, isBg: boolean): boolean {
-  if (hasScissor) return false
-  // The background slot is a monolithic layer containing all non-layered UI.
-  // Regional repaint is unsafe here because a small dirty rect (for example a
-  // focused titlebar) can still require re-presenting other overlapping window
-  // content after z-order/focus changes. Until background commands are clipped
-  // to the repaint rect or app windows become separate layer boundaries, repaint
-  // and present the full bg layer for correctness.
-  if (isBg) return false
-  if (!boundaryNode || boundaryNode.kind === "text") return true
-  if (boundaryNode.props.viewportClip === false) return false
-  if (hasTransformInSubtree(boundaryNode)) return false
-  return true
-}
-
-function hasTransformInSubtree(node: TGENode): boolean {
-  if (node.kind === "text") return false
-  if (node.props.transform) return true
-  return node.children.some((child) => hasTransformInSubtree(child))
-}
-
-function applyBackendProfile(profile: PaintProfiler | undefined, backend: RendererBackend) {
-  if (!profile) return
-  const backendProfile = backend.drainProfile?.()
-  if (!backendProfile) return
-  profile.paintBackendCompositeMs += backendProfile.compositeMs
-  profile.paintBackendReadbackMs += backendProfile.readbackMs
-  profile.paintBackendNativeEmitMs += backendProfile.nativeEmitMs
-  profile.paintBackendNativeReadbackMs += backendProfile.nativeReadbackMs
-  profile.paintBackendNativeCompressMs += backendProfile.nativeCompressMs
-  profile.paintBackendNativeShmPrepareMs += backendProfile.nativeShmPrepareMs
-  profile.paintBackendNativeWriteMs += backendProfile.nativeWriteMs
-  profile.paintBackendNativeRawBytes += backendProfile.nativeRawBytes
-  profile.paintBackendNativePayloadBytes += backendProfile.nativePayloadBytes
-  profile.paintBackendUniformMs += backendProfile.uniformUpdateMs
-}
-
-function computeSubtreeTransformQuad(node: TGENode) {
-  if (!node._transforms?.local) return null
-  const layout = node.layout
-  const chain: TGENode[] = []
-  let current: TGENode | null = node
-  while (current) {
-    if (current._transforms?.local) chain.push(current)
-    current = current.parent
-  }
-  const transformAbsolutePoint = (x: number, y: number) => {
-    let point = { x, y }
-    for (const target of chain) {
-      const l = target.layout
-      const absolute = multiply(multiply(translate(l.x, l.y), target._transforms!.local!), translate(-l.x, -l.y))
-      point = transformPoint(absolute, point.x, point.y)
-    }
-    return point
-  }
-
-  const x = layout.x
-  const y = layout.y
-  const w = layout.width
-  const h = layout.height
-  return {
-    p0: transformAbsolutePoint(x, y),
-    p1: transformAbsolutePoint(x + w, y),
-    p2: transformAbsolutePoint(x, y + h),
-    p3: transformAbsolutePoint(x + w, y + h),
-  }
-}
-
-function isAxisTranslationQuad(node: TGENode, quad: TransformQuad) {
-  const epsilon = 1e-6
-  return Math.abs(quad.p1.x - quad.p0.x - node.layout.width) < epsilon
-    && Math.abs(quad.p1.y - quad.p0.y) < epsilon
-    && Math.abs(quad.p2.x - quad.p0.x) < epsilon
-    && Math.abs(quad.p2.y - quad.p0.y - node.layout.height) < epsilon
-}
-
-function clippedTranslationQuad(left: number, top: number, width: number, height: number): TransformQuad {
-  return {
-    p0: { x: left, y: top },
-    p1: { x: left + width, y: top },
-    p2: { x: left, y: top + height },
-    p3: { x: left + width, y: top + height },
-  }
-}
-
-function hasCaptureExpansion(node: TGENode, includeTransform = false): boolean {
-  const props = resolveProps(node)
-  if (props.shadow !== undefined || props.glow !== undefined || props.filter !== undefined) return true
-  if (props.backdropBlur !== undefined || props.backdropBrightness !== undefined || props.backdropContrast !== undefined || props.backdropSaturate !== undefined || props.backdropGrayscale !== undefined || props.backdropInvert !== undefined || props.backdropSepia !== undefined || props.backdropHueRotate !== undefined) return true
-  if (includeTransform && props.transform !== undefined) return true
-  return node.children.some((child) => hasCaptureExpansion(child, true))
-}
-
-function expandCommandBoundsForEffects(
-  cmd: RenderCommand | RenderGraphOp,
-  node: TGENode,
-): { minX: number; minY: number; maxX: number; maxY: number } {
-  let minX = cmd.x
-  let minY = cmd.y
-  let maxX = cmd.x + cmd.width
-  let maxY = cmd.y + cmd.height
-  const props = resolveProps(node)
-
-  if (props.shadow) {
-    const shadows = Array.isArray(props.shadow) ? props.shadow : [props.shadow]
-    for (const s of shadows) {
-      if (!s || typeof s !== "object") continue
-      const sx = typeof (s as any).x === "number" ? (s as any).x : (typeof (s as any).offsetX === "number" ? (s as any).offsetX : 0)
-      const sy = typeof (s as any).y === "number" ? (s as any).y : (typeof (s as any).offsetY === "number" ? (s as any).offsetY : 0)
-      const blur = Math.max(0, typeof (s as any).blur === "number" ? (s as any).blur : 0)
-      const pad = Math.ceil(blur) * 2
-      minX = Math.min(minX, cmd.x + sx - pad)
-      minY = Math.min(minY, cmd.y + sy - pad)
-      maxX = Math.max(maxX, cmd.x + cmd.width + sx + pad)
-      maxY = Math.max(maxY, cmd.y + cmd.height + sy + pad)
-    }
-  }
-
-  if (props.glow && typeof props.glow === "object") {
-    const glow = props.glow as { radius?: number }
-    const pad = Math.ceil((glow.radius ?? 0) * 2)
-    minX = Math.min(minX, cmd.x - pad)
-    minY = Math.min(minY, cmd.y - pad)
-    maxX = Math.max(maxX, cmd.x + cmd.width + pad)
-    maxY = Math.max(maxY, cmd.y + cmd.height + pad)
-  }
-
-  return { minX, minY, maxX, maxY }
-}
-
-function applyPendingNodeDamage(
-  layer: Layer,
-  slot: LayerSlot,
-  commands: RenderCommand[],
-  pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }>,
-  markLayerDamaged: (layer: Layer, rect: DamageRect) => void,
-  bucket?: LayerOpBucket,
-) {
-  if (pendingNodeDamageRects.length === 0) return
-  const nodeIds = new Set<number>()
-  if (bucket) {
-    for (const op of bucket.ops) {
-      if (op.nodeId !== undefined) nodeIds.add(op.nodeId)
-    }
-  } else {
-  for (const idx of slot.cmdIndices) {
-    const nodeId = commands[idx]?.nodeId
-    if (nodeId !== undefined) nodeIds.add(nodeId)
-  }
-  }
-  if (nodeIds.size === 0) return
-  for (const pending of pendingNodeDamageRects) {
-    if (nodeIds.has(pending.nodeId)) markLayerDamaged(layer, pending.rect)
-  }
-}
-
-function updateLayerStabilityCounters(
-  preparedSlots: PreparedLayerSlot[],
-  slotBoundaryByKey: Map<string, LayerBoundary>,
-  nodeRefById: Map<number, TGENode>,
-) {
-  for (const prepared of preparedSlots) {
-    if (prepared.isBackground) {
-      const dirty = prepared.dirtyRect
-      for (const [, node] of nodeRefById) {
-        if (node.destroyed || node.kind === "text" || node.kind === "root") continue
-        if (node._layerKey && node._layerKey !== "bg" && node._layerKey !== "root") continue
-        const nodeDirty = dirty !== null && (
-          !node.layout ||
-          (node.layout.width > 0 && node.layout.height > 0 && intersectRect(node.layout, dirty) !== null)
-        )
-        if (nodeDirty) {
-          node._unstableFrameCount++
-          node._stableFrameCount = 0
-        } else {
-          node._stableFrameCount++
-          node._unstableFrameCount = 0
-        }
-      }
-      continue
-    }
-    const boundary = slotBoundaryByKey.get(prepared.slot.key)
-    if (!boundary) continue
-    const node = nodeRefById.get(boundary.nodeId)
-    if (!node) continue
-    if (prepared.dirtyRect) {
-      node._unstableFrameCount++
-      node._stableFrameCount = 0
-    } else {
-      node._stableFrameCount++
-      node._unstableFrameCount = 0
-    }
-  }
-}
-
-function findBucketForSlot(bucketByKey: Map<string, LayerOpBucket> | null, slotKey: string): LayerOpBucket | undefined {
-  if (!bucketByKey) return undefined
-  return bucketByKey.get(slotKey)
-    ?? (slotKey === "bg" ? bucketByKey.get("root") : (slotKey === "root" ? bucketByKey.get("bg") : undefined))
 }
 
 // ── paintFrame ────────────────────────────────────────────────────────────
@@ -469,255 +198,18 @@ export function paintFrame(
   const slotBoundaryByKey = plan.slotBoundaryByKey
 
   const frameStart = expFrameBudgetMs > 0 ? performance.now() : 0
-  let frameBudgetExceeded = false
-  const layerOrder: Layer[] = []
-  const preparedSlots: PreparedLayerSlot[] = []
   let ioMs = 0
 
   // ── Step 1: Layer prep ──
   const layerPrepStart = profile ? performance.now() : 0
-  for (const slot of allSlots) {
-    const bucket = findBucketForSlot(bucketByKey, slot.key)
-    if (bucket ? bucket.ops.length === 0 : slot.cmdIndices.length === 0) continue
-
-    if (expFrameBudgetMs > 0 && !frameBudgetExceeded && slot.z >= 0) {
-      const elapsed = performance.now() - frameStart
-      if (elapsed > expFrameBudgetMs) {
-        frameBudgetExceeded = true
-      }
-    }
-    if (frameBudgetExceeded && slot.z >= 0) {
-      const deferLayer = layerCache.get(slot.key)
-      if (deferLayer) deferLayer.dirty = true
-      continue
-    }
-
-    const layer = getOrCreateLayer(slot.key, slot.z)
-    const previousRect = getPreviousLayerRect(layer)
-    const boundary = slotBoundaryByKey.get(slot.key)
-    const boundaryNode = boundary ? state.nodeRefById.get(boundary.nodeId) ?? null : null
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    let hasScissor = false
-    let scissorX = 0
-    let scissorY = 0
-    let scissorR = 0
-    let scissorB = 0
-
-    if (bucket) {
-      for (const op of bucket.ops) {
-        let opMinX = op.x
-        let opMinY = op.y
-        let opMaxX = op.x + op.width
-        let opMaxY = op.y + op.height
-        if (op.nodeId !== undefined && (!boundary?.hasSubtreeTransform || op.nodeId === boundary?.nodeId)) {
-          const node = state.nodeRefById.get(op.nodeId)
-          if (node) {
-            const expanded = expandCommandBoundsForEffects(op, node)
-            opMinX = expanded.minX
-            opMinY = expanded.minY
-            opMaxX = expanded.maxX
-            opMaxY = expanded.maxY
-          }
-        }
-        minX = Math.min(minX, opMinX)
-        minY = Math.min(minY, opMinY)
-        maxX = Math.max(maxX, opMaxX)
-        maxY = Math.max(maxY, opMaxY)
-      }
-    } else {
-    const pendingBounds: RenderCommand[] = []
-    for (const idx of slot.cmdIndices) {
-      const cmd = commands[idx]
-      if (!cmd) continue
-      if (cmd.type === CMD.SCISSOR_START && !hasScissor) {
-        scissorX = cmd.x
-        scissorY = cmd.y
-        scissorR = cmd.x + cmd.width
-        scissorB = cmd.y + cmd.height
-        minX = scissorX
-        minY = scissorY
-        maxX = scissorR
-        maxY = scissorB
-        hasScissor = true
-        for (const pending of pendingBounds) {
-          const cx = Math.round(pending.x)
-          const cy = Math.round(pending.y)
-          const cr = Math.round(pending.x + pending.width)
-          const cb = Math.round(pending.y + pending.height)
-          const overlapX = Math.abs(cx - scissorX) < 4 || Math.abs(cr - scissorR) < 4
-          const overlapY = Math.abs(cy - scissorY) < 4 || Math.abs(cb - scissorB) < 4
-          if (!overlapX || !overlapY) continue
-          minX = Math.min(minX, cx)
-          minY = Math.min(minY, cy)
-          maxX = Math.max(maxX, cr)
-          maxY = Math.max(maxY, cb)
-        }
-        continue
-      }
-      if (hasScissor) {
-        if (cmd.type !== CMD.RECTANGLE && cmd.type !== CMD.BORDER) continue
-        const cx = Math.round(cmd.x)
-        const cy = Math.round(cmd.y)
-        const cr = Math.round(cmd.x + cmd.width)
-        const cb = Math.round(cmd.y + cmd.height)
-        const overlapX = Math.abs(cx - scissorX) < 4 || Math.abs(cr - scissorR) < 4
-        const overlapY = Math.abs(cy - scissorY) < 4 || Math.abs(cb - scissorB) < 4
-        if (!overlapX || !overlapY) continue
-        minX = Math.min(minX, cx)
-        minY = Math.min(minY, cy)
-        maxX = Math.max(maxX, cr)
-        maxY = Math.max(maxY, cb)
-      } else {
-        let cmdMinX = cmd.x
-        let cmdMinY = cmd.y
-        let cmdMaxX = cmd.x + cmd.width
-        let cmdMaxY = cmd.y + cmd.height
-        if (cmd.nodeId !== undefined && (!boundary?.hasSubtreeTransform || cmd.nodeId === boundary?.nodeId)) {
-          const node = state.nodeRefById.get(cmd.nodeId)
-          if (node) {
-            const expanded = expandCommandBoundsForEffects(cmd, node)
-            cmdMinX = expanded.minX
-            cmdMinY = expanded.minY
-            cmdMaxX = expanded.maxX
-            cmdMaxY = expanded.maxY
-          }
-        }
-        minX = Math.min(minX, cmdMinX)
-        minY = Math.min(minY, cmdMinY)
-        maxX = Math.max(maxX, cmdMaxX)
-        maxY = Math.max(maxY, cmdMaxY)
-        if (cmd.type === CMD.RECTANGLE || cmd.type === CMD.BORDER) pendingBounds.push(cmd)
-      }
-    }
-    }
-
-    const isBg = slot.z < 0 || slot.key === "bg" || slot.key === "root"
-    let lx = isBg ? 0 : Math.floor(minX)
-    let ly = isBg ? 0 : Math.floor(minY)
-    let lw = isBg ? viewportWidth : (Math.ceil(maxX) - lx)
-    let lh = isBg ? viewportHeight : (Math.ceil(maxY) - ly)
-
-    const freezeWhileInteracting = useLayerCompositing && shouldFreezeInteractionLayer(boundaryNode)
-    const debugName = boundaryNode?.props.debugName ?? slot.key
-    const shouldViewportClip = freezeWhileInteracting ? false : (boundaryNode?.props.viewportClip ?? true)
-    const allowRegionalRepaint = canUseRegionalRepaint(boundaryNode, hasScissor, isBg)
-    const rawSubtreeTransform = boundary?.hasSubtreeTransform && boundaryNode
-      ? computeSubtreeTransformQuad(boundaryNode)
-      : null
-    const boundedTranslation = !!(
-      rawSubtreeTransform
-      && boundaryNode
-      && isAxisTranslationQuad(boundaryNode, rawSubtreeTransform)
-      && !hasCaptureExpansion(boundaryNode)
-      && !freezeWhileInteracting
-    )
-
-    // A translated layer is clipped in output space, but its source target
-    // must start at the corresponding untransformed coordinate. Otherwise a
-    // wide row is first squeezed to the viewport-sized target and then
-    // translated, shifting the horizontal crop (for example, -5px shows the
-    // first source pixels instead of the entering slice). Keep the target
-    // viewport-bounded and carry the source offset below. Subtrees with
-    // capture-expanding effects stay on the historical full-capture path.
-    if (boundedTranslation && rawSubtreeTransform) {
-      const dx = rawSubtreeTransform.p0.x - boundaryNode!.layout.x
-      const dy = rawSubtreeTransform.p0.y - boundaryNode!.layout.y
-      const contentRight = lx + lw + dx
-      const contentBottom = ly + lh + dy
-      lx = Math.floor(lx + dx)
-      ly = Math.floor(ly + dy)
-      lw = Math.ceil(contentRight) - lx
-      lh = Math.ceil(contentBottom) - ly
-    }
-
-    if (freezeWhileInteracting && boundaryNode && boundaryNode.kind !== "text" && boundaryNode.props.floating) {
-      const layoutX = Math.round(boundaryNode.layout.x)
-      const layoutY = Math.round(boundaryNode.layout.y)
-      const layoutW = Math.round(boundaryNode.layout.width)
-      const layoutH = Math.round(boundaryNode.layout.height)
-      if (layoutW > 0 && layoutH > 0) {
-        lx = layoutX
-        ly = layoutY
-        lw = layoutW
-        lh = layoutH
-      }
-    }
-
-    if (shouldViewportClip) {
-      const clipLeft = Math.max(0, lx)
-      const clipTop = Math.max(0, ly)
-      const clipRight = Math.min(viewportWidth, lx + lw)
-      const clipBottom = Math.min(viewportHeight, ly + lh)
-
-      if (clipLeft >= clipRight || clipTop >= clipBottom) {
-        layer.dirty = false
-        continue
-      }
-
-      lx = clipLeft
-      ly = clipTop
-      lw = clipRight - clipLeft
-      lh = clipBottom - clipTop
-    }
-
-    updateLayerGeometry(layer, lx, ly, lw, lh, { moveOnly: false })
-    applyPendingNodeDamage(layer, slot, commands, pendingNodeDamageRects, markLayerDamaged, bucket)
-    const geometryChanged = !!previousRect && (
-      previousRect.x !== layer.x
-      || previousRect.y !== layer.y
-      || previousRect.width !== layer.width
-      || previousRect.height !== layer.height
-    )
-    if (geometryChanged && layer.damageRect) {
-      for (const lower of layerOrder) {
-        markLayerDamaged(lower, layer.damageRect)
-      }
-    }
-    layerOrder.push(layer)
-
-    let paintOffsetX = lx
-    let paintOffsetY = ly
-    let subtreeTransform = rawSubtreeTransform
-    if (boundedTranslation && rawSubtreeTransform && boundaryNode) {
-      // p0 is the transformed position of the layer's untransformed origin.
-      // This maps the clipped output rectangle back to the source rectangle
-      // while retaining integer target dimensions for the native limit.
-      paintOffsetX = boundaryNode.layout.x + lx - rawSubtreeTransform.p0.x
-      paintOffsetY = boundaryNode.layout.y + ly - rawSubtreeTransform.p0.y
-      subtreeTransform = clippedTranslationQuad(lx, ly, lw, lh)
-    }
-    const bounds = { x: lx, y: ly, width: lw, height: lh }
-    const dirtyRect = selectLayerDirtyRect(layer.dirty, layer.damageRect, bounds)
-    const clippedDamage = dirtyRect ? intersectRect(dirtyRect, bounds) : null
-    const layerArea = lw * lh
-    const damageArea = rectArea(clippedDamage)
-    const useRegionalRepaint = !!(
-      !forceLayerRepaint
-      && allowRegionalRepaint
-      && layer.damageRect
-      && clippedDamage
-      && damageArea > 0
-      && damageArea < layerArea * 0.5
-    )
-    preparedSlots.push({
-      slot,
-      layer,
-      debugName,
-      bounds,
-      dirtyRect,
-      clippedDamage,
-      isBackground: isBg,
-      subtreeTransform,
-      paintOffsetX,
-      paintOffsetY,
-      allowRegionalRepaint,
-      useRegionalRepaint,
-      freezeWhileInteracting,
-    })
-  }
+  const { preparedSlots, frameBudgetExceeded } = prepareLayerSlots({
+    allSlots,
+    bucketByKey,
+    slotBoundaryByKey,
+    commands,
+    state,
+    frameStart,
+  })
   if (profile) profile.paintLayerPrepMs += performance.now() - layerPrepStart
 
   // ── Step 2: Aggregate dirty rects + build frame context ──

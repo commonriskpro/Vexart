@@ -202,75 +202,9 @@ async function decodeWithSharp(buffer: ArrayBuffer, src: string): Promise<Decode
       height: info.height,
     }
   } catch {
-    // sharp not available — try manual PNG decode
-    return decodePNG(buffer, src)
-  }
-}
-
-/**
- * Minimal PNG decode fallback — handles the most common PNG format.
- * For full format support, install `sharp`.
- */
-async function decodePNG(buffer: ArrayBuffer, src: string): Promise<DecodedImage | null> {
-  try {
-    // Use Bun's native PNG support if available
-    // @ts-ignore — Bun may have native image decode
-    if (typeof globalThis.createImageBitmap === "function") {
-      const blob = new Blob([buffer])
-      const bitmap = await createImageBitmap(blob)
-    }
-
-    console.error(`[vexart image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
-    return null
-  } catch {
     console.error(`[vexart image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
     return null
   }
-}
-
-/**
- * Scale image pixels to fit a target box.
- * @deprecated Scaling is performed natively by WGPU hardware samplers during render.
- * @public
- */
-export function scaleImage(
-  src: DecodedImage,
-  targetW: number,
-  targetH: number,
-  fit: "contain" | "cover" | "fill" | "none" = "contain",
-): { data: Uint8Array; width: number; height: number; offsetX: number; offsetY: number } {
-  if (fit === "none" || (targetW === src.width && targetH === src.height)) {
-    return { data: src.data, width: src.width, height: src.height, offsetX: 0, offsetY: 0 }
-  }
-
-  const srcAspect = src.width / src.height
-  const tgtAspect = targetW / targetH
-
-  let scaleW = targetW
-  let scaleH = targetH
-
-  if (fit === "contain") {
-    if (srcAspect > tgtAspect) {
-      scaleW = targetW
-      scaleH = Math.round(targetW / srcAspect)
-    } else {
-      scaleH = targetH
-      scaleW = Math.round(targetH * srcAspect)
-    }
-  } else if (fit === "cover") {
-    if (srcAspect > tgtAspect) {
-      scaleH = targetH
-      scaleW = Math.round(targetH * srcAspect)
-    } else {
-      scaleW = targetW
-      scaleH = Math.round(targetW / srcAspect)
-    }
-  }
-
-  const offsetX = Math.round((targetW - scaleW) / 2)
-  const offsetY = Math.round((targetH - scaleH) / 2)
-
-  return { data: src.data, width: scaleW, height: scaleH, offsetX, offsetY }
 }
 
 /** Clear the image cache (e.g., on hot reload). */
