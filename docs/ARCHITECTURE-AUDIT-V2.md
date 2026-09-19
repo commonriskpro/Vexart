@@ -19,7 +19,7 @@
 | **1.3** | **Native / Rust** | 6 pipelines WGPU compilados en arranque que nunca se usan | 40–80 ms retraso en cold-start; ~1.200 LOC | **Media** |
 | **2.3** | **Engine / FFI** | Scratch buffers zero-alloc en `msdfMeasureText` y cache ampliado (2048) (Completado) | Eliminadas 6 alocaciones por llamada y ampliado cache LRU a 2048 | ✅ **Hecho** |
 | **3.2** | **App Framework** | Inversión de capas: Tier 1 `@vexart/app` importa Tier 2 `@vexart/styled` | Acoplamiento indebido de diseño | **Media** |
-| **4.2** | **Headless** | `ScrollView` muta altura de layout para el thumb y colores hardcodeados | Recalculo de layout en cada tick de scroll | **Media** |
+| **4.2** | **Headless** | Posicionamiento del thumb vía `transform` y colores reactivos en `ScrollView` (Completado) | Eliminados recálculos de Flexily por frame de scroll y desacoplados colores de tema | ✅ **Hecho** |
 | **4.3** | **Engine Loop** | Scroll deja `layer.damageRect = null`, anulando repintado regional | Repintado de capa completa en cada scroll | **Media** |
 | **3.3** | **App Framework** | `keepAliveCache` ordena arrays enteros al desalojar rutas | Alocaciones menores de GC | **Baja** |
 | **5.1** | **Packaging** | Dependencia raíz redundante `marked` | Dependencia innecesaria en raíz | **Baja** |
@@ -169,14 +169,18 @@
   3. Se creó `packages/headless/src/overlays/popover.tsx` con soporte para `modal?: boolean` (por defecto `true`). Al abrirse en modo modal, captura sincrónicamente `focusedId()` y aísla la navegación mediante `pushFocusScope()`. Al cerrarse, desapila el scope y restaura el foco al disparador.
   4. Soporte para descarte por `Escape` en modo modal y no modal coordinado vía `overlay-stack`, y descarte por click en backdrop exterior `floating="root"`.
 
-### Hallazgo 4.2: `ScrollView` Altera Alturas de Layout para Posicionar el Thumb
-* **Prioridad:** **Media**
+### Hallazgo 4.2: `ScrollView` Altera Alturas de Layout para Posicionar el Thumb (✅ Completado)
+* **Prioridad:** **Media** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/headless/src/containers/scroll-view.tsx:50–57, 148`
+  * `packages/headless/src/containers/scroll-view.tsx`
+  * `packages/styled/src/components/scroll-view.tsx`
 * **Problema:**
-  Para mover la barra de desplazamiento, renderiza `<box height={thumbOffset()} />`. Cada movimiento de scroll modifica la altura de este nodo, forzando un recálculo de layout en Flexily. Además, incluye colores fijos dentro del paquete headless.
-* **Solución Arquitectónica:**
-  Posicionar el scrollbar thumb mediante transformación geométrica (`transform: { translateY }`) para evitar recálculos de Flexily, y delegar los colores al wrapper de styled.
+  Para mover la barra de desplazamiento, renderizaba `<box height={thumbOffset()} />`. Cada movimiento de scroll modificaba la altura de este nodo espaciador, forzando un recálculo de layout en Flexily por cada pixel scrolleado. Además, incluía colores fijos (`0x1a1a2eff`, `0x555577cc`) dentro del paquete headless, violando el principio headless y rompiendo la reactividad con el tema de `@vexart/styled`.
+* **Solución Arquitectónica Implementada:**
+  1. Se eliminó el espaciador `<box height={thumbOffset()} width={SCROLLBAR.width} />` del layout de `Scrollbar`.
+  2. Se posicionó el scrollbar thumb directamente mediante transformación geométrica 2D (`transform={{ translateY: thumbOffset() }}`), desacoplando el movimiento visual del thumb del pipeline de layout de Flexily (cero recálculos de layout durante el scroll).
+  3. Se añadieron `scrollbarTrackColor?: string | number` y `scrollbarThumbColor?: string | number` a `ScrollViewProps` en `@vexart/headless`, permitiendo inyectar colores personalizados y usando los valores de `SCROLLBAR` solo como fallback.
+  4. En `VoidScrollView` (`@vexart/styled`), se añadieron `scrollbarTrackColor` y `scrollbarThumbColor` a `VoidScrollViewProps` y se enlazaron reactivamente a los tokens de tema (`themeColors.muted` y `themeColors.border` por defecto), garantizando reactividad total ante cambios con `setTheme()`.
 
 ### Hallazgo 4.3: Inexistencia de `layer.damageRect` en Eventos de Scroll
 * **Prioridad:** **Media**

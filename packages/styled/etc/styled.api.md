@@ -737,6 +737,8 @@ export type VoidScrollViewProps = {
     scrollY?: boolean;
     scrollSpeed?: number;
     showScrollbar?: boolean;
+    scrollbarTrackColor?: string | number;
+    scrollbarThumbColor?: string | number;
     direction?: "row" | "column";
     padding?: number;
     paddingX?: number;

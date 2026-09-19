@@ -23,6 +23,8 @@ export type VoidScrollViewProps = {
   scrollY?: boolean
   scrollSpeed?: number
   showScrollbar?: boolean
+  scrollbarTrackColor?: string | number
+  scrollbarThumbColor?: string | number
   direction?: "row" | "column"
   padding?: number
   paddingX?: number
@@ -44,6 +46,8 @@ export function VoidScrollView(props: VoidScrollViewProps) {
       scrollY={props.scrollY ?? true}
       scrollSpeed={props.scrollSpeed}
       showScrollbar={props.showScrollbar}
+      scrollbarTrackColor={props.scrollbarTrackColor ?? themeColors.muted}
+      scrollbarThumbColor={props.scrollbarThumbColor ?? themeColors.border}
       backgroundColor={themeColors.secondary}
       cornerRadius={radius.md}
       borderColor={themeColors.input}

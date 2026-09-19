@@ -67,6 +67,8 @@ export type ScrollViewProps = {
   // Scrollbar
   /** Show scrollbar. Default: true (auto-hides when content fits). */
   showScrollbar?: boolean
+  scrollbarTrackColor?: string | number
+  scrollbarThumbColor?: string | number
 
   // Visual
   backgroundColor?: string | number
@@ -94,7 +96,12 @@ export type ScrollViewProps = {
  * reactive re-evaluation every frame — the ScrollHandle itself
  * is NOT a SolidJS signal, so we need an explicit trigger.
  */
-function Scrollbar(props: { handle: ScrollHandle; height: SizingUnit }) {
+function Scrollbar(props: {
+  handle: ScrollHandle
+  height: SizingUnit
+  trackColor?: string | number
+  thumbColor?: string | number
+}) {
   const [scrollTick, setScrollTick] = createSignal(0)
   let lastY = 0
   let lastCh = 0
@@ -154,14 +161,18 @@ function Scrollbar(props: { handle: ScrollHandle; height: SizingUnit }) {
         paddingX={SCROLLBAR.padding}
       >
         {/* Track */}
-        <box width={SCROLLBAR.width} height="100%" backgroundColor={SCROLLBAR.trackColor} cornerRadius={SCROLLBAR.thumbRadius}>
-          {/* Spacer above thumb */}
-          <box height={thumbOffset()} width={SCROLLBAR.width} />
+        <box
+          width={SCROLLBAR.width}
+          height="100%"
+          backgroundColor={props.trackColor ?? SCROLLBAR.trackColor}
+          cornerRadius={SCROLLBAR.thumbRadius}
+        >
           {/* Thumb */}
           <box
             width={SCROLLBAR.width}
             height={thumbHeight()}
-            backgroundColor={SCROLLBAR.thumbColor}
+            transform={{ translateY: thumbOffset() }}
+            backgroundColor={props.thumbColor ?? SCROLLBAR.thumbColor}
             cornerRadius={SCROLLBAR.thumbRadius}
           />
         </box>
@@ -211,7 +222,12 @@ export function ScrollView(props: ScrollViewProps) {
 
       {/* Vertical scrollbar */}
       {showScrollbar && props.scrollY ? (
-        <Scrollbar handle={handle} height={props.height ?? 200} />
+        <Scrollbar
+          handle={handle}
+          height={props.height ?? 200}
+          trackColor={props.scrollbarTrackColor}
+          thumbColor={props.scrollbarThumbColor}
+        />
       ) : null}
     </box>
   )

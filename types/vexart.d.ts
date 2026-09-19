@@ -2429,6 +2429,8 @@ export declare type ScrollViewProps = {
     scrollSpeed?: number;
     /** Show scrollbar. Default: true (auto-hides when content fits). */
     showScrollbar?: boolean;
+    scrollbarTrackColor?: string | number;
+    scrollbarThumbColor?: string | number;
     backgroundColor?: string | number;
     cornerRadius?: number;
     borderColor?: string | number;
@@ -4062,6 +4064,8 @@ export declare type VoidScrollViewProps = {
     scrollY?: boolean;
     scrollSpeed?: number;
     showScrollbar?: boolean;
+    scrollbarTrackColor?: string | number;
+    scrollbarThumbColor?: string | number;
     direction?: "row" | "column";
     padding?: number;
     paddingX?: number;
