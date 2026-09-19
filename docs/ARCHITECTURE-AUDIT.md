@@ -315,7 +315,7 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 - [ ] Activar `ShmRingBuffer` existente en vez de alloc per-frame
 - [ ] Texture pooling para offscreen targets
 - [ ] Shader unificado para imagen con radius (eliminar 3-stage copy)
-- [ ] Usar GPU sampler para scaling en vez de CPU nearest-neighbor
+- [x] Usar GPU sampler para scaling en vez de CPU nearest-neighbor
 - [ ] Async double-buffered readback (eliminar `pollster::block_on` stall)
 
 ### Fase 4: Componentes (calidad y correctitud)

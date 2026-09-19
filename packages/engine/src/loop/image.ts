@@ -3,12 +3,14 @@
  *
  * Decision 11: Image decode in Bun.
  * Decoding is ONE-TIME per image (not per-frame) — JS perf is sufficient.
+ * Scaling is performed natively on the GPU via WGPU hardware samplers.
  *
  * Pipeline:
  *   <img src="./logo.png" />
  *     → Bun reads file → decode to RGBA ArrayBuffer
  *     → store in the node's lazy image extra bag
- *     → paintCommand copies pixels to layer buffer
+ *     → native asset registry uploads to WGPU texture
+ *     → WGPU vertex + fragment shaders sample and scale via hardware sampler
  *
  * Supports: PNG, JPEG, BMP, TIFF, GIF, ICO (anything Bun's native image decode handles).
  * Falls back to `sharp` if available.
@@ -37,11 +39,9 @@ export type RawImage = DecodedImage
 const imageCache = new Map<string, DecodedImage>()
 type ImageSubscriber = (image: DecodedImage | null) => void
 const pendingDecodes = new Map<string, Set<ImageSubscriber>>()
-const scaledImageCaches = new Set<Map<string, DecodedImage>>()
 let generation = 0
 let nextAsset = 0
 const MAX_IMAGE_CACHE = 128
-const MAX_SCALED_CACHE_ENTRIES = 256
 
 function touchCacheEntry<K, V>(cache: Map<K, V>, key: K, value: V) {
   cache.delete(key)
@@ -55,35 +55,18 @@ export type ScaledImageCache = {
   destroy: () => void
 }
 
-/** @public */
+/**
+ * @deprecated Image scaling is handled natively by WGPU hardware samplers in the GPU pipeline.
+ * Maintained as zero-overhead stub for internal API compatibility.
+ * @public
+ */
 export function createScaledImageCache(): ScaledImageCache {
-  const cache = new Map<string, DecodedImage>()
-  scaledImageCaches.add(cache)
-
   return {
-    get(src, targetW, targetH, key) {
-      if (targetW === src.width && targetH === src.height) return src
-      const fullKey = `${key}:${src.width}x${src.height}->${targetW}x${targetH}`
-      const cached = cache.get(fullKey)
-      if (cached) {
-        touchCacheEntry(cache, fullKey, cached)
-        return cached
-      }
-      const scaled = nearestNeighborScale(src, targetW, targetH)
-      if (cache.size >= MAX_SCALED_CACHE_ENTRIES) {
-        const first = cache.keys().next().value
-        if (first) cache.delete(first)
-      }
-      cache.set(fullKey, scaled)
-      return scaled
+    get(src) {
+      return src
     },
-    clear() {
-      cache.clear()
-    },
-    destroy() {
-      cache.clear()
-      scaledImageCaches.delete(cache)
-    },
+    clear() {},
+    destroy() {},
   }
 }
 
@@ -177,14 +160,6 @@ async function decodeImage(src: string): Promise<DecodedImage | null> {
     }
 
     const arrayBuffer = await file.arrayBuffer()
-    // Use Bun's native image decode — returns ImageBitmap-like with RGBA data
-    // Bun supports createImageBitmap on Blob
-    const blob = new Blob([arrayBuffer])
-
-    // Try Bun's built-in image decode via sharp-like API
-    // Bun.readableStreamToArrayBuffer is available, but we need pixel decode.
-    // The most reliable cross-platform approach: use the `sharp` package if available,
-    // otherwise fall back to manual PNG decode for the common case.
     return await decodeWithSharp(arrayBuffer, src)
   } catch (err) {
     console.error(`[vexart image] Decode failed for ${src}:`, err)
@@ -227,9 +202,6 @@ async function decodePNG(buffer: ArrayBuffer, src: string): Promise<DecodedImage
     if (typeof globalThis.createImageBitmap === "function") {
       const blob = new Blob([buffer])
       const bitmap = await createImageBitmap(blob)
-      // createImageBitmap returns an ImageBitmap — we need raw RGBA
-      // This path may not give us raw data in all Bun versions
-      // Fall through to error for now
     }
 
     console.error(`[vexart image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
@@ -242,34 +214,26 @@ async function decodePNG(buffer: ArrayBuffer, src: string): Promise<DecodedImage
 
 /**
  * Scale image pixels to fit a target box.
- * Returns a new RGBA buffer at the target dimensions.
+ * @deprecated Scaling is performed natively by WGPU hardware samplers during render.
+ * @public
  */
-/** @public */
 export function scaleImage(
   src: DecodedImage,
   targetW: number,
   targetH: number,
   fit: "contain" | "cover" | "fill" | "none" = "contain",
 ): { data: Uint8Array; width: number; height: number; offsetX: number; offsetY: number } {
-  if (fit === "none") {
-    // No scaling — paint at original size, clipped to target
+  if (fit === "none" || (targetW === src.width && targetH === src.height)) {
     return { data: src.data, width: src.width, height: src.height, offsetX: 0, offsetY: 0 }
   }
 
-  if (fit === "fill") {
-    // Stretch to fill — simple nearest-neighbor scale
-    return { ...nearestNeighborScale(src, targetW, targetH), offsetX: 0, offsetY: 0 }
-  }
-
-  // contain / cover: maintain aspect ratio
   const srcAspect = src.width / src.height
   const tgtAspect = targetW / targetH
 
-  let scaleW: number
-  let scaleH: number
+  let scaleW = targetW
+  let scaleH = targetH
 
   if (fit === "contain") {
-    // Fit inside — letterbox if needed
     if (srcAspect > tgtAspect) {
       scaleW = targetW
       scaleH = Math.round(targetW / srcAspect)
@@ -277,8 +241,7 @@ export function scaleImage(
       scaleH = targetH
       scaleW = Math.round(targetH * srcAspect)
     }
-  } else {
-    // cover — fill entire target, crop overflow
+  } else if (fit === "cover") {
     if (srcAspect > tgtAspect) {
       scaleH = targetH
       scaleW = Math.round(targetH * srcAspect)
@@ -288,43 +251,10 @@ export function scaleImage(
     }
   }
 
-  const scaled = nearestNeighborScale(src, scaleW, scaleH)
   const offsetX = Math.round((targetW - scaleW) / 2)
   const offsetY = Math.round((targetH - scaleH) / 2)
 
-  return { ...scaled, offsetX, offsetY }
-}
-
-/** Nearest-neighbor scale — fast, good enough for terminal pixels. */
-function nearestNeighborScale(
-  src: DecodedImage,
-  dstW: number,
-  dstH: number,
-): DecodedImage {
-  if (dstW === src.width && dstH === src.height) return src
-  if (dstW <= 0 || dstH <= 0) return { data: new Uint8Array(0), width: 0, height: 0 }
-
-  const dst = new Uint8Array(dstW * dstH * 4)
-  const xRatio = src.width / dstW
-  const yRatio = src.height / dstH
-  const srcStride = src.width * 4
-
-  for (let dy = 0; dy < dstH; dy++) {
-    const sy = Math.min(Math.floor(dy * yRatio), src.height - 1)
-    const srcRow = sy * srcStride
-    const dstRow = dy * dstW * 4
-    for (let dx = 0; dx < dstW; dx++) {
-      const sx = Math.min(Math.floor(dx * xRatio), src.width - 1)
-      const si = srcRow + sx * 4
-      const di = dstRow + dx * 4
-      dst[di] = src.data[si]
-      dst[di + 1] = src.data[si + 1]
-      dst[di + 2] = src.data[si + 2]
-      dst[di + 3] = src.data[si + 3]
-    }
-  }
-
-  return { data: dst, width: dstW, height: dstH }
+  return { data: src.data, width: scaleW, height: scaleH, offsetX, offsetY }
 }
 
 /** Clear the image cache (e.g., on hot reload). */
@@ -343,25 +273,19 @@ export function clearImageCache() {
   }
   imageCache.clear()
   pendingDecodes.clear()
-  for (const cache of scaledImageCaches) cache.clear()
 }
 
 /** @public */
 export function getImageCacheStats() {
   let decodedBytes = 0
   for (const image of imageCache.values()) decodedBytes += image.data.byteLength
-  let scaledEntries = 0
-  let scaledBytes = 0
-  for (const cache of scaledImageCaches) {
-    scaledEntries += cache.size
-    for (const image of cache.values()) scaledBytes += image.data.byteLength
-  }
   return {
     decodedCount: imageCache.size,
     decodedBytes,
     pendingCount: pendingDecodes.size,
-    scaledCacheCount: scaledImageCaches.size,
-    scaledEntries,
-    scaledBytes,
+    scaledCacheCount: 0,
+    scaledEntries: 0,
+    scaledBytes: 0,
   }
 }
+
