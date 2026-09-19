@@ -292,27 +292,27 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 
 ### Fase 1: Limpieza (bajo riesgo, impacto inmediato)
 
-- [ ] Podar dead code en `walk-tree.ts` (ax/ay, parseDirection, setId)
-- [ ] Eliminar 12 FFI exports muertos y 9 pipelines no usados
-- [ ] Remover registries Rust muertos (LayerRegistry, ResourceManager, ImageAssetRegistry dead paths)
-- [ ] Remover `serde_json` → pasar font family como string prefijado
-- [ ] Limpiar deps: sacar `opentype.js`, mover `zod` a `internal-devtools`
-- [ ] Corregir `solid-plugin.ts` CLI (`"vexart/engine"` → `"vexart/jsx-runtime"`)
-- [ ] Limpiar `.dependency-cruiser.cjs` (reglas de `@vexart/primitives`)
-- [ ] Remover phantom peer dep `@vexart/headless` de `@vexart/app`
+- [x] Podar dead code en `walk-tree.ts` (ax/ay, parseDirection, setId)
+- [x] Eliminar 12 FFI exports muertos y 9 pipelines no usados
+- [x] Remover registries Rust muertos (LayerRegistry, ResourceManager, ImageAssetRegistry dead paths)
+- [x] Remover `serde_json` → pasar font family como string prefijado
+- [x] Limpiar deps: sacar `opentype.js`, mover `zod` a `internal-devtools`
+- [x] Corregir `solid-plugin.ts` CLI (`"vexart/engine"` → `"vexart/jsx-runtime"`)
+- [x] Limpiar `.dependency-cruiser.cjs` (reglas de `@vexart/primitives`)
+- [x] Remover phantom peer dep `@vexart/headless` de `@vexart/app`
 
 ### Fase 2: Pipeline Unificado (impacto grande, cambio estructural)
 
-- [ ] Unificar `RenderCommand` y `RenderGraphOp` en una sola estructura
-- [ ] Reemplazar los 35 arrays paralelos con traversal directo sobre `TGENode`
-- [ ] Escribir layout directo: `_flexNode` → `node.layout` → render ops en una pasada
-- [ ] Implementar dirty-set visual para `syncVisualPropsToCommands`
-- [ ] Subtree layout invalidation usando Flexily `isDirty()`
+- [x] Unificar `RenderCommand` y `RenderGraphOp` en una sola estructura
+- [x] Reemplazar los 35 arrays paralelos con traversal directo sobre `TGENode`
+- [x] Escribir layout directo: `_flexNode` → `node.layout` → render ops en una pasada
+- [x] Implementar dirty-set visual para `syncVisualPropsToCommands`
+- [x] Subtree layout invalidation usando Flexily `isDirty()`
 
 ### Fase 3: Transport & GPU (impacto en performance real)
 
 - [x] GPU un-premultiply (shader pass en composite, no CPU loop)
-- [ ] Activar `ShmRingBuffer` existente en vez de alloc per-frame
+- [x] Activar `ShmRingBuffer` existente en vez de alloc per-frame
 - [x] Texture pooling para offscreen targets
 - [x] Shader unificado para imagen con radius (eliminar 3-stage copy)
 - [x] Usar GPU sampler para scaling en vez de CPU nearest-neighbor
