@@ -996,15 +996,17 @@ pub fn readback_region_rgba(
         return ERR_INVALID_ARG;
     }
 
-    let texture_ptr: *const wgpu::Texture = &rec.texture;
+    let view_ptr: *const wgpu::TextureView = &rec.view;
+    let pool = pctx.ensure_regional_pool() as *mut readback::RegionalReadbackPool;
 
     let written = readback::readback_region(
+        unsafe { &mut *pool },
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
         &pctx.wgpu.pipelines.unpremultiply_pack,
         &pctx.wgpu.pipelines.unpremultiply_bgl,
-        // SAFETY: texture_ptr stable in pctx.targets; device/queue are disjoint fields.
-        unsafe { &*texture_ptr },
+        // SAFETY: view_ptr points to rec.view in pctx.targets; device/queue/pool are disjoint fields.
+        unsafe { &*view_ptr },
         tw,
         th,
         rx,

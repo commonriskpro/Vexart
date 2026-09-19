@@ -272,6 +272,209 @@ impl<B: BufferUnmap> Drop for UnmapGuard<'_, B> {
     }
 }
 
+/// Reusable GPU buffer pool for regional readback passes.
+///
+/// Eliminates per-frame buffer allocation thrashing (uniform, storage, and staging)
+/// and enables double-buffering ping-pong across regional damage dispatches.
+pub struct RegionalReadbackPool {
+    pub uniform_buffer: wgpu::Buffer,
+    pub storage_buffer: wgpu::Buffer,
+    pub staging_buffers: [wgpu::Buffer; 2],
+    pub staging_rx: [Option<std::sync::mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>>; 2],
+    pub staging_index: usize,
+    pub capacity_bytes: u64,
+}
+
+impl RegionalReadbackPool {
+    /// Default initial capacity: 1MB (512x512x4 RGBA bytes).
+    pub const DEFAULT_CAPACITY_BYTES: u64 = 512 * 512 * 4;
+
+    /// Create a new regional readback pool with the specified initial capacity.
+    pub fn new(device: &wgpu::Device, initial_capacity_bytes: u64) -> Self {
+        let capacity = initial_capacity_bytes.max(1024 * 1024);
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vexart-regional-pool-uniform-buffer"),
+            size: 16,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let storage_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vexart-regional-pool-storage-buffer"),
+            size: capacity,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let staging_buffers = [
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-regional-pool-staging-buffer-0"),
+                size: capacity,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-regional-pool-staging-buffer-1"),
+                size: capacity,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+        ];
+
+        Self {
+            uniform_buffer,
+            storage_buffer,
+            staging_buffers,
+            staging_rx: [None, None],
+            staging_index: 0,
+            capacity_bytes: capacity,
+        }
+    }
+
+    /// Ensure buffers have at least needed_bytes capacity, geometrically growing if necessary.
+    pub fn ensure_capacity(&mut self, device: &wgpu::Device, needed_bytes: u64) {
+        if needed_bytes <= self.capacity_bytes {
+            return;
+        }
+
+        let mut new_capacity = self.capacity_bytes.max(1024 * 1024);
+        while new_capacity < needed_bytes {
+            new_capacity = match new_capacity.checked_mul(2) {
+                Some(cap) => cap,
+                None => {
+                    new_capacity = needed_bytes;
+                    break;
+                }
+            };
+        }
+
+        self.storage_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("vexart-regional-pool-storage-buffer"),
+            size: new_capacity,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        self.staging_buffers = [
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-regional-pool-staging-buffer-0"),
+                size: new_capacity,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-regional-pool-staging-buffer-1"),
+                size: new_capacity,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+        ];
+
+        self.staging_rx = [None, None];
+        self.staging_index = 0;
+        self.capacity_bytes = new_capacity;
+    }
+
+    /// Advance the ping-pong staging slot (alternating 0 and 1) and reset the slot's receiver.
+    pub fn advance_staging_slot(&mut self) -> usize {
+        let slot = self.staging_index;
+        self.staging_index = (self.staging_index + 1) % 2;
+        self.staging_rx[slot] = None;
+        slot
+    }
+}
+
+/// Region GPU→CPU readback using pooled buffers and compute unpremultiply+pack shader,
+/// executing a callback directly over the mapped staging memory with zero intermediate copies.
+pub fn readback_region_with<R, F>(
+    pool: &mut RegionalReadbackPool,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &wgpu::ComputePipeline,
+    bgl: &wgpu::BindGroupLayout,
+    view: &wgpu::TextureView,
+    target_width: u32,
+    target_height: u32,
+    rx: u32,
+    ry: u32,
+    rw: u32,
+    rh: u32,
+    callback: F,
+) -> Option<R>
+where
+    F: FnOnce(&[u8]) -> R,
+{
+    // Clamp region to target bounds.
+    let x = rx.min(target_width);
+    let y = ry.min(target_height);
+    let w = rw.min(target_width.saturating_sub(x));
+    let h = rh.min(target_height.saturating_sub(y));
+
+    if w == 0 || h == 0 {
+        return None;
+    }
+
+    if w.checked_mul(4).and_then(|b| b.checked_add(255)).is_none() {
+        return None;
+    }
+    let needed = (w as usize).checked_mul(h as usize)?.checked_mul(4)?;
+    let needed_u64 = needed as u64;
+
+    pool.ensure_capacity(device, needed_u64);
+
+    let uniforms: [u32; 4] = [w, h, x, y];
+    queue.write_buffer(&pool.uniform_buffer, 0, bytemuck::cast_slice(&uniforms));
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("vexart-region-unpremultiply-bind-group"),
+        layout: bgl,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: pool.storage_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: pool.uniform_buffer.as_entire_binding(),
+            },
+        ],
+    });
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("vexart-region-readback-encoder"),
+    });
+
+    {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("vexart-region-unpremultiply-compute-pass"),
+            timestamp_writes: None,
+        });
+        cpass.set_pipeline(pipeline);
+        cpass.set_bind_group(0, &bind_group, &[]);
+        let workgroups_x = w.div_ceil(16);
+        let workgroups_y = h.div_ceil(16);
+        cpass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+    }
+
+    let slot = pool.advance_staging_slot();
+    encoder.copy_buffer_to_buffer(&pool.storage_buffer, 0, &pool.staging_buffers[slot], 0, needed_u64);
+    queue.submit(std::iter::once(encoder.finish()));
+
+    let slice = pool.staging_buffers[slot].slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = tx.send(result);
+    });
+    pool.staging_rx[slot] = Some(rx);
+
+    let rx = pool.staging_rx[slot].take()?;
+    consume_staging_slot(device, &pool.staging_buffers[slot], rx, needed, callback)
+}
+
 /// Region GPU→CPU readback using compute unpremultiply+pack shader.
 ///
 /// Dispatches the `unpremultiply_pack` compute shader with `(origin_x, origin_y)` offsets,
@@ -283,11 +486,12 @@ impl<B: BufferUnmap> Drop for UnmapGuard<'_, B> {
 /// # Safety
 /// `dst` must be valid for `dst_cap` bytes.
 pub fn readback_region(
+    pool: &mut RegionalReadbackPool,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     pipeline: &wgpu::ComputePipeline,
     bgl: &wgpu::BindGroupLayout,
-    texture: &wgpu::Texture,
+    view: &wgpu::TextureView,
     target_width: u32,
     target_height: u32,
     rx: u32,
@@ -321,84 +525,29 @@ pub fn readback_region(
     if dst_cap < needed_u32 || dst.is_null() {
         return 0;
     }
-    let needed_u64 = needed as u64;
 
-    use wgpu::util::DeviceExt;
-    let uniforms: [u32; 4] = [w, h, x, y];
-    let uniform_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("vexart-region-unpremultiply-uniform-buffer"),
-        contents: bytemuck::cast_slice(&uniforms),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
-
-    let storage_buf = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("vexart-region-unpremultiply-storage-buffer"),
-        size: needed_u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-        mapped_at_creation: false,
-    });
-
-    let staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("vexart-region-readback-staging-buffer"),
-        size: needed_u64,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("vexart-region-unpremultiply-bind-group"),
-        layout: bgl,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: storage_buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: uniform_buf.as_entire_binding(),
-            },
-        ],
-    });
-
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("vexart-region-readback-encoder"),
-    });
-
-    {
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("vexart-region-unpremultiply-compute-pass"),
-            timestamp_writes: None,
-        });
-        cpass.set_pipeline(pipeline);
-        cpass.set_bind_group(0, &bind_group, &[]);
-        let workgroups_x = w.div_ceil(16);
-        let workgroups_y = h.div_ceil(16);
-        cpass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
-    }
-
-    encoder.copy_buffer_to_buffer(&storage_buf, 0, &staging_buf, 0, needed_u64);
-    queue.submit(std::iter::once(encoder.finish()));
-
-    let slice = staging_buf.slice(..);
-    let (tx, rx) = std::sync::mpsc::channel();
-    slice.map_async(wgpu::MapMode::Read, move |result| {
-        let _ = tx.send(result);
-    });
-
-    let copied = consume_staging_slot(device, &staging_buf, rx, needed, |mapped| {
-        let dst_slice: &mut [u8] =
-            // SAFETY: caller guarantees dst is valid for dst_cap bytes.
-            unsafe { std::slice::from_raw_parts_mut(dst, dst_cap as usize) };
-        dst_slice[..needed].copy_from_slice(&mapped[..needed]);
-        needed_u32
-    });
-    copied.unwrap_or(0)
+    readback_region_with(
+        pool,
+        device,
+        queue,
+        pipeline,
+        bgl,
+        view,
+        target_width,
+        target_height,
+        rx,
+        ry,
+        rw,
+        rh,
+        |mapped| {
+            let dst_slice: &mut [u8] =
+                // SAFETY: caller guarantees dst is valid for dst_cap bytes.
+                unsafe { std::slice::from_raw_parts_mut(dst, dst_cap as usize) };
+            dst_slice[..needed].copy_from_slice(&mapped[..needed]);
+            needed_u32
+        },
+    )
+    .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -472,9 +621,11 @@ mod tests {
         let callback = readback_full_with(&ctx.device, &ctx.queue, &ctx.pipelines.unpremultiply_pack,
             &bind_group, &storage, &readback, 64, 1, |bytes| bytes.to_vec());
         assert_eq!(callback, Some(full));
+        let mut pool = RegionalReadbackPool::new(&ctx.device, 1024 * 1024);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut region = [0; 4];
-        assert_eq!(readback_region(&ctx.device, &ctx.queue, &ctx.pipelines.unpremultiply_pack,
-            &ctx.pipelines.unpremultiply_bgl, &texture, 64, 1, 3, 0, 1, 1,
+        assert_eq!(readback_region(&mut pool, &ctx.device, &ctx.queue, &ctx.pipelines.unpremultiply_pack,
+            &ctx.pipelines.unpremultiply_bgl, &view, 64, 1, 3, 0, 1, 1,
             region.as_mut_ptr(), 4), 4);
         assert_eq!(region, [255, 128, 0, 128]);
     }
@@ -651,14 +802,16 @@ mod tests {
     fn readback_region_should_return_zero_when_dimensions_overflow() {
         let pctx = crate::paint::PaintContext::new();
         let mut dst = [0u8; 16];
+        let mut pool = RegionalReadbackPool::new(&pctx.wgpu.device, RegionalReadbackPool::DEFAULT_CAPACITY_BYTES);
 
         // Case 1: w * h overflows u32
         let res1 = readback_region(
+            &mut pool,
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
             &pctx.wgpu.pipelines.unpremultiply_pack,
             &pctx.wgpu.pipelines.unpremultiply_bgl,
-            &pctx.target_texture,
+            &pctx.target_view,
             u32::MAX,
             u32::MAX,
             0,
@@ -672,11 +825,12 @@ mod tests {
 
         // Case 2: (w * h) * 4 overflows u32 even if w * h does not
         let res2 = readback_region(
+            &mut pool,
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
             &pctx.wgpu.pipelines.unpremultiply_pack,
             &pctx.wgpu.pipelines.unpremultiply_bgl,
-            &pctx.target_texture,
+            &pctx.target_view,
             1 << 30,
             1,
             0,
@@ -691,11 +845,12 @@ mod tests {
         // Case 3: w * 4 + 255 overflows u32 (padded_bytes_per_row overflow)
         let w_padded_overflow = (u32::MAX / 4) + 1;
         let res3 = readback_region(
+            &mut pool,
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
             &pctx.wgpu.pipelines.unpremultiply_pack,
             &pctx.wgpu.pipelines.unpremultiply_bgl,
-            &pctx.target_texture,
+            &pctx.target_view,
             w_padded_overflow,
             1,
             0,
@@ -715,14 +870,16 @@ mod tests {
     fn readback_region_should_return_zero_when_buffer_too_small_or_null() {
         let pctx = crate::paint::PaintContext::new();
         let mut dst = [0u8; 64];
+        let mut pool = RegionalReadbackPool::new(&pctx.wgpu.device, RegionalReadbackPool::DEFAULT_CAPACITY_BYTES);
 
         // Buffer too small: 10 * 10 * 4 = 400 bytes needed, but capacity is 64
         let res = readback_region(
+            &mut pool,
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
             &pctx.wgpu.pipelines.unpremultiply_pack,
             &pctx.wgpu.pipelines.unpremultiply_bgl,
-            &pctx.target_texture,
+            &pctx.target_view,
             64,
             64,
             0,
@@ -736,11 +893,12 @@ mod tests {
 
         // Null dst pointer
         let res_null = readback_region(
+            &mut pool,
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
             &pctx.wgpu.pipelines.unpremultiply_pack,
             &pctx.wgpu.pipelines.unpremultiply_bgl,
-            &pctx.target_texture,
+            &pctx.target_view,
             64,
             64,
             0,
@@ -776,14 +934,18 @@ mod tests {
             wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
         );
 
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut pool = RegionalReadbackPool::new(&pctx.wgpu.device, RegionalReadbackPool::DEFAULT_CAPACITY_BYTES);
+
         // Read a 2x2 sub-region starting at (2, 1)
         let mut region_out = [0u8; 2 * 2 * 4];
         let written = readback_region(
+            &mut pool,
             &pctx.wgpu.device,
             &pctx.wgpu.queue,
             &pctx.wgpu.pipelines.unpremultiply_pack,
             &pctx.wgpu.pipelines.unpremultiply_bgl,
-            &texture,
+            &view,
             width,
             height,
             2,
@@ -795,6 +957,46 @@ mod tests {
         );
         assert_eq!(written, 16);
         assert_eq!(region_out, [255, 128, 0, 128].repeat(4).as_slice());
+    }
+
+    #[test]
+    fn test_regional_pool_initial_capacity_and_ping_pong() {
+        let pctx = crate::paint::PaintContext::new();
+        let mut pool = RegionalReadbackPool::new(&pctx.wgpu.device, 512 * 512 * 4);
+        assert_eq!(pool.capacity_bytes, 1024 * 1024);
+        assert_eq!(pool.staging_index, 0);
+
+        let slot0 = pool.advance_staging_slot();
+        assert_eq!(slot0, 0);
+        assert_eq!(pool.staging_index, 1);
+
+        let slot1 = pool.advance_staging_slot();
+        assert_eq!(slot1, 1);
+        assert_eq!(pool.staging_index, 0);
+
+        let slot2 = pool.advance_staging_slot();
+        assert_eq!(slot2, 0);
+        assert_eq!(pool.staging_index, 1);
+    }
+
+    #[test]
+    fn test_regional_pool_geometric_growth() {
+        let pctx = crate::paint::PaintContext::new();
+        let mut pool = RegionalReadbackPool::new(&pctx.wgpu.device, 1024 * 1024);
+        assert_eq!(pool.capacity_bytes, 1024 * 1024);
+
+        // Growth request exceeding 1MB (e.g. 1024x1024x4 = 4MB)
+        let needed = 4 * 1024 * 1024;
+        pool.ensure_capacity(&pctx.wgpu.device, needed);
+        assert!(pool.capacity_bytes >= needed);
+        assert_eq!(pool.capacity_bytes, 4 * 1024 * 1024);
+        assert_eq!(pool.storage_buffer.size(), 4 * 1024 * 1024);
+        assert_eq!(pool.staging_buffers[0].size(), 4 * 1024 * 1024);
+        assert_eq!(pool.staging_buffers[1].size(), 4 * 1024 * 1024);
+
+        // Subsequent request within capacity must not reallocate
+        pool.ensure_capacity(&pctx.wgpu.device, 2 * 1024 * 1024);
+        assert_eq!(pool.capacity_bytes, 4 * 1024 * 1024);
     }
 
     #[test]

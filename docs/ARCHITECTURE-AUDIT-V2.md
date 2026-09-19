@@ -10,7 +10,7 @@
 
 | ID | Eje / Módulo | Hallazgo Arquitectónico | Impacto Estimado | Prioridad |
 | :--- | :--- | :--- | :--- | :---: |
-| **1.1** | **Native / GPU** | Readback regional aloca 3 buffers GPU y hace CPU wait stall por daño | Latencia de 2–6 ms por daño regional | **Alta** |
+| **1.1** | **Native / GPU** | RegionalReadbackPool con doble búfer y zero-copy emission (Completado) | Eliminada alocación y CPU stall en daño regional | ✅ **Hecho** |
 | **2.1** | **Engine Loop** | Doble recorrido DFS por frame (`walkTreeOnce` + `traverseFrame`) | Recorrido y resolución de props redundante | **Alta** |
 | **2.2** | **Engine / Native** | MSDF Text sin batchear (1 llamada FFI + 1 draw call por cada texto) | Sobrecarga masiva de draw calls y mutexes | **Alta** |
 | **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) | Memory leak en procesos largos | **Alta** |
@@ -29,21 +29,27 @@
 
 ## 1. Native / GPU (`native/libvexart/`)
 
-### Hallazgo 1.1: Alocación de Buffers GPU y CPU Stall en Readback Regional
-* **Prioridad:** **Alta**
+### Hallazgo 1.1: Alocación de Buffers GPU y CPU Stall en Readback Regional (✅ Completado)
+* **Prioridad:** **Alta** — *Implementado y Verificado*
 * **Archivos:**
-  * `native/libvexart/src/composite/readback.rs:285–355` (`readback_region`)
-  * `native/libvexart/src/kitty/transport.rs:735–752` (`emit_region_target_with_stats`)
+  * `native/libvexart/src/composite/readback.rs` (`RegionalReadbackPool`, `readback_region_with`, `readback_region`)
+  * `native/libvexart/src/kitty/transport.rs` (`emit_region_target_with_stats`)
+  * `native/libvexart/src/paint/mod.rs` (`PaintContext.regional_pool`)
+  * `native/libvexart/src/composite/mod.rs` (`readback_region_rgba`)
 * **Problema:**
-  Mientras que el readback de pantalla completa usa búferes prealocados y doble amortiguación asíncrona, `readback_region` no tiene pool. En cada daño regional (escritura en un Input, parpadeo del cursor, hover):
+  Mientras que el readback de pantalla completa usa búferes prealocados y doble amortiguación asíncrona, `readback_region` no tenía pool. En cada daño regional (escritura en un Input, parpadeo del cursor, hover):
   1. Ejecuta `device.create_buffer_init` para uniformes de offset (`[w, h, x, y]`).
   2. Ejecuta `device.create_buffer` para almacenamiento de salida.
   3. Ejecuta `device.create_buffer` para el staging buffer (`MAP_READ`).
   4. Crea bind group y view de textura.
   5. Tras despachar el compute shader, invoca `device.poll(Wait)`, clavando la CPU de forma síncrona.
   6. Destruye inmediatamente todos los búferes y bind groups creados.
-* **Solución Arquitectónica:**
-  Implementar un pool acotado de búferes de staging regional en `PaintContext` (o reutilizar los búferes de compute del target con tijeras/scissors), eliminando la creación de búferes por frame y desacoplando el sondeo de terminación.
+* **Solución Arquitectónica Implementada:**
+  Se implementó `RegionalReadbackPool` adjunto a `PaintContext`:
+  1. Pool reutilizable con `uniform_buffer` (actualizado via `queue.write_buffer`), `storage_buffer` prealocado con crecimiento geométrico (default 1MB, 512×512×4), y doble amortiguación (`staging_buffers: [Buffer; 2]`) con ping-pong (`staging_index: 0 | 1`).
+  2. Reutilización de `rec.view` preexistente en `TargetRecord` en vez de `texture.create_view`.
+  3. `readback_region_with`: consume el búfer mapped directamente via closure con zero intermediarios copies en `emit_region_target_with_stats`.
+  4. Reducción a 0 alocaciones por daño regional y sondeo no bloqueante `device.poll(Poll)` previo a wait.
 
 ### Hallazgo 1.2: `ResourceManager` y `ImageAssetRegistry` Desarmados (✅ Completado)
 * **Prioridad:** **Media** — *Implementado y Verificado*

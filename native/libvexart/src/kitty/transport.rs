@@ -710,8 +710,8 @@ pub unsafe fn emit_region_target_with_stats(
         return ERR_KITTY_TRANSPORT;
     }
     let mode = TRANSPORT_MODE.with(|c| c.get());
-    let (width, height, texture_ptr) = match pctx.targets.get(target) {
-        Some(rec) => (rec.width, rec.height, &rec.texture as *const wgpu::Texture),
+    let (width, height, view_ptr) = match pctx.targets.get(target) {
+        Some(rec) => (rec.width, rec.height, &rec.view as *const wgpu::TextureView),
         None => {
             set_last_error(format!(
                 "emit_region_target_with_stats: invalid target handle {target}"
@@ -729,37 +729,44 @@ pub unsafe fn emit_region_target_with_stats(
     }
 
     let t_rb = Instant::now();
-    let needed = (w as usize) * (h as usize) * 4;
-    let mut scratch = std::mem::take(&mut pctx.readback_scratch);
-    scratch.resize(needed, 0);
-    let written = crate::composite::readback::readback_region(
+    let pool = pctx.ensure_regional_pool() as *mut crate::composite::readback::RegionalReadbackPool;
+    let view = unsafe { &*view_ptr };
+
+    let mut readback_us = 0u64;
+    let mut encode_us = 0u64;
+    let mut transfer = ShmTransferStats::default();
+    let mut written = 0u32;
+    let mut rc = OK;
+
+    let res = crate::composite::readback::readback_region_with(
+        unsafe { &mut *pool },
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
         &pctx.wgpu.pipelines.unpremultiply_pack,
         &pctx.wgpu.pipelines.unpremultiply_bgl,
-        unsafe { &*texture_ptr },
+        view,
         width,
         height,
         x,
         y,
         w,
         h,
-        scratch.as_mut_ptr(),
-        scratch.len() as u32,
+        |mapped| {
+            readback_us = t_rb.elapsed().as_micros() as u64;
+            let t_enc = Instant::now();
+            let result = emit_region_rgba_with_stats(mapped, image_id, x, y, w, h, mode);
+            encode_us = t_enc.elapsed().as_micros() as u64;
+            rc = result.0;
+            transfer = result.1;
+            written = mapped.len() as u32;
+        },
     );
-    let readback_us = t_rb.elapsed().as_micros() as u64;
-    if written == 0 {
-        pctx.readback_scratch = scratch;
+
+    if res.is_none() || written == 0 {
         set_last_error("emit_region_target_with_stats: GPU region readback returned 0 bytes");
         return ERR_KITTY_TRANSPORT;
     }
 
-    let t_enc = Instant::now();
-    let result = emit_region_rgba_with_stats(&scratch[..written as usize], image_id, x, y, w, h, mode);
-    pctx.readback_scratch = scratch;
-    let rc = result.0;
-    let transfer = result.1;
-    let encode_us = t_enc.elapsed().as_micros() as u64;
     let total_us = t0.elapsed().as_micros() as u64;
 
     if !stats_out.is_null() {

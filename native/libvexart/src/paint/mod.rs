@@ -92,6 +92,8 @@ pub struct PaintContext {
     pub readback_scratch: Vec<u8>,
     /// Pooled batch list for dispatching render commands without per-dispatch heap allocation.
     pub prepared_batches: Vec<PreparedBatch>,
+    /// Pooled GPU buffers for regional readback, eliminating per-frame buffer allocations.
+    pub regional_pool: Option<crate::composite::readback::RegionalReadbackPool>,
 }
 
 impl Default for PaintContext {
@@ -174,6 +176,11 @@ impl PaintContext {
             mapped_at_creation: false,
         });
 
+        let regional_pool = Some(crate::composite::readback::RegionalReadbackPool::new(
+            &wgpu.device,
+            crate::composite::readback::RegionalReadbackPool::DEFAULT_CAPACITY_BYTES,
+        ));
+
         Self {
             wgpu,
             images: HashMap::new(),
@@ -191,7 +198,19 @@ impl PaintContext {
             staging_buffer: Vec::new(),
             readback_scratch: Vec::new(),
             prepared_batches: Vec::new(),
+            regional_pool,
         }
+    }
+
+    /// Ensure regional readback pool is allocated and return a mutable reference.
+    pub fn ensure_regional_pool(&mut self) -> &mut crate::composite::readback::RegionalReadbackPool {
+        if self.regional_pool.is_none() {
+            self.regional_pool = Some(crate::composite::readback::RegionalReadbackPool::new(
+                &self.wgpu.device,
+                crate::composite::readback::RegionalReadbackPool::DEFAULT_CAPACITY_BYTES,
+            ));
+        }
+        self.regional_pool.as_mut().unwrap()
     }
 
     /// Allocate space in the persistent vertex buffer, aligning to 16 bytes.
