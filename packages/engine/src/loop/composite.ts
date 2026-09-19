@@ -31,10 +31,10 @@ import type { DamageRect } from "../ffi/damage"
 import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { RendererBackend } from "../ffi/renderer-backend"
 import { traverseFrame } from "./pipeline-traverse"
-import { applyScrollOffsetsToOps } from "./pipeline-scroll"
 import type { LayerOpBucket } from "./pipeline-types"
 import { isLayoutDirty, clearLayoutDirty } from "../reconciler/dirty"
 import { routeScrollDeltas } from "./composite-scroll"
+import { getEffectivePosition } from "../reconciler/hit-test"
 import { createScrollHandle } from "./scroll"
 import {
   bindLayerDirtyStore,
@@ -305,17 +305,23 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     s.walkCounters.scrollSpeedCap = walkState.scrollSpeedCap.value
     s.hasAnyTransforms = traversalResult.hasAnyTransforms
 
-    // Step 3: Run the new pipeline pass 2 (scroll offsets on ops)
-    const newScrollOffsets = applyScrollOffsetsToOps(
-      traversalResult.layerBuckets,
-      s.scrollContainers,
-      s.nodeRefById,
-      {
-        scrollOffsets: s.scrollOffsets,
-        markDamageLayer: markLayerDamageByKey,
-      },
-    )
-    s.scrollOffsets = newScrollOffsets
+    // Mark damage on layers for any scrolled containers
+    for (let i = 0; i < s.scrollContainers.length; i++) {
+      const container = s.scrollContainers[i]
+      const total = s.scrollOffsets.get(container.id)
+      if (total && (total.x !== 0 || total.y !== 0)) {
+        const layerKey = container._layerKey ?? "bg"
+        const pos = getEffectivePosition(container, s.scrollOffsets)
+        const containerRect: DamageRect = {
+          x: Math.round(pos.x),
+          y: Math.round(pos.y),
+          width: Math.round(container.layout.width),
+          height: Math.round(container.layout.height),
+        }
+        markLayerDamageByKey(layerKey, containerRect)
+      }
+    }
+
     if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart
     if (profile) profile.layoutMs = performance.now() - layoutStart
 

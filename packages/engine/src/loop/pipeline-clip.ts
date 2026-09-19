@@ -89,6 +89,7 @@ export function intersectClipRects(
 
 /**
  * Push a scroll container scissor clip into the pipeline context.
+ * Calculates scissor bounds in screen-space using parentScrollOffset if nested.
  */
 export function pushScrollClip(
   ctx: PipelineContext,
@@ -97,8 +98,17 @@ export function pushScrollClip(
   width: number,
   height: number,
   nodeId: number,
+  parentScrollOffset?: { x: number; y: number } | null,
 ): void {
-  pushClip(ctx, { x, y, width, height, nodeId })
+  const shiftX = parentScrollOffset ? parentScrollOffset.x : 0
+  const shiftY = parentScrollOffset ? parentScrollOffset.y : 0
+  pushClip(ctx, {
+    x: x + shiftX,
+    y: y + shiftY,
+    width,
+    height,
+    nodeId,
+  })
 }
 
 /**

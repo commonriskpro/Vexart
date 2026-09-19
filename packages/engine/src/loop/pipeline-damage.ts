@@ -35,6 +35,33 @@ export function damageRectForLayoutTransition(
 }
 
 /**
+ * Evaluates and records layout transition damage for a node using scalar layout coordinates.
+ * Avoids any object allocations when geometry has not changed.
+ */
+export function accumulateNodeDamageScalars(
+  node: TGENode,
+  prevX: number,
+  prevY: number,
+  prevW: number,
+  prevH: number,
+  state: WalkTreeState,
+): DamageRect | null {
+  if (prevX === node.layout.x && prevY === node.layout.y && prevW === node.layout.width && prevH === node.layout.height) {
+    return null
+  }
+  const prevEmpty = prevW <= 0 || prevH <= 0
+  const nextEmpty = node.layout.width <= 0 || node.layout.height <= 0
+  if (prevEmpty && nextEmpty) return null
+  const prevRect = prevEmpty ? null : { x: prevX, y: prevY, width: prevW, height: prevH }
+  const nextRect = nextEmpty ? null : { x: node.layout.x, y: node.layout.y, width: node.layout.width, height: node.layout.height }
+  const damage = !prevRect ? nextRect : (!nextRect ? prevRect : unionRect(prevRect, nextRect))
+  if (damage && (state as any).pendingNodeDamageRects) {
+    (state as any).pendingNodeDamageRects.push({ nodeId: node.id, rect: damage })
+  }
+  return damage
+}
+
+/**
  * Evaluates and records layout transition damage for a node.
  */
 export function accumulateNodeDamage(

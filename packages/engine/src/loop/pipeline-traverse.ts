@@ -52,8 +52,6 @@ import {
   type PipelineContext,
   type LayerOpBucket,
   createPipelineContext,
-  snapshotLayouts,
-  restoreLayouts,
   getCurrentClipBounds,
   pushLayer,
   popLayer,
@@ -68,7 +66,7 @@ import {
 import { AUTO_LAYER_BUDGET, shouldPromoteToLayer } from "./layer-boundary"
 import { shouldPromoteInteractionLayer } from "../reconciler/interaction"
 import { ATTACH_POINT } from "./layout-adapter"
-import { createScrollHandle } from "./scroll"
+import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 
 import {
   attachClipStackToOp,
@@ -83,9 +81,9 @@ import {
 } from "./pipeline-transform"
 import {
   accumulateNodeDamage,
+  accumulateNodeDamageScalars,
   evaluateAABBCull,
   isolatesSubtree,
-  collectAllNodes,
   damageRectForLayoutTransition,
 } from "./pipeline-damage"
 
@@ -108,6 +106,93 @@ const warnedRawTextNodes = new Set<number>()
 const effectPool: EffectConfig[] = []
 let effectPoolIdx = 0
 let autoLayerCount = 0
+
+// ── Preallocated Static Undo Journal ────────────────────────────────────────
+
+let _journalCapacity = 256
+let _journalNodes: (TGENode | null)[] = new Array(_journalCapacity).fill(null)
+let _journalData: Float64Array = new Float64Array(_journalCapacity * 4)
+let _journalCount = 0
+
+function recordLayoutChange(
+  node: TGENode,
+  prevX: number,
+  prevY: number,
+  prevWidth: number,
+  prevHeight: number,
+): void {
+  if (_journalCount >= _journalCapacity) {
+    _journalCapacity *= 2
+    const nextNodes: (TGENode | null)[] = new Array(_journalCapacity).fill(null)
+    for (let i = 0; i < _journalCount; i++) nextNodes[i] = _journalNodes[i]
+    _journalNodes = nextNodes
+
+    const nextData = new Float64Array(_journalCapacity * 4)
+    nextData.set(_journalData)
+    _journalData = nextData
+  }
+  _journalNodes[_journalCount] = node
+  const offset = _journalCount * 4
+  _journalData[offset] = prevX
+  _journalData[offset + 1] = prevY
+  _journalData[offset + 2] = prevWidth
+  _journalData[offset + 3] = prevHeight
+  _journalCount++
+}
+
+function restoreJournal(): void {
+  for (let i = 0; i < _journalCount; i++) {
+    const node = _journalNodes[i]
+    if (node) {
+      const offset = i * 4
+      node.layout.x = _journalData[offset]
+      node.layout.y = _journalData[offset + 1]
+      node.layout.width = _journalData[offset + 2]
+      node.layout.height = _journalData[offset + 3]
+      _journalNodes[i] = null
+    }
+  }
+  _journalCount = 0
+}
+
+function clearJournal(): void {
+  for (let i = 0; i < _journalCount; i++) {
+    _journalNodes[i] = null
+  }
+  _journalCount = 0
+}
+
+// ── Preallocated Scroll Extents Stack ────────────────────────────────────────
+
+const MAX_SCROLL_DEPTH = 32
+const _extentMaxRight = new Float64Array(MAX_SCROLL_DEPTH)
+const _extentMaxBottom = new Float64Array(MAX_SCROLL_DEPTH)
+const _extentContainerAbsX = new Float64Array(MAX_SCROLL_DEPTH)
+const _extentContainerAbsY = new Float64Array(MAX_SCROLL_DEPTH)
+let _extentDepth = 0
+
+function recordCulledSubtreeExtents(node: TGENode, parentAbsX: number, parentAbsY: number): void {
+  if (_extentDepth === 0) return
+  const d = _extentDepth - 1
+  for (let i = 0; i < node.children.length; i++) {
+    const child = node.children[i]
+    if (child.props.scrollX || child.props.scrollY) continue
+    const flex = child._flexNode
+    const cLeft = flex ? flex.getComputedLeft() : 0
+    const cTop = flex ? flex.getComputedTop() : 0
+    const cW = flex ? flex.getComputedWidth() : child.layout.width
+    const cH = flex ? flex.getComputedHeight() : child.layout.height
+    const cAbsX = parentAbsX + (Number.isFinite(cLeft) ? cLeft : 0)
+    const cAbsY = parentAbsY + (Number.isFinite(cTop) ? cTop : 0)
+    const relRight = (cAbsX - _extentContainerAbsX[d]) + (Number.isFinite(cW) ? cW : 0)
+    const relBottom = (cAbsY - _extentContainerAbsY[d]) + (Number.isFinite(cH) ? cH : 0)
+    if (relRight > _extentMaxRight[d]) _extentMaxRight[d] = relRight
+    if (relBottom > _extentMaxBottom[d]) _extentMaxBottom[d] = relBottom
+    if (child.children.length > 0) {
+      recordCulledSubtreeExtents(child, cAbsX, cAbsY)
+    }
+  }
+}
 
 function claimEffect(): EffectConfig {
   const effect = effectPool[effectPoolIdx] ?? { color: 0 }
@@ -254,19 +339,27 @@ export function visitNode(
     absY = anchorY + parentPoint.y - elementPoint.y + oy
   }
 
-  const prevLayout = {
-    x: node.layout.x,
-    y: node.layout.y,
-    width: node.layout.width,
-    height: node.layout.height,
+  const prevX = node.layout.x
+  const prevY = node.layout.y
+  const prevW = node.layout.width
+  const prevH = node.layout.height
+
+  if (prevX !== absX || prevY !== absY || prevW !== width || prevH !== height) {
+    recordLayoutChange(node, prevX, prevY, prevW, prevH)
+    node.layout.x = absX
+    node.layout.y = absY
+    node.layout.width = width
+    node.layout.height = height
+    accumulateNodeDamageScalars(node, prevX, prevY, prevW, prevH, state)
   }
 
-  node.layout.x = absX
-  node.layout.y = absY
-  node.layout.width = width
-  node.layout.height = height
-
-  accumulateNodeDamage(node, prevLayout, state)
+  if (_extentDepth > 0) {
+    const d = _extentDepth - 1
+    const relRight = (absX - _extentContainerAbsX[d]) + width
+    const relBottom = (absY - _extentContainerAbsY[d]) + height
+    if (relRight > _extentMaxRight[d]) _extentMaxRight[d] = relRight
+    if (relBottom > _extentMaxBottom[d]) _extentMaxBottom[d] = relBottom
+  }
 
   const dfsIndex = ctx.dfsIndex++
   if (state.nodeCount) state.nodeCount.value++
@@ -278,6 +371,16 @@ export function visitNode(
 
   const isScroll = !!(props.scrollX || props.scrollY)
   const hasTransformProp = props.transform !== undefined && props.transform !== null
+
+  if (isScroll) {
+    if (_extentDepth < MAX_SCROLL_DEPTH) {
+      _extentContainerAbsX[_extentDepth] = absX
+      _extentContainerAbsY[_extentDepth] = absY
+      _extentMaxRight[_extentDepth] = 0
+      _extentMaxBottom[_extentDepth] = 0
+      _extentDepth++
+    }
+  }
 
   if (
     evaluateAABBCull(
@@ -296,8 +399,20 @@ export function visitNode(
       viewportH,
     )
   ) {
+    if (isScroll && _extentDepth > 0) {
+      _extentDepth--
+    } else if (_extentDepth > 0 && node.children.length > 0) {
+      recordCulledSubtreeExtents(node, absX, absY)
+    }
     return
   }
+
+  const parentScrollOffset =
+    parentScrollContainerId !== 0
+      ? ctx.scrollOffsets?.get(parentScrollContainerId)
+      : undefined
+  const visualX = absX + (parentScrollOffset ? parentScrollOffset.x : 0)
+  const visualY = absY + (parentScrollOffset ? parentScrollOffset.y : 0)
 
   if (node.kind === "text") {
     state.textNodes.push(node)
@@ -312,9 +427,8 @@ export function visitNode(
       const handle = createScrollHandle(sid)
       const ox = props.scrollX ? handle.scrollX : 0
       const oy = props.scrollY ? handle.scrollY : 0
-      const parentOffset = parentScrollContainerId !== 0 ? ctx.scrollOffsets?.get(parentScrollContainerId) : undefined
-      const totalX = (parentOffset?.x ?? 0) + ox
-      const totalY = (parentOffset?.y ?? 0) + oy
+      const totalX = (parentScrollOffset?.x ?? 0) + ox
+      const totalY = (parentScrollOffset?.y ?? 0) + oy
       ctx.scrollOffsets?.set(node.id, { x: totalX, y: totalY })
     }
   }
@@ -441,8 +555,8 @@ export function visitNode(
       kind: "text",
       renderObjectId: null,
       type: CMD.TEXT,
-      x: absX,
-      y: absY,
+      x: visualX,
+      y: visualY,
       width,
       height,
       color,
@@ -540,8 +654,8 @@ export function visitNode(
       kind: "rectangle",
       renderObjectId: node.id,
       type: CMD.RECTANGLE,
-      x: absX,
-      y: absY,
+      x: visualX,
+      y: visualY,
       width,
       height,
       color: placeholderColor,
@@ -560,8 +674,8 @@ export function visitNode(
       kind: "image",
       renderObjectId: node.id,
       type: CMD.RECTANGLE,
-      x: absX,
-      y: absY,
+      x: visualX,
+      y: visualY,
       width,
       height,
       color: placeholderColor,
@@ -601,8 +715,8 @@ export function visitNode(
       kind: "rectangle",
       renderObjectId: node.id,
       type: CMD.RECTANGLE,
-      x: absX,
-      y: absY,
+      x: visualX,
+      y: visualY,
       width,
       height,
       color: placeholderColor,
@@ -622,8 +736,8 @@ export function visitNode(
         kind: "canvas",
         renderObjectId: node.id,
         type: CMD.RECTANGLE,
-        x: absX,
-        y: absY,
+        x: visualX,
+        y: visualY,
         width,
         height,
         color: placeholderColor,
@@ -717,8 +831,8 @@ export function visitNode(
       kind: "rectangle",
       renderObjectId: node.id,
       type: CMD.RECTANGLE,
-      x: absX,
-      y: absY,
+      x: visualX,
+      y: visualY,
       width,
       height,
       color: bgColor,
@@ -734,7 +848,7 @@ export function visitNode(
     }
 
     if (effectConfig) {
-      const backdrop = createBackdropMetadata(effectConfig, absX, absY, width, height, radius, getCurrentClipBounds(ctx), ctx.clip.stack)
+      const backdrop = createBackdropMetadata(effectConfig, visualX, visualY, width, height, radius, getCurrentClipBounds(ctx), ctx.clip.stack)
       const transformStateId = backdrop?.transformStateId ?? getTransformStateId(effectConfig)
       const clipStateId = backdrop?.clipStateId ?? createClipStateId(ctx.clip.stack)
       const effectStateId = backdrop?.effectStateId ?? getEffectStateId(effectConfig, radius)
@@ -743,8 +857,8 @@ export function visitNode(
         kind: "effect",
         renderObjectId: node.id,
         type: CMD.RECTANGLE,
-        x: absX,
-        y: absY,
+        x: visualX,
+        y: visualY,
         width,
         height,
         color: bgColor,
@@ -769,7 +883,7 @@ export function visitNode(
   }
 
   if (isScroll) {
-    pushScrollClip(ctx, absX, absY, width, height, node.id)
+    pushScrollClip(ctx, absX, absY, width, height, node.id, parentScrollOffset)
   }
 
   const childScrollContainerId = isScroll ? node.id : parentScrollContainerId
@@ -814,6 +928,15 @@ export function visitNode(
 
   if (isScroll) {
     popScrollClip(ctx)
+    if (_extentDepth > 0) {
+      _extentDepth--
+      const extRight = _extentMaxRight[_extentDepth]
+      const extBottom = _extentMaxBottom[_extentDepth]
+      const contentWidth = Math.max(extRight, width)
+      const contentHeight = Math.max(extBottom, height)
+      const sid = props.scrollId ?? `tge-scroll-${node.id}`
+      updateScrollContainerGeometry(sid, width, height, contentWidth, contentHeight)
+    }
   }
 
   const paintBorderWidth = props.borderWidth ?? 0
@@ -834,8 +957,8 @@ export function visitNode(
       kind: "border",
       renderObjectId: null,
       type: CMD.BORDER,
-      x: absX,
-      y: absY,
+      x: visualX,
+      y: visualY,
       width,
       height,
       color: hasVisualBorder ? borderColor : 0,
@@ -876,11 +999,9 @@ export function traverseFrame(
   viewportH: number,
   scrollOffsets?: Map<number, { x: number; y: number }>,
 ): TraversalResult {
-  const allNodes = collectAllNodes(root)
-  const snapshot = snapshotLayouts(allNodes)
-
   effectPoolIdx = 0
   autoLayerCount = 0
+  _journalCount = 0
 
   const activeScrollOffsets = scrollOffsets ?? (state as any).scrollOffsets ?? new Map<number, { x: number; y: number }>()
   const ctx = createPipelineContext(activeScrollOffsets)
@@ -889,10 +1010,18 @@ export function traverseFrame(
   const deferredElementFloats: TGENode[] = []
 
   try {
-    root.layout.x = 0
-    root.layout.y = 0
-    root.layout.width = viewportW
-    root.layout.height = viewportH
+    const rootPrevX = root.layout.x
+    const rootPrevY = root.layout.y
+    const rootPrevW = root.layout.width
+    const rootPrevH = root.layout.height
+    if (rootPrevX !== 0 || rootPrevY !== 0 || rootPrevW !== viewportW || rootPrevH !== viewportH) {
+      recordLayoutChange(root, rootPrevX, rootPrevY, rootPrevW, rootPrevH)
+      root.layout.x = 0
+      root.layout.y = 0
+      root.layout.width = viewportW
+      root.layout.height = viewportH
+      accumulateNodeDamageScalars(root, rootPrevX, rootPrevY, rootPrevW, rootPrevH, state)
+    }
     root._dfsIndex = ctx.dfsIndex++
     if (state.nodeCount) state.nodeCount.value++
     root._depth = 0
@@ -952,6 +1081,13 @@ export function traverseFrame(
       const oy = rootProps.scrollY ? handle.scrollY : 0
       ctx.scrollOffsets?.set(root.id, { x: ox, y: oy })
       pushScrollClip(ctx, 0, 0, viewportW, viewportH, root.id)
+      _extentContainerAbsX[0] = 0
+      _extentContainerAbsY[0] = 0
+      _extentMaxRight[0] = 0
+      _extentMaxBottom[0] = 0
+      _extentDepth = 1
+    } else {
+      _extentDepth = 0
     }
 
     const sortedChildren = sortChildrenByStackingOrder(root.children)
@@ -991,6 +1127,13 @@ export function traverseFrame(
 
     if (rootIsScroll) {
       popScrollClip(ctx)
+      _extentDepth--
+      const extRight = _extentMaxRight[0]
+      const extBottom = _extentMaxBottom[0]
+      const contentWidth = Math.max(extRight, viewportW)
+      const contentHeight = Math.max(extBottom, viewportH)
+      const sid = rootProps.scrollId ?? `tge-scroll-${root.id}`
+      updateScrollContainerGeometry(sid, viewportW, viewportH, contentWidth, contentHeight)
     }
 
     let elemIdx = 0
@@ -1080,13 +1223,15 @@ export function traverseFrame(
     state.hasAnyTransforms = traversalContext.hasAnyTransforms
     if (state.layout) (state.layout as any).hasAnyTransforms = traversalContext.hasAnyTransforms
 
+    clearJournal()
     return {
       success: true,
       layerBuckets: ctx.layer.allBuckets,
       hasAnyTransforms: traversalContext.hasAnyTransforms,
     }
   } catch (error) {
-    restoreLayouts(snapshot)
+    _extentDepth = 0
+    restoreJournal()
     return {
       success: false,
       layerBuckets: [],
