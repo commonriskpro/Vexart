@@ -98,8 +98,6 @@ await build({
     "solid-js/universal",
     "marked",
     "@napi-rs/canvas",
-    "@chenglou/pretext",
-    "opentype.js",
   ],
   alias: {
     // Resolve both workspace engine entrypoints into this single graph. The

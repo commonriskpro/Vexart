@@ -22,8 +22,8 @@
 | **4.2** | **Headless** | Posicionamiento del thumb vía `transform` y colores reactivos en `ScrollView` (Completado) | Eliminados recálculos de Flexily por frame de scroll y desacoplados colores de tema | ✅ **Hecho** |
 | **4.3** | **Engine Loop** | Delimitación de `layer.damageRect` regional en eventos de scroll (Completado) | Repintado regional habilitado y evitado `markAllDirty` indiscriminado en scroll | ✅ **Hecho** |
 | **3.3** | **App Framework** | Optimización de `keepAliveCache` en router con Map LRU O(1) (Completado) | Eliminada alocación de arrays y sort() en desalojo de rutas | ✅ **Hecho** |
-| **5.1** | **Packaging** | Dependencia raíz redundante `marked` | Dependencia innecesaria en raíz | **Baja** |
-| **5.2** | **Tooling** | Paquetes fantasma (`pretext`, `opentype.js`) en externals de bundler | Deuda de configuración en `build-dist.ts` | **Baja** |
+| **5.1** | **Packaging** | Dependencia raíz redundante `marked` (Completado) | Dependencia innecesaria removida de la raíz | ✅ **Hecho** |
+| **5.2** | **Tooling** | Paquetes fantasma (`pretext`, `opentype.js`) en externals de bundler (Completado) | Eliminadas referencias obsoletas de `build-dist.ts` | ✅ **Hecho** |
 
 ---
 
@@ -224,12 +224,12 @@
 
 ## 5. Higiene de Paquetes y Distribución
 
-### Hallazgo 5.1: Dependencia Raíz Redundante `marked`
-* **Prioridad:** **Baja**
+### Hallazgo 5.1: Dependencia Raíz Redundante `marked` (✅ Completado)
+* **Prioridad:** **Baja** — *Implementado y Verificado*
 * `marked` figura en `package.json` raíz y solo se usa en `@vexart/styled`, que ya lo tiene en su propio manifiesto.
-* **Acción:** Remover de `package.json` raíz.
+* **Acción:** Removida de `package.json` raíz.
 
-### Hallazgo 5.2: Paquetes Fantasma en Externals de `build-dist.ts`
-* **Prioridad:** **Baja**
+### Hallazgo 5.2: Paquetes Fantasma en Externals de `build-dist.ts` (✅ Completado)
+* **Prioridad:** **Baja** — *Implementado y Verificado*
 * `scripts/build-dist.ts` referencia `opentype.js` y `@chenglou/pretext` en el array de exclusiones externas cuando ya fueron eliminados del proyecto.
-* **Acción:** Limpiar las referencias obsoletas en el script de empaquetado.
+* **Acción:** Limpiadas las referencias obsoletas (`@chenglou/pretext` y `opentype.js`) en el script de empaquetado.

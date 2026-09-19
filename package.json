@@ -83,8 +83,7 @@
   },
   "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
-    "flexily": "workspace:*",
-    "marked": "^18.0.0"
+    "flexily": "workspace:*"
   },
   "overrides": {
     "hono": "^4.12.14"
