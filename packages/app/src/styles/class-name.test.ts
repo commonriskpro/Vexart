@@ -2,7 +2,15 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { createEffect, createRoot } from "solid-js"
 import { getClassNameResolver } from "@vexart/engine/internal"
 import { darkTheme, lightTheme, setTheme } from "@vexart/styled"
-import { CLASS_NAME_UNKNOWN_BEHAVIOR, clearClassNameCache, createStyles, mergeClassNameProps, resolveClassName } from "./class-name"
+import {
+  CLASS_NAME_UNKNOWN_BEHAVIOR,
+  clearClassNameCache,
+  createStyles,
+  getClassNameCacheSize,
+  MAX_CLASS_NAME_CACHE_SIZE,
+  mergeClassNameProps,
+  resolveClassName,
+} from "./class-name"
 
 beforeEach(() => {
   setTheme(darkTheme)
@@ -83,6 +91,68 @@ describe("cache", () => {
     const b = resolveClassName("p-4", { unknownClass: "warn" })
 
     expect(a).not.toBe(b)
+  })
+
+  test("bounded LRU cache never exceeds MAX_CLASS_NAME_CACHE_SIZE (2048) under dynamic class storm", () => {
+    expect(getClassNameCacheSize()).toBe(0)
+    for (let i = 0; i < 3000; i++) {
+      resolveClassName(`p-${i} m-${i}`)
+    }
+    expect(getClassNameCacheSize()).toBe(MAX_CLASS_NAME_CACHE_SIZE)
+    expect(MAX_CLASS_NAME_CACHE_SIZE).toBe(2048)
+  })
+
+  test("cache hits refresh LRU order preventing premature eviction", () => {
+    // 1. Insert entry A and entry B
+    const classA = "p-1"
+    const classB = "p-2"
+    const resA = resolveClassName(classA)
+    const resB = resolveClassName(classB)
+    expect(getClassNameCacheSize()).toBe(2)
+
+    // 2. Cache hit on classA refreshes its recency (MRU); classB becomes the oldest (LRU)
+    const hitA = resolveClassName(classA)
+    expect(hitA).toBe(resA)
+
+    // 3. Fill cache up to capacity (MAX_CLASS_NAME_CACHE_SIZE)
+    // Currently cache has [classB (LRU), classA (MRU)].
+    // Adding MAX_CLASS_NAME_CACHE_SIZE - 2 items fills cache exactly to capacity.
+    for (let i = 0; i < MAX_CLASS_NAME_CACHE_SIZE - 2; i++) {
+      resolveClassName(`m-${i}`)
+    }
+    expect(getClassNameCacheSize()).toBe(MAX_CLASS_NAME_CACHE_SIZE)
+
+    // 4. Trigger eviction by inserting a brand new class
+    resolveClassName("trigger-eviction")
+    expect(getClassNameCacheSize()).toBe(MAX_CLASS_NAME_CACHE_SIZE)
+
+    // classA was refreshed before the fill, so it was NOT evicted and remains a cache hit
+    const survivingA = resolveClassName(classA)
+    expect(survivingA).toBe(resA)
+
+    // classB was the oldest (LRU), so it must have been evicted (cache miss gives new reference)
+    const newResB = resolveClassName(classB)
+    expect(newResB).not.toBe(resB)
+  })
+
+  test("clearClassNameCache and theme change reset cache size to 0", () => {
+    expect(getClassNameCacheSize()).toBe(0)
+
+    resolveClassName("p-4")
+    resolveClassName("p-8")
+    expect(getClassNameCacheSize()).toBe(2)
+
+    clearClassNameCache()
+    expect(getClassNameCacheSize()).toBe(0)
+
+    resolveClassName("p-4")
+    expect(getClassNameCacheSize()).toBe(1)
+
+    // Changing theme triggers cache invalidation on next resolution
+    setTheme(lightTheme)
+    resolveClassName("p-12")
+    // "p-4" was purged on theme version change; "p-12" is the single new entry
+    expect(getClassNameCacheSize()).toBe(1)
   })
 })
 

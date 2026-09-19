@@ -13,7 +13,7 @@
 | **1.1** | **Native / GPU** | RegionalReadbackPool con doble búfer y zero-copy emission (Completado) | Eliminada alocación y CPU stall en daño regional | ✅ **Hecho** |
 | **2.1** | **Engine Loop** | Doble recorrido DFS por frame (`walkTreeOnce` + `traverseFrame`) (Completado) | Eliminada primera pasada DFS y unificado ciclo en `traverseFrame` | ✅ **Hecho** |
 | **2.2** | **Engine / Native** | MSDF Text batching con protocolo binario VXTX (Completado) | Eliminadas N llamadas FFI/draw calls; 1 FFI + 1 draw call por capa | ✅ **Hecho** |
-| **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) | Memory leak en procesos largos | **Alta** |
+| **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) (Completado) | Eliminado memory leak con Bounded LRU Cache (2.048 entradas) | ✅ **Hecho** |
 | **4.1** | **Headless** | `Popover` no tiene trampa de foco (`pushFocusScope`) ni escucha `Escape` | Violación de accesibilidad / fuga de foco | **Alta** |
 | **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados (Completado) | Eliminadas 692 LOC; 3 mutexes reducidos a 1 (`SHARED_PAINT`) | ✅ **Hecho** |
 | **1.3** | **Native / Rust** | 6 pipelines WGPU compilados en arranque que nunca se usan | 40–80 ms retraso en cold-start; ~1.200 LOC | **Media** |
@@ -126,14 +126,19 @@
 
 ## 3. App Framework y Compilador de Clases (`packages/app/`)
 
-### Hallazgo 3.1: Memory Leak por Cache no Acotado en `class-name.ts`
-* **Prioridad:** **Alta**
+### Hallazgo 3.1: Memory Leak por Cache no Acotado en `class-name.ts` (✅ Completado)
+* **Prioridad:** **Alta** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/app/src/styles/class-name.ts:46, 380–410`
+  * `packages/app/src/styles/class-name.ts:46–63, 384–423`
+  * `packages/app/src/styles/class-name.test.ts`
 * **Problema:**
-  `const cache = new Map<string, ClassNameResolveResult>()` almacena indefinidamente todas las clases generadas. En UIs con interpolación dinámica (`gap-${val}`, `w-[${px}]`), el mapa crece sin límite y nunca se purga.
-* **Solución Arquitectónica:**
-  Sustituir el `Map` plano por un LRU Cache con capacidad acotada (ej: 2.048 entradas).
+  `const cache = new Map<string, ClassNameResolveResult>()` almacenaba indefinidamente todas las clases generadas. En UIs con interpolación dinámica (`gap-${val}`, `w-[${px}]`), el mapa crecía sin límite y nunca se purgaba.
+* **Solución Arquitectónica Implementada:**
+  1. Sustitución del `Map` no acotado por un Bounded LRU Cache con capacidad máxima de 2.048 entradas (`MAX_CLASS_NAME_CACHE_SIZE = 2048`).
+  2. En Cache Hit: refresco de recencia (`cache.delete(className); cache.set(className, cached);`) garantizando orden LRU genuino.
+  3. En Cache Miss: desalojo preventivo de la entrada más antigua (`cache.keys().next().value`) al alcanzar la capacidad máxima previo a la inserción.
+  4. Preservación del vaciado atómico en `clearClassNameCache()` y ante cambios reactivos de tema (`version !== lastThemeVersion`).
+  5. Exportación de `@internal function getClassNameCacheSize(): number` y `MAX_CLASS_NAME_CACHE_SIZE` para testing, métricas y observabilidad.
 
 ### Hallazgo 3.2: Inversión de Capas entre `@vexart/app` y `@vexart/styled`
 * **Prioridad:** **Media**

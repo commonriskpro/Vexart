@@ -36,6 +36,9 @@ export type ClassNameResolveResult = {
 
 // ── Cache ───────────────────────────────────────────────────────────────────
 
+/** @internal */
+export const MAX_CLASS_NAME_CACHE_SIZE = 2048
+
 const cache = new Map<string, ClassNameResolveResult>()
 let lastThemeVersion = -1
 
@@ -47,6 +50,14 @@ let lastThemeVersion = -1
  */
 export function clearClassNameCache() {
   cache.clear()
+}
+
+/**
+ * Returns current number of entries in className LRU cache.
+ * @internal
+ */
+export function getClassNameCacheSize(): number {
+  return cache.size
 }
 
 // ── Style Registry (createStyles) ───────────────────────────────────────────
@@ -368,7 +379,11 @@ export function resolveClassName(className: string | undefined | null, options: 
   const useCache = !options.onDiagnostic && !options.unknownClass
   if (useCache) {
     const cached = cache.get(className)
-    if (cached) return cached
+    if (cached) {
+      cache.delete(className)
+      cache.set(className, cached)
+      return cached
+    }
   }
 
   const props: MutableStyleProps = {}
@@ -389,7 +404,13 @@ export function resolveClassName(className: string | undefined | null, options: 
   }
 
   const result: ClassNameResolveResult = { props, diagnostics }
-  if (useCache) cache.set(className, result)
+  if (useCache) {
+    if (cache.size >= MAX_CLASS_NAME_CACHE_SIZE) {
+      const oldest = cache.keys().next().value
+      if (oldest !== undefined) cache.delete(oldest)
+    }
+    cache.set(className, result)
+  }
   return result
 }
 
