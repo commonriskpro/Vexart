@@ -15,6 +15,14 @@
 import type { TerminalKind } from "./detect"
 import { inTmux, parentTerminal, parentSupportsKittyPlaceholder, passthroughSupported, createWriter } from "./tmux"
 
+export function isRemoteConnection(): boolean {
+  return !!(
+    process.env["SSH_CONNECTION"] ||
+    process.env["SSH_CLIENT"] ||
+    process.env["SSH_TTY"]
+  )
+}
+
 /** @public */
 export type Capabilities = {
   /** Terminal emulator name */
@@ -158,6 +166,10 @@ export function inferCaps(kind: TerminalKind): Capabilities {
 
     case "unknown":
       break
+  }
+
+  if ((caps.kittyGraphics || caps.kittyPlaceholder) && !isRemoteConnection()) {
+    caps.transmissionMode = "shm"
   }
 
   return caps

@@ -975,6 +975,32 @@ pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_owned(
     })
 }
 
+/// Emit a complete frame using the fixed POSIX SHM ring buffer with backpressure.
+/// # Safety
+/// stats_out must be writable when non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_frame_shm_ring(
+    _ctx: u64,
+    target: u64,
+    image_id: u32,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    ffi_guard!({
+        if image_id == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let mut guard = get_or_init_paint();
+        let Some(pctx) = guard.as_mut() else {
+            return ERR_GPU_DEVICE_LOST;
+        };
+        let rc = kitty::transport::emit_frame_shm_ring(pctx, target, image_id, stats_out);
+        if rc == OK {
+            advance_presentation_frame();
+        }
+        rc
+    })
+}
+
 /// Delete a Kitty image by ID natively.
 ///
 /// # Safety
@@ -997,6 +1023,24 @@ pub unsafe extern "C" fn vexart_kitty_delete_layer(
 #[no_mangle]
 pub extern "C" fn vexart_kitty_set_transport(_ctx: u64, mode: u32) -> i32 {
     ffi_guard!({ kitty::transport::set_transport_mode(mode) })
+}
+
+/// POSIX SHM prepare (shm_open + ftruncate + mmap + memcpy + munmap). Phase 2 Slice 2.
+///
+/// # Safety
+/// All pointer args must be valid for their respective lengths.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_shm_prepare(
+    name_ptr: *const u8,
+    name_len: u32,
+    data_ptr: *const u8,
+    data_len: u32,
+    mode: u32,
+    out_handle: *mut u64,
+) -> i32 {
+    ffi_guard!({
+        kitty::shm::shm_prepare(name_ptr, name_len, data_ptr, data_len, mode, out_handle)
+    })
 }
 
 /// POSIX SHM release (close + optional shm_unlink). Phase 2 Slice 2.
@@ -1050,10 +1094,49 @@ pub unsafe extern "C" fn vexart_kitty_emit_placeholder_shm_frame(
     rc
 }
 
+/// Emit a full target through tmux using the fixed POSIX SHM ring buffer with backpressure.
+/// # Safety
+/// params must point to 20 readable bytes, stats_out must be writable when non-null.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_kitty_emit_placeholder_shm_ring(
+    ctx: u64,
+    target: u64,
+    params: *const u32,
+    params_len: u32,
+    stats_out: *mut types::NativePresentationStats,
+) -> i32 {
+    let _ = ctx;
+    ffi_guard!({
+        let mut guard = get_or_init_paint();
+        let Some(pctx) = guard.as_mut() else {
+            return ERR_GPU_DEVICE_LOST;
+        };
+        let rc = kitty::placeholder::emit_placeholder_shm_ring(
+            pctx,
+            target,
+            params,
+            params_len,
+            stats_out,
+        );
+        if rc == OK {
+            advance_presentation_frame();
+        }
+        rc
+    })
+}
+
 /// Report whether the terminal has unlinked a native Kitty SHM object.
 #[no_mangle]
 pub extern "C" fn vexart_kitty_shm_is_consumed(handle: u64) -> i32 {
     ffi_guard!({ kitty::shm::shm_is_consumed(handle) })
+}
+
+/// Report whether all slots in the fixed SHM ring buffer are drained.
+#[no_mangle]
+pub extern "C" fn vexart_kitty_shm_is_drained() -> i32 {
+    ffi_guard!({
+        if kitty::shm::shm_ring_is_drained() { 1 } else { 0 }
+    })
 }
 
 /// Unlink all active Kitty SHM objects and close their descriptors.
@@ -1873,5 +1956,47 @@ mod tests {
 
         let _ = vexart_context_destroy(1);
         assert_eq!(FRAME_COUNT.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_shm_ring_ffi_emit_and_drain_lifecycle() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        let _ = vexart_context_destroy(1);
+
+        assert_eq!(vexart_kitty_shm_is_drained(), 1);
+
+        let mut target = 0u64;
+        let rc = unsafe { vexart_composite_target_create(1, 8, 8, &mut target) };
+        assert_eq!(rc, OK);
+
+        let mut stats = types::NativePresentationStats::default();
+        let rc = unsafe { vexart_kitty_emit_frame_shm_ring(1, target, 77771, &mut stats) };
+        assert_eq!(rc, OK);
+        assert_eq!(stats.transport, types::NativePresentationStats::TRANSPORT_SHM);
+        assert_eq!(stats.kitty_bytes_emitted, 8 * 8 * 4);
+        assert_ne!(stats.total_us, 0);
+        assert_eq!(vexart_kitty_shm_is_drained(), 0);
+
+        // Placeholder ring emit
+        let params: [u32; 5] = [77772, 1, 5, 5, 1];
+        let mut placeholder_stats = types::NativePresentationStats::default();
+        let rc = unsafe {
+            vexart_kitty_emit_placeholder_shm_ring(
+                1,
+                target,
+                params.as_ptr(),
+                20,
+                &mut placeholder_stats,
+            )
+        };
+        assert_eq!(rc, OK);
+        assert_eq!(placeholder_stats.transport, types::NativePresentationStats::TRANSPORT_SHM);
+        assert_eq!(vexart_kitty_shm_is_drained(), 0);
+
+        // Cleanup drains everything
+        assert_eq!(vexart_kitty_shm_cleanup_all(), OK);
+        assert_eq!(vexart_kitty_shm_is_drained(), 1);
+
+        let _ = vexart_context_destroy(1);
     }
 }

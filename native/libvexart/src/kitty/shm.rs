@@ -20,7 +20,7 @@ use nix::sys::stat::Mode;
 use nix::unistd::ftruncate;
 
 use crate::ffi::error::set_last_error;
-use crate::ffi::panic::{ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, OK};
+use crate::ffi::panic::{ERR_INVALID_ARG, ERR_KITTY_TRANSPORT, ERR_SHM_RING_FULL, OK};
 
 // ─── Handle registry ──────────────────────────────────────────────────────
 
@@ -108,10 +108,15 @@ pub struct ShmRingSlot {
     pub generation: u64,
     pub name: Option<CString>,
     pub fd: Option<OwnedFd>,
+    pub mapped_ptr: Option<NonNull<u8>>,
+    pub mapped_capacity: usize,
     pub capacity: usize,
     pub in_use: bool,
     pub handle: u64,
 }
+
+unsafe impl Send for ShmRingSlot {}
+unsafe impl Sync for ShmRingSlot {}
 
 impl ShmRingSlot {
     pub fn new(slot_index: usize) -> Self {
@@ -124,6 +129,8 @@ impl ShmRingSlot {
             generation: start_gen,
             name: None,
             fd: None,
+            mapped_ptr: None,
+            mapped_capacity: 0,
             capacity: 0,
             in_use: false,
             handle: 0,
@@ -202,7 +209,7 @@ impl ShmRingBuffer {
         }
         let Some(slot_idx) = available else {
             set_last_error("SHM ring is awaiting terminal consumption; use the owned frame presenter for asynchronous backpressure");
-            return Err(ERR_KITTY_TRANSPORT);
+            return Err(ERR_SHM_RING_FULL);
         };
         self.current = slot_idx;
         let slot = &mut self.slots[slot_idx];
@@ -285,32 +292,79 @@ impl ShmRingBuffer {
             }
         };
 
-        let mapped: NonNull<c_void> = match unsafe {
-            mmap(
-                None,
-                size,
-                ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                MapFlags::MAP_SHARED,
-                &fd,
-                0,
-            )
-        } {
-            Ok(ptr) => ptr,
-            Err(e) => {
-                set_last_error(format!("mmap failed: {e}"));
-                let _ = shm_unlink(c_name.as_c_str());
-                return Err(ERR_KITTY_TRANSPORT);
+        let mapped: NonNull<c_void> = if let Some(existing_ptr) = slot.mapped_ptr {
+            if data_len <= slot.mapped_capacity {
+                match unsafe {
+                    mmap(
+                        NonZeroUsize::new(existing_ptr.as_ptr() as usize),
+                        size,
+                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                        MapFlags::MAP_SHARED | MapFlags::MAP_FIXED,
+                        &fd,
+                        0,
+                    )
+                } {
+                    Ok(ptr) => ptr,
+                    Err(e) => {
+                        set_last_error(format!("mmap fixed failed: {e}"));
+                        let _ = shm_unlink(c_name.as_c_str());
+                        return Err(ERR_KITTY_TRANSPORT);
+                    }
+                }
+            } else {
+                unsafe {
+                    let _ = munmap(existing_ptr.cast(), slot.mapped_capacity);
+                }
+                match unsafe {
+                    mmap(
+                        None,
+                        size,
+                        ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                        MapFlags::MAP_SHARED,
+                        &fd,
+                        0,
+                    )
+                } {
+                    Ok(ptr) => {
+                        slot.mapped_capacity = data_len;
+                        ptr
+                    }
+                    Err(e) => {
+                        slot.mapped_ptr = None;
+                        slot.mapped_capacity = 0;
+                        set_last_error(format!("mmap realloc failed: {e}"));
+                        let _ = shm_unlink(c_name.as_c_str());
+                        return Err(ERR_KITTY_TRANSPORT);
+                    }
+                }
+            }
+        } else {
+            match unsafe {
+                mmap(
+                    None,
+                    size,
+                    ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
+                    MapFlags::MAP_SHARED,
+                    &fd,
+                    0,
+                )
+            } {
+                Ok(ptr) => {
+                    slot.mapped_capacity = data_len;
+                    ptr
+                }
+                Err(e) => {
+                    set_last_error(format!("mmap initial failed: {e}"));
+                    let _ = shm_unlink(c_name.as_c_str());
+                    return Err(ERR_KITTY_TRANSPORT);
+                }
             }
         };
 
+        slot.mapped_ptr = Some(mapped.cast());
+
         unsafe {
             std::ptr::copy_nonoverlapping(data.as_ptr(), mapped.as_ptr() as *mut u8, data_len);
-        }
-
-        if let Err(e) = unsafe { munmap(mapped, data_len) } {
-            set_last_error(format!("munmap failed: {e}"));
-            let _ = shm_unlink(c_name.as_c_str());
-            return Err(ERR_KITTY_TRANSPORT);
         }
 
         // 7. Record handle and slot state
@@ -336,8 +390,14 @@ impl ShmRingBuffer {
             if let Some(ref name) = slot.name.take() {
                 let _ = shm_unlink(name.as_c_str());
             }
+            if let Some(ptr) = slot.mapped_ptr.take() {
+                unsafe {
+                    let _ = munmap(ptr.cast(), slot.mapped_capacity);
+                }
+            }
             slot.fd = None;
             slot.capacity = 0;
+            slot.mapped_capacity = 0;
             slot.in_use = false;
         }
     }
@@ -348,10 +408,36 @@ impl ShmRingBuffer {
             if let Some(ref name) = slot.name.take() {
                 let _ = shm_unlink(name.as_c_str());
             }
+            if let Some(ptr) = slot.mapped_ptr.take() {
+                unsafe {
+                    let _ = munmap(ptr.cast(), slot.mapped_capacity);
+                }
+            }
             slot.fd = None;
             slot.capacity = 0;
+            slot.mapped_capacity = 0;
             slot.in_use = false;
         }
+    }
+
+    /// Report whether all slots in the ring buffer are drained (either unallocated or terminal unlinked).
+    pub fn is_drained(&self) -> bool {
+        for slot in &self.slots {
+            if let Some(ref name) = slot.name {
+                match shm_open(name.as_c_str(), OFlag::O_RDONLY, Mode::empty()) {
+                    Ok(_) => return false,
+                    Err(nix::errno::Errno::ENOENT) => continue,
+                    Err(_) => return false,
+                }
+            }
+        }
+        true
+    }
+}
+
+impl Drop for ShmRingBuffer {
+    fn drop(&mut self) {
+        self.cleanup_all();
     }
 }
 
@@ -379,6 +465,15 @@ pub fn shm_prepare_ring(data: &[u8]) -> Result<(usize, CString), i32> {
         Err(poisoned) => poisoned.into_inner(),
     };
     ring.acquire(data)
+}
+
+/// Report whether all slots in the global SHM ring buffer are drained.
+pub fn shm_ring_is_drained() -> bool {
+    let ring = match SHM_RING_BUFFER.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    ring.is_drained()
 }
 
 /// Mark global ring buffer slot as in-flight after successful transport write.
@@ -1059,5 +1154,83 @@ mod tests {
             (slot.generation & 0xffff_ffff) as u32
         );
         assert!(name_str.len() <= 31);
+    }
+
+    #[test]
+    fn test_ring_buffer_saturation_returns_err_shm_ring_full() {
+        let mut ring = ShmRingBuffer::new();
+        assert!(ring.is_drained());
+
+        let p0 = [1u8; 16];
+        let p1 = [2u8; 16];
+        let p2 = [3u8; 16];
+        let p3 = [4u8; 16];
+
+        let (_, name0) = ring.acquire(&p0).expect("slot 0");
+        let (_, name1) = ring.acquire(&p1).expect("slot 1");
+        let (_, name2) = ring.acquire(&p2).expect("slot 2");
+
+        assert!(!ring.is_drained());
+
+        // Saturated: all 3 slots still awaiting terminal consumption
+        let err = ring.acquire(&p3);
+        assert_eq!(err, Err(ERR_SHM_RING_FULL));
+
+        // Terminal unlinks slot 0
+        shm_unlink(name0.as_c_str()).unwrap();
+        assert!(!ring.is_drained()); // slots 1 and 2 still active
+
+        // Now acquire succeeds into slot 0
+        let (slot_recycled, name_recycled) = ring.acquire(&p3).expect("recycled slot 0");
+        assert_eq!(slot_recycled, 0);
+
+        // Clean up remaining
+        shm_unlink(name1.as_c_str()).unwrap();
+        shm_unlink(name2.as_c_str()).unwrap();
+        shm_unlink(name_recycled.as_c_str()).unwrap();
+        assert!(ring.is_drained());
+    }
+
+    #[test]
+    fn test_ring_buffer_persistent_mapping_realloc() {
+        let mut ring = ShmRingBuffer::new();
+        let small_payload = vec![0x42u8; 64];
+        let large_payload = vec![0x99u8; 1024];
+        let smaller_payload = vec![0x11u8; 128];
+
+        // Slot 0 initial allocation (64 bytes)
+        let (s0, name0) = ring.acquire(&small_payload).expect("initial acquire");
+        assert_eq!(s0, 0);
+        assert_eq!(ring.slots()[0].mapped_capacity, 64);
+        assert!(ring.slots()[0].mapped_ptr.is_some());
+
+        shm_unlink(name0.as_c_str()).unwrap();
+
+        // Slot 1 and 2 to advance past
+        let (_s1, n1) = ring.acquire(&small_payload).unwrap();
+        let (_s2, n2) = ring.acquire(&small_payload).unwrap();
+        shm_unlink(n1.as_c_str()).unwrap();
+        shm_unlink(n2.as_c_str()).unwrap();
+
+        // Slot 0 realloc with larger payload (1024 bytes > 64)
+        let (s0_b, name0_b) = ring.acquire(&large_payload).expect("larger acquire");
+        assert_eq!(s0_b, 0);
+        assert_eq!(ring.slots()[0].mapped_capacity, 1024);
+
+        shm_unlink(name0_b.as_c_str()).unwrap();
+
+        let (_s1_b, n1_b) = ring.acquire(&small_payload).unwrap();
+        let (_s2_b, n2_b) = ring.acquire(&small_payload).unwrap();
+        shm_unlink(n1_b.as_c_str()).unwrap();
+        shm_unlink(n2_b.as_c_str()).unwrap();
+
+        // Slot 0 reuse with smaller payload (128 bytes <= 1024): keeps mapped_capacity
+        let (s0_c, name0_c) = ring.acquire(&smaller_payload).expect("smaller acquire");
+        assert_eq!(s0_c, 0);
+        assert_eq!(ring.slots()[0].mapped_capacity, 1024);
+
+        shm_unlink(name0_c.as_c_str()).unwrap();
+        ring.cleanup_all();
+        assert!(ring.is_drained());
     }
 }

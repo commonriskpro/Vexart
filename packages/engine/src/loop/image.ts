@@ -19,6 +19,7 @@
 import { ensureImageExtra, type TGENode } from "../ffi/node"
 import { nativeImageAssetRegister, nativeImageAssetRelease, syncNativeImageHandle, releaseNodeImage } from "../ffi/native-image-assets"
 import { markDirty } from "../reconciler/dirty"
+import { markLayerDirtyByKey } from "./composite"
 
 // ── Cache ──
 
@@ -111,6 +112,9 @@ export function decodeImageForNode(node: TGENode) {
     extra.buffer = image
     syncNativeImageHandle(node, image?.nativeHandle ?? null)
     extra.state = image ? "loaded" : "error"
+    if (node._layerKey) {
+      markLayerDirtyByKey(node._layerKey)
+    }
     markDirty()
   }
 

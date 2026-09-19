@@ -2042,13 +2042,30 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           continue
         }
         if (op.kind === "image") {
-          // Finish earlier shapes before queuing this image. The image FFI
-          // path is source-bound and cannot share cmd_kind=9's batch ABI.
-          flushAll()
-          const imageHandle = op.image.nativeImageHandle && op.image.nativeImageHandle > 0n
+          const imageHandle = (op.image.nativeImageHandle && op.image.nativeImageHandle > 0n)
             ? op.image.nativeImageHandle
-            : getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height)
-          if (!imageHandle) return { ok: false, rawLayer: null }
+            : (op.textureId && typeof op.textureId === "bigint" && op.textureId > 0n)
+              ? op.textureId
+              : (op.image.imageBuffer ? getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height) : 0n)
+          if (!imageHandle) {
+            const boxW = clip.right - clip.left
+            const boxH = clip.bottom - clip.top
+            geometryStream.appendShapeRect(
+              (clip.left / ctx.target.width) * 2 - 1,
+              1 - (clip.top / ctx.target.height) * 2,
+              (boxW / ctx.target.width) * 2,
+              -((boxH / ctx.target.height) * 2),
+              boxW,
+              boxH,
+              clampShapeRadius(op.cornerRadius, boxW, boxH),
+              0,
+              op.color >>> 0,
+              0,
+            )
+            markDirty(clip.left, clip.top, clip.right, clip.bottom)
+            continue
+          }
+          flushAll()
           const fit = op.image.objectFit
           const imageOpacity = op.rect.effect?.opacity ?? 1
           const hasRadius = op.image.cornerRadius > 0
@@ -2076,8 +2093,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             // letterboxing (contain) from these signed fractions.
             const geometry = getImageFitGeometry(
               fit,
-              op.image.imageBuffer.width,
-              op.image.imageBuffer.height,
+              op.image.imageBuffer?.width ?? Math.max(1, Math.round(op.width)),
+              op.image.imageBuffer?.height ?? Math.max(1, Math.round(op.height)),
               Math.max(1, Math.round(op.width)),
               Math.max(1, Math.round(op.height)),
             )
@@ -2145,6 +2162,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           const textY = Math.round(op.y) - ctx.offsetY
           const colorRgba = op.color >>> 0
           const preWrap = op.whiteSpace === "pre-wrap"
+          const noWrap = op.whiteSpace === "nowrap"
           const text = preWrap
             ? layoutText(op.text, op.fontId, op.maxWidth, op.lineHeight, op.fontSize, {
                 whiteSpace: "pre-wrap",
@@ -2152,7 +2170,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
                 fontFamily: op.fontFamily,
                 fontWeight: op.fontWeight,
                 fontStyle: op.fontStyle,
-              }).lines.map((line) => line.text).join("\n")
+              }).lines.map((line) => line.text).join("\x0a")
             : op.text
           deferredMsdfOps.push({
             text,
@@ -2160,7 +2178,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             y: textY,
             fontSize: op.fontSize,
             lineHeight: op.lineHeight,
-            maxWidth: preWrap ? 0 : (op.maxWidth > 0 ? op.maxWidth : 999999),
+            maxWidth: preWrap || noWrap ? 0 : (op.maxWidth > 0 ? op.maxWidth : 999999),
             colorRgba,
             fontFamily: op.fontFamily,
             fontWeight: op.fontWeight,
@@ -2193,7 +2211,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   }
 
   const composeLayersToFrame = (frame: RendererBackendFrameContext, layers: RenderedLayerRecord[]): RendererBackendFrameResult | null => {
-    if (layers.length === 0) {
+    if (layers.length === 0 || frame.dirtyLayerCount === 0) {
       pruneLayerTargets()
       return { output: "none", strategy: lastStrategy }
     }
@@ -2254,6 +2272,10 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   }
 
   const composeRetainedFrame = (frame: RendererBackendFrameContext, layers: RendererBackendRetainedLayer[]): RendererBackendFrameResult | null => {
+    if (frame.dirtyLayerCount === 0) {
+      pruneLayerTargets()
+      return { output: "none", strategy: lastStrategy }
+    }
     const retainedLayers: RenderedLayerRecord[] = []
     for (const layer of layers) {
       const record = layerTargets.get(layer.key)
@@ -2444,8 +2466,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const height = Math.max(1, crop?.height ?? boxHeight)
     const geometry = getImageFitGeometry(
       op.image.objectFit,
-      op.image.imageBuffer.width,
-      op.image.imageBuffer.height,
+      op.image.imageBuffer?.width ?? Math.max(1, Math.round(op.width)),
+      op.image.imageBuffer?.height ?? Math.max(1, Math.round(op.height)),
       boxWidth,
       boxHeight,
     )
@@ -2541,10 +2563,27 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const cropHeight = clip.bottom - clip.top
     if (cropX < 0 || cropY < 0 || cropX + cropWidth > width || cropY + cropHeight > height) return null
     if (op.kind === "image") {
-      const imageHandle = op.image.nativeImageHandle && op.image.nativeImageHandle > 0n
+      const imageHandle = (op.image.nativeImageHandle && op.image.nativeImageHandle > 0n)
         ? op.image.nativeImageHandle
-        : getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height)
-      if (!imageHandle) return null
+        : (op.textureId && typeof op.textureId === "bigint" && op.textureId > 0n)
+          ? op.textureId
+          : (op.image.imageBuffer ? getImage(op.image.imageBuffer.data, op.image.imageBuffer.width, op.image.imageBuffer.height) : 0n)
+      if (!imageHandle) {
+        const sourceOp = { ...op.rect, clipBounds: undefined }
+        const source = renderOpToImage?.(
+          sourceOp,
+          width,
+          height,
+          bounds.left + ctx.offsetX,
+          bounds.top + ctx.offsetY,
+          [sourceOp],
+        )
+        if (!source) return null
+        const cropped = cropImage(source, width, height, cropX, cropY, cropWidth, cropHeight)
+        instanceImageHandles.delete(source)
+        vexartRemoveImage(getVexartCtx(), source)
+        return cropped ? { handle: cropped, width: cropWidth, height: cropHeight } : null
+      }
       return renderStyledImage(op, imageHandle, { x: cropX, y: cropY, width: cropWidth, height: cropHeight }, op.rect.effect?.opacity ?? 1)
     }
     const sourceOp = { ...op, clipBounds: undefined }

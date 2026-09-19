@@ -52,6 +52,15 @@ describe("text layout metrics", () => {
     expect(keepAll.lineCount).toBe(1)
     expect(keepAll.lines[0]?.width).toBeGreaterThan(50)
   })
+
+  test("nowrap prevents line wrapping even when text exceeds maxWidth", () => {
+    const normal = layoutText("one two three four five six", 0, 50, 17, 14, { whiteSpace: "normal" })
+    const nowrap = layoutText("one two three four five six", 0, 50, 17, 14, { whiteSpace: "nowrap" })
+
+    expect(normal.lineCount).toBeGreaterThan(1)
+    expect(nowrap.lineCount).toBe(1)
+    expect(nowrap.lines[0]?.text).toBe("one two three four five six")
+  })
 })
 
 describe("font registry lifecycle", () => {

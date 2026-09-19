@@ -538,6 +538,118 @@ fn emit_shm_readback(
     }
 }
 
+fn emit_shm_readback_ring(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    image_id: u32,
+    placement_id: u32,
+    cols: u32,
+    rows: u32,
+    emit_grid: bool,
+    expected_len: usize,
+    readback_us: u64,
+) -> ShmEmitOutcome {
+    let raw_bytes = rgba.len() as u64;
+    if rgba.len() != expected_len {
+        set_last_error(format!(
+            "placeholder SHM readback length {} does not match target RGBA size {expected_len}",
+            rgba.len()
+        ));
+        return ShmEmitOutcome {
+            rc: ERR_KITTY_TRANSPORT,
+            readback_us,
+            raw_bytes,
+            ..ShmEmitOutcome::default()
+        };
+    }
+
+    let t_grid = Instant::now();
+    let grid = match emit_grid
+        .then(|| encode_grid(image_id, cols, rows))
+        .transpose()
+    {
+        Ok(grid) => grid,
+        Err(error) => {
+            set_last_error(format!("placeholder SHM grid encoding failed: {error}"));
+            return ShmEmitOutcome {
+                rc: ERR_KITTY_TRANSPORT,
+                readback_us,
+                encode_us: t_grid.elapsed().as_micros() as u64,
+                raw_bytes,
+                ..ShmEmitOutcome::default()
+            };
+        }
+    };
+    let grid_encode_us = t_grid.elapsed().as_micros() as u64;
+
+    let t_prepare = Instant::now();
+    let (slot_index, name) = match super::shm::shm_prepare_ring(rgba) {
+        Ok(prepared) => prepared,
+        Err(rc) => {
+            return ShmEmitOutcome {
+                rc,
+                readback_us,
+                encode_us: grid_encode_us,
+                shm_prepare_us: t_prepare.elapsed().as_micros() as u64,
+                raw_bytes,
+                ..ShmEmitOutcome::default()
+            };
+        }
+    };
+    let shm_prepare_us = t_prepare.elapsed().as_micros() as u64;
+
+    let t_encode = Instant::now();
+    let upload_apc = encode_shm_upload_apc(
+        &name,
+        rgba.len(),
+        width,
+        height,
+        image_id,
+        placement_id,
+        cols,
+        rows,
+    );
+    let output = assemble_shm_output(&upload_apc, grid.as_deref());
+    let encode_us = grid_encode_us + t_encode.elapsed().as_micros() as u64;
+    let t_write = Instant::now();
+    record_success(image_id);
+    let write_result = write_to_stdout(&output);
+    let write_us = t_write.elapsed().as_micros() as u64;
+    match write_result {
+        Ok(()) => {
+            super::shm::shm_ring_mark_in_flight(slot_index);
+            ShmEmitOutcome {
+                rc: OK,
+                handle: slot_index as u64,
+                kitty_bytes: output.len() as u64,
+                readback_us,
+                encode_us,
+                write_us,
+                shm_prepare_us,
+                raw_bytes,
+                payload_bytes: rgba.len() as u64,
+            }
+        }
+        Err(error) => {
+            let _ = write_to_stdout(&wrap_tmux_apc(&delete_apc(image_id)));
+            forget_success(image_id);
+            super::shm::shm_ring_fail_closed(slot_index);
+            set_last_error(format!("placeholder SHM stdout write failed: {error}"));
+            ShmEmitOutcome {
+                rc: ERR_KITTY_TRANSPORT,
+                readback_us,
+                encode_us,
+                write_us,
+                shm_prepare_us,
+                raw_bytes,
+                payload_bytes: rgba.len() as u64,
+                ..ShmEmitOutcome::default()
+            }
+        }
+    }
+}
+
 fn write_shm_stats(
     stats_out: *mut NativePresentationStats,
     outcome: &ShmEmitOutcome,
@@ -665,6 +777,88 @@ pub unsafe fn emit_placeholder_shm_frame(
         // required by this FFI boundary.
         unsafe { *out_handle = outcome.handle };
     }
+    write_shm_stats(
+        stats_out,
+        &outcome,
+        total_start.elapsed().as_micros() as u64,
+    );
+    outcome.rc
+}
+
+/// Emit a full GPU target through tmux using the fixed SHM ring buffer with backpressure.
+pub unsafe fn emit_placeholder_shm_ring(
+    pctx: &mut PaintContext,
+    target: u64,
+    params: *const u32,
+    params_len: u32,
+    stats_out: *mut NativePresentationStats,
+) -> i32 {
+    let expected_params_len = 5 * std::mem::size_of::<u32>() as u32;
+    if params.is_null() || params_len != expected_params_len {
+        set_last_error(format!(
+            "placeholder SHM params must be non-null and exactly {expected_params_len} bytes"
+        ));
+        return ERR_INVALID_ARG;
+    }
+    let params = unsafe { std::slice::from_raw_parts(params, 5) };
+    let image_id = params[0];
+    let placement_id = params[1];
+    let cols = params[2];
+    let rows = params[3];
+    let emit_grid = params[4];
+    if image_id == 0 || placement_id == 0 {
+        set_last_error("placeholder SHM image and placement IDs must be non-zero");
+        return ERR_INVALID_ARG;
+    }
+    if emit_grid > 1 {
+        set_last_error("placeholder SHM grid-emission flag must be 0 or 1");
+        return ERR_INVALID_ARG;
+    }
+
+    let total_start = Instant::now();
+    let (width, height) = match resolve_target_dims(pctx, target) {
+        Some(dimensions) => dimensions,
+        None => {
+            set_last_error(format!("placeholder SHM: invalid target handle {target}"));
+            return ERR_KITTY_TRANSPORT;
+        }
+    };
+    let expected_len = match validate_dimensions(width, height, cols, rows) {
+        Ok(length) => length,
+        Err(error) => {
+            set_last_error(format!("placeholder SHM: {error}"));
+            return ERR_INVALID_ARG;
+        }
+    };
+
+    let readback_start = Instant::now();
+    let outcome = do_readback_with(pctx, target, width, height, |rgba| {
+        emit_shm_readback_ring(
+            rgba,
+            width,
+            height,
+            image_id,
+            placement_id,
+            cols,
+            rows,
+            emit_grid != 0,
+            expected_len,
+            readback_start.elapsed().as_micros() as u64,
+        )
+    });
+    let Some(outcome) = outcome else {
+        set_last_error("placeholder SHM: GPU readback returned no bytes");
+        let outcome = ShmEmitOutcome {
+            rc: ERR_KITTY_TRANSPORT,
+            ..ShmEmitOutcome::default()
+        };
+        write_shm_stats(
+            stats_out,
+            &outcome,
+            total_start.elapsed().as_micros() as u64,
+        );
+        return outcome.rc;
+    };
     write_shm_stats(
         stats_out,
         &outcome,

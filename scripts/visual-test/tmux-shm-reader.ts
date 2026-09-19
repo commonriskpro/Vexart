@@ -20,7 +20,7 @@ type ShmSymbols = {
   close: (fd: number) => number
 }
 
-const SHM_NAME = /^\/vx-[0-9a-f]+-[0-9a-f]+$/
+const SHM_NAME = /^\/vx-[0-9a-f]+(?:-[0-9a-f]+|-s[0-9a-f]+-g[0-9a-f]+)$/
 const O_RDONLY = 0
 
 function loadSymbols(): ShmSymbols {

@@ -222,7 +222,7 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
 
       const shmPromise = (!opts.skipProbe && caps.kittyGraphics && !isRemoteConnection())
         ? probeShm(write, addDataHandler, removeDataHandler, opts.probeTimeout ?? 2000).catch(() => false)
-        : Promise.resolve(false)
+        : Promise.resolve(!isRemoteConnection() && (caps.transmissionMode === "shm" || caps.kittyGraphics || caps.kittyPlaceholder))
 
       const colorsPromise = !opts.skipColors
         ? queryColors(rawWrite, addDataHandler, removeDataHandler, 1000).catch(() => ({ bg: null, fg: null }))
@@ -254,6 +254,9 @@ export async function createTerminal(opts: TerminalOptions = {}): Promise<Termin
         caps.kittyPlaceholder = false
         transportProbe.shm = false
         caps.transmissionMode = "direct"
+      } else if (opts.skipProbe) {
+        transportProbe.shm = !isRemoteConnection() && (caps.transmissionMode === "shm" || caps.kittyGraphics || caps.kittyPlaceholder)
+        caps.transmissionMode = transportProbe.shm ? "shm" : "direct"
       } else {
         transportProbe.shm = shmOk
         caps.transmissionMode = shmOk ? "shm" : "direct"

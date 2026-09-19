@@ -12,6 +12,7 @@ pub const ERR_SHADER_COMPILE: i32 = -6;
 pub const ERR_KITTY_TRANSPORT: i32 = -7;
 pub const ERR_INVALID_FONT: i32 = -8; // reserved — unused in Phase 2 (stubs)
 pub const ERR_INVALID_ARG: i32 = -9; // null pointer, out-of-range index, etc.
+pub const ERR_SHM_RING_FULL: i32 = -100; // SHM ring buffer is saturated awaiting terminal consumption
 
 /// Wraps an FFI export body in `catch_unwind` to prevent panics from crossing the C boundary.
 /// On panic, stores the panic message in `LAST_ERROR` and returns `ERR_PANIC`.

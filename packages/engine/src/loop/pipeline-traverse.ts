@@ -789,18 +789,18 @@ function visitNode(
     state.rectNodeById.set(node.id, node)
     const extra = ensureImageExtra(node)
     const imgBuf = extra.buffer
-    const placeholderColor = 0x00000001
+    const placeholderColor = typeof props.backgroundColor === "number"
+      ? (props.backgroundColor >>> 0)
+      : (typeof props.backgroundColor === "string" ? (parseColor(props.backgroundColor) >>> 0) : 0x00000001)
     const radius = props.cornerRadius ?? props.borderRadius ?? 0
-    const imageConfig: ImagePaintConfig | null = imgBuf
-      ? {
-          renderObjectId: node.id,
-          color: placeholderColor,
-          cornerRadius: radius,
-          imageBuffer: imgBuf,
-          nativeImageHandle: extra.nativeHandle,
-          objectFit: props.objectFit ?? "contain",
-        }
-      : null
+    const imageConfig: ImagePaintConfig = {
+      renderObjectId: node.id,
+      color: placeholderColor,
+      cornerRadius: radius,
+      imageBuffer: imgBuf ?? null,
+      nativeImageHandle: extra.nativeHandle,
+      objectFit: props.objectFit ?? "contain",
+    }
 
     let effectConfig: EffectConfig | null = null
     const hasBackdrop = hasBackdropEffect(props)
@@ -869,59 +869,26 @@ function visitNode(
       clipBounds: getCurrentClipBounds(ctx),
     }
 
-    if (imageConfig) {
-      const imageOp: ImageRenderOp = {
-        kind: "image",
-        renderObjectId: node.id,
-        type: CMD.RECTANGLE,
-        x: absX,
-        y: absY,
-        width,
-        height,
-        color: placeholderColor,
-        cornerRadius: radius,
-        extra1: 0,
-        extra2: 0,
-        nodeId: node.id,
-        rect: rectOp,
-        image: imageConfig,
-        clipBounds: getCurrentClipBounds(ctx),
-      }
-      attachClipStackToOp(imageOp, ctx)
-      emitOp(ctx, imageOp)
-    } else if (effectConfig) {
-      const backdrop = createBackdropMetadata(effectConfig, absX, absY, width, height, radius, getCurrentClipBounds(ctx), ctx.clip.stack)
-      const transformStateId = backdrop?.transformStateId ?? getTransformStateId(effectConfig)
-      const clipStateId = backdrop?.clipStateId ?? createClipStateId(ctx.clip.stack)
-      const effectStateId = backdrop?.effectStateId ?? getEffectStateId(effectConfig, radius)
-
-      const effectOp: EffectRenderOp = {
-        kind: "effect",
-        renderObjectId: node.id,
-        type: CMD.RECTANGLE,
-        x: absX,
-        y: absY,
-        width,
-        height,
-        color: placeholderColor,
-        cornerRadius: radius,
-        extra1: 0,
-        extra2: 0,
-        nodeId: node.id,
-        rect: rectOp,
-        effect: effectConfig,
-        backdrop,
-        transformStateId,
-        clipStateId,
-        effectStateId,
-        clipBounds: getCurrentClipBounds(ctx),
-      }
-      attachClipStackToOp(effectOp, ctx)
-      emitOp(ctx, effectOp)
-    } else {
-      attachClipStackToOp(rectOp, ctx)
-      emitOp(ctx, rectOp)
+    const imageOp: ImageRenderOp = {
+      kind: "image",
+      renderObjectId: node.id,
+      type: CMD.RECTANGLE,
+      x: absX,
+      y: absY,
+      width,
+      height,
+      color: placeholderColor,
+      cornerRadius: radius,
+      extra1: 0,
+      extra2: 0,
+      nodeId: node.id,
+      textureId: extra.nativeHandle ?? 0,
+      rect: rectOp,
+      image: imageConfig,
+      clipBounds: getCurrentClipBounds(ctx),
     }
+    attachClipStackToOp(imageOp, ctx)
+    emitOp(ctx, imageOp)
     if (shouldPushLayer) popLayer(ctx)
     return
   }

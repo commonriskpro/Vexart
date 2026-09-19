@@ -17,7 +17,7 @@ export type GridTextIntrinsicOptions = {
   readonly fontFamily?: string
   readonly fontWeight?: number
   readonly fontStyle?: string
-  readonly whiteSpace?: "normal" | "pre-wrap"
+  readonly whiteSpace?: "normal" | "pre-wrap" | "nowrap"
   readonly wordBreak?: "normal" | "keep-all"
 }
 
@@ -112,7 +112,9 @@ export function createGridTextIntrinsicMeasure(options: GridTextIntrinsicOptions
   const wordBreak = options.wordBreak ?? "normal"
   const normalized = normalizeTextForLayout(options.text, whiteSpace)
   const maxContent = maxUnwrappedLineWidth(normalized, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
-  const minContent = minContentWidth(normalized, wordBreak, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
+  const minContent = whiteSpace === "nowrap"
+    ? maxContent
+    : minContentWidth(normalized, wordBreak, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
   const layoutOptions = optionsForLayout(options)
   const cache = new Map<string, GridIntrinsicSizes>()
 

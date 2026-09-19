@@ -27,11 +27,20 @@ thread_local! {
     // Next animation frame number for each live Kitty image id. A missing
     // entry means the image has not been transmitted by this process yet.
     static IMAGE_FRAMES: RefCell<HashMap<u32, u32>> = RefCell::new(HashMap::new());
+    // Last direct-transport payload for each live Kitty image id. The render
+    // loop can revisit an unchanged target many times; avoid flooding stdout
+    // with identical animation frames while still allowing real pixels to
+    // update immediately.
+    static IMAGE_HASHES: RefCell<HashMap<u32, u64>> = RefCell::new(HashMap::new());
     // Dimensions of the root canvas last transmitted for each live Kitty image
     // id. Kitty animation frames belong to that root canvas; a target resize
     // therefore requires a fresh image transmit rather than an animation
     // update with a different `s`/`v` pair.
     static IMAGE_GEOMETRIES: RefCell<HashMap<u32, (u32, u32)>> = RefCell::new(HashMap::new());
+    // Test-only counter used to prove a digest is scanned once per output
+    // attempt even though the result is consumed by both cache operations.
+    #[cfg(test)]
+    static RGBA_HASH_SCANS: Cell<usize> = const { Cell::new(0) };
     // Test-only failure injection keeps output-path retry tests independent of
     // the process stdout used by the native transport.
     #[cfg(test)]
@@ -39,7 +48,7 @@ thread_local! {
     // Test-only animation support override keeps transport tests independent of
     // the host terminal environment.
     #[cfg(test)]
-    static FORCE_ANIMATION_SUPPORT: Cell<Option<bool>> = const { Cell::new(Some(true)) };
+    static FORCE_ANIMATION_SUPPORT: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 fn image_frame(image_id: u32) -> Option<u32> {
@@ -72,6 +81,9 @@ fn forget_image_frame(image_id: u32) {
     IMAGE_FRAMES.with(|frames| {
         frames.borrow_mut().remove(&image_id);
     });
+    IMAGE_HASHES.with(|hashes| {
+        hashes.borrow_mut().remove(&image_id);
+    });
     IMAGE_GEOMETRIES.with(|geometries| {
         geometries.borrow_mut().remove(&image_id);
     });
@@ -92,25 +104,49 @@ fn animation_supported() -> bool {
     if let Some(forced) = FORCE_ANIMATION_SUPPORT.with(|c| c.get()) {
         return forced;
     }
-    animation_supported_from_env(
-        std::env::var("GHOSTTY_RESOURCES_DIR").is_ok(),
-        std::env::var("TERM_PROGRAM").as_deref().ok(),
-        std::env::var("VEXART_KITTY_ANIMATION").as_deref().ok(),
-    )
+    let vexart_kitty_animation = std::env::var("VEXART_KITTY_ANIMATION").ok();
+    animation_supported_from_env(vexart_kitty_animation.as_deref())
 }
 
-fn animation_supported_from_env(
-    _ghostty_resources_dir: bool,
-    _term_program: Option<&str>,
-    vexart_kitty_animation: Option<&str>,
-) -> bool {
-    if vexart_kitty_animation == Some("1") {
-        return true;
-    }
-    if vexart_kitty_animation == Some("0") {
-        return false;
-    }
-    true
+fn animation_supported_from_env(vexart_kitty_animation: Option<&str>) -> bool {
+    vexart_kitty_animation == Some("1")
+}
+
+fn rgba_hash(rgba: &[u8]) -> u64 {
+    // This digest is an ephemeral cache key, not an integrity or security
+    // check. It is intentionally not persisted or exposed through FFI.
+    #[cfg(test)]
+    RGBA_HASH_SCANS.with(|scans| scans.set(scans.get().saturating_add(1)));
+    rgba.iter().fold(0xcbf29ce484222325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+    })
+}
+
+fn payload_hash(rgba: &[u8], width: u32, height: u32, col: i32, row: i32, z: i32) -> u64 {
+    [
+        rgba_hash(rgba),
+        u64::from(width),
+        u64::from(height),
+        col as u64,
+        row as u64,
+        z as u64,
+    ]
+    .into_iter()
+    .fold(0xcbf29ce484222325, |hash, value| {
+        value.to_le_bytes().iter().fold(hash, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+        })
+    })
+}
+
+fn payload_unchanged(image_id: u32, digest: u64) -> bool {
+    IMAGE_HASHES.with(|hashes| hashes.borrow().get(&image_id).copied() == Some(digest))
+}
+
+fn record_payload(image_id: u32, digest: u64) {
+    IMAGE_HASHES.with(|hashes| {
+        hashes.borrow_mut().insert(image_id, digest);
+    });
 }
 
 fn needs_full_transmit(image_id: u32, width: u32, height: u32) -> bool {
@@ -213,6 +249,7 @@ pub fn set_transport_mode(mode: u32) -> i32 {
 pub fn cleanup_shm_on_shutdown() {
     crate::kitty::shm::cleanup_all_shm_handles();
     IMAGE_FRAMES.with(|cell| cell.borrow_mut().clear());
+    IMAGE_HASHES.with(|cell| cell.borrow_mut().clear());
     IMAGE_GEOMETRIES.with(|cell| cell.borrow_mut().clear());
 }
 
@@ -319,19 +356,32 @@ fn do_readback(
 ) -> u32 {
     use crate::composite::readback::readback_full;
 
+    let needed = match (width as usize).checked_mul(height as usize).and_then(|px| px.checked_mul(4)) {
+        Some(size) => size,
+        None => return 0,
+    };
+    dst.resize(needed, 0);
+
     let rec = match pctx.targets.get_mut(target) {
         Some(r) => r,
         None => return 0,
     };
 
-    let rb_buf = rec.ensure_readback_buffer(&pctx.wgpu.device);
-    let rb_buf_ptr: *const wgpu::Buffer = rb_buf;
+    rec.advance_staging_slot();
+    let (storage_buf, staging_buf, bind_group) = match rec
+        .ensure_readback_buffers(&pctx.wgpu.device, &pctx.wgpu.pipelines.unpremultiply_bgl)
+    {
+        Some(bufs) => bufs,
+        None => return 0,
+    };
+    let storage_ptr: *const wgpu::Buffer = storage_buf;
+    let staging_ptr: *const wgpu::Buffer = staging_buf;
+    let bg_ptr: *const wgpu::BindGroup = bind_group;
     let device_ptr: *const wgpu::Device = &pctx.wgpu.device;
     let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue;
-    let texture_ptr: *const wgpu::Texture = &rec.texture;
-    let padded = rec.padded_bytes_per_row;
+    let pipeline_ptr: *const wgpu::ComputePipeline = &pctx.wgpu.pipelines.unpremultiply_pack;
 
-    // SAFETY: device, queue, texture, readback_buffer are all owned by pctx and
+    // SAFETY: device, queue, pipeline, buffers are all owned by pctx and
     // are stable (not moved/dropped) during this call. We hold pctx mutably, which
     // ensures exclusive access. The raw pointers are valid for the duration of
     // readback_full (a synchronous blocking call).
@@ -339,11 +389,12 @@ fn do_readback(
         readback_full(
             &*device_ptr,
             &*queue_ptr,
-            &*texture_ptr,
+            &*pipeline_ptr,
+            &*bg_ptr,
+            &*storage_ptr,
+            &*staging_ptr,
             width,
             height,
-            padded,
-            &*rb_buf_ptr,
             dst.as_mut_ptr(),
             dst.len() as u32,
         )
@@ -351,8 +402,7 @@ fn do_readback(
 }
 
 /// Read a full target and consume packed RGBA bytes while the GPU readback
-/// buffer is mapped. Aligned rows are borrowed directly; padded rows use the
-/// exact packed fallback in `readback_full_with`.
+/// buffer is mapped.
 pub(super) fn do_readback_with<R, F>(
     pctx: &mut PaintContext,
     target: u64,
@@ -365,34 +415,32 @@ where
 {
     use crate::composite::readback::readback_full_with;
 
-    let mut scratch = std::mem::take(&mut pctx.readback_scratch);
     let device_ptr: *const wgpu::Device = &pctx.wgpu.device;
     let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue;
-    let rec = match pctx.targets.get_mut(target) {
-        Some(r) => r,
-        None => {
-            pctx.readback_scratch = scratch;
-            return None;
-        }
-    };
-    let rb_buf = rec.ensure_readback_buffer(unsafe { &*device_ptr });
-    let rb_buf_ptr: *const wgpu::Buffer = rb_buf;
-    let texture_ptr: *const wgpu::Texture = &rec.texture;
-    let padded = rec.padded_bytes_per_row;
+    let pipeline_ptr: *const wgpu::ComputePipeline = &pctx.wgpu.pipelines.unpremultiply_pack;
+    let bgl_ptr: *const wgpu::BindGroupLayout = &pctx.wgpu.pipelines.unpremultiply_bgl;
 
-    let result = readback_full_with(
-        unsafe { &*device_ptr },
-        unsafe { &*queue_ptr },
-        unsafe { &*texture_ptr },
-        width,
-        height,
-        padded,
-        unsafe { &*rb_buf_ptr },
-        &mut scratch,
-        callback,
-    );
-    pctx.readback_scratch = scratch;
-    result
+    let rec = pctx.targets.get_mut(target)?;
+    rec.advance_staging_slot();
+    let (storage_buf, staging_buf, bind_group) =
+        rec.ensure_readback_buffers(unsafe { &*device_ptr }, unsafe { &*bgl_ptr })?;
+    let storage_ptr: *const wgpu::Buffer = storage_buf;
+    let staging_ptr: *const wgpu::Buffer = staging_buf;
+    let bg_ptr: *const wgpu::BindGroup = bind_group;
+
+    unsafe {
+        readback_full_with(
+            &*device_ptr,
+            &*queue_ptr,
+            &*pipeline_ptr,
+            &*bg_ptr,
+            &*storage_ptr,
+            &*staging_ptr,
+            width,
+            height,
+            callback,
+        )
+    }
 }
 
 // ─── Native Presentation exports (Phase 2b) ────────────────────────────────
@@ -420,6 +468,64 @@ pub unsafe fn emit_frame_shm_owned(
 ) -> i32 {
     *out_handle = 0;
     emit_frame_with_owner(pctx, target, image_id, stats_out, Some(out_handle))
+}
+
+/// Emit a frame using the fixed SHM ring buffer with backpressure.
+pub unsafe fn emit_frame_shm_ring(
+    pctx: &mut PaintContext,
+    target: u64,
+    image_id: u32,
+    stats_out: *mut NativePresentationStats,
+) -> i32 {
+    let t0 = Instant::now();
+    let (width, height) = match resolve_target_dims(pctx, target) {
+        Some(d) => d,
+        None => {
+            set_last_error(format!(
+                "emit_frame_shm_ring: invalid target handle {target}"
+            ));
+            return ERR_KITTY_TRANSPORT;
+        }
+    };
+    let pixel_count = (width as usize) * (height as usize) * 4;
+
+    let t_rb = Instant::now();
+    let mut readback_us = 0u64;
+    let mut encode_us = 0u64;
+    let result = do_readback_with(pctx, target, width, height, |rgba| {
+        readback_us = t_rb.elapsed().as_micros() as u64;
+        let t_enc = Instant::now();
+        let res = emit_shm_rgba_with_owner(rgba, width, height, image_id, 0, 0, 0, None);
+        encode_us = t_enc.elapsed().as_micros() as u64;
+        res
+    });
+    let (rc, transfer) = match result {
+        Some(result) => result,
+        None => {
+            set_last_error("emit_frame_shm_ring: GPU readback returned 0 bytes");
+            return ERR_KITTY_TRANSPORT;
+        }
+    };
+    let total_us = t0.elapsed().as_micros() as u64;
+
+    if !stats_out.is_null() {
+        let stats = &mut *stats_out;
+        stats.version = NativePresentationStats::VERSION;
+        stats.mode = NativePresentationStats::MODE_FINAL_FRAME;
+        stats.rgba_bytes_read = 0;
+        stats.kitty_bytes_emitted = pixel_count as u64;
+        stats.readback_us = readback_us;
+        stats.encode_us = encode_us;
+        stats.write_us = transfer.write_us;
+        stats.total_us = total_us;
+        stats.transport = NativePresentationStats::TRANSPORT_SHM;
+        stats.flags = NativePresentationStats::FLAG_NATIVE_USED;
+        if rc == OK {
+            stats.flags |= NativePresentationStats::FLAG_VALID;
+        }
+        write_transfer_stats(stats, transfer);
+    }
+    rc
 }
 
 unsafe fn emit_frame_with_owner(
@@ -732,6 +838,10 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
+    let digest = payload_hash(rgba, width, height, 0, 0, 0);
+    if payload_unchanged(image_id, digest) {
+        return OK;
+    }
     let (target_frame, escaped) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -763,6 +873,7 @@ fn emit_direct_inner(rgba: &[u8], width: u32, height: u32, image_id: u32) -> i32
         Ok(()) => {
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
+            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -827,7 +938,7 @@ fn emit_shm_rgba_at_with_stats(
 
 fn emit_shm_rgba_with_owner(
     rgba: &[u8], width: u32, height: u32, image_id: u32,
-    col: i32, row: i32, _z: i32, owner: Option<&mut u64>,
+    col: i32, row: i32, z: i32, owner: Option<&mut u64>,
 ) -> (i32, ShmTransferStats) {
     use crate::kitty::encoder::PixelPayload;
     use base64::engine::general_purpose::STANDARD as B64;
@@ -839,6 +950,10 @@ fn emit_shm_rgba_with_owner(
     };
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
+    let digest = payload_hash(rgba, width, height, col, row, z);
+    if owner.is_none() && payload_unchanged(image_id, digest) {
+        return (OK, stats);
+    }
     let compression = shm_compression_enabled();
     let t_compress = Instant::now();
     let encoded = PixelPayload::encode(rgba, compression);
@@ -854,7 +969,7 @@ fn emit_shm_rgba_with_owner(
     let t_shm = Instant::now();
     let (lease, shm_name) = match ShmLease::prepare(payload, owner.is_some()) {
         Ok(res) => res,
-        Err(_) => return (ERR_KITTY_TRANSPORT, stats),
+        Err(rc) => return (rc, stats),
     };
     stats.shm_prepare_us = t_shm.elapsed().as_micros() as u64;
     let name_b64 = B64.encode(shm_name.as_bytes());
@@ -894,6 +1009,7 @@ fn emit_shm_rgba_with_owner(
             lease.publish(owner);
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
+            record_payload(image_id, digest);
             (OK, stats)
         }
         Err(e) => {
@@ -911,11 +1027,15 @@ fn emit_direct_rgba_at(
     image_id: u32,
     col: i32,
     row: i32,
-    _z: i32,
+    z: i32,
 ) -> i32 {
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
     let full_transmit = animation_frame.is_none();
+    let digest = payload_hash(rgba, width, height, col, row, z);
+    if payload_unchanged(image_id, digest) {
+        return OK;
+    }
     let (target_frame, escaped) = if let Some(existing) = animation_frame {
         let (target_frame, compose_frame, is_replacement) =
             next_animation_frame(Some(existing));
@@ -949,6 +1069,7 @@ fn emit_direct_rgba_at(
         Ok(()) => {
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
+            record_payload(image_id, digest);
             OK
         }
         Err(e) => {
@@ -1072,6 +1193,18 @@ mod tests {
         FORCE_WRITE_FAILURE.with(|failure| failure.set(value));
     }
 
+    fn force_animation_support(value: Option<bool>) {
+        FORCE_ANIMATION_SUPPORT.with(|c| c.set(value));
+    }
+
+    fn reset_hash_scan_count() {
+        RGBA_HASH_SCANS.with(|scans| scans.set(0));
+    }
+
+    fn hash_scan_count() -> usize {
+        RGBA_HASH_SCANS.with(|scans| scans.get())
+    }
+
     #[test]
     fn test_set_transport_mode_valid() {
         assert_eq!(set_transport_mode(0), OK);
@@ -1153,18 +1286,131 @@ mod tests {
     #[test]
     fn test_delete_clears_frame_and_geometry() {
         let image_id = 40_005;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
         record_image_frame(image_id, None);
         record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, digest);
 
         forget_image_frame(image_id);
 
         assert!(image_frame(image_id).is_none());
+        assert!(!payload_unchanged(image_id, digest));
         assert!(image_geometry(image_id).is_none());
+    }
+
+    #[test]
+    fn test_identical_payload_skips_direct_and_shm_output() {
+        let image_id = 40_001;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
+        force_write_failure(true);
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, digest);
+
+        assert_eq!(emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 3, 4), OK);
+        let result = emit_shm_rgba_at_with_stats(&rgba, 1, 1, image_id, 2, 3, 4);
+        assert_eq!(result.0, OK);
+        assert_eq!(result.1.raw_bytes, rgba.len() as u64);
+        assert_eq!(result.1.payload_bytes, 0);
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_changed_pixels_attempt_output_and_keep_previous_digest_on_failure() {
+        let image_id = 40_002;
+        let previous = [0x10, 0x20, 0x30, 0xff];
+        let changed = [0x11, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&previous, 1, 1, 2, 3, 4);
+        let changed_digest = payload_hash(&changed, 1, 1, 2, 3, 4);
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, previous_digest);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(&changed, 1, 1, image_id, 2, 3, 4),
+            ERR_KITTY_TRANSPORT
+        );
+        assert!(!payload_unchanged(image_id, changed_digest));
+        assert!(payload_unchanged(image_id, previous_digest));
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_changed_metadata_attempts_output() {
+        let image_id = 40_003;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
+        let changed_digest = payload_hash(&rgba, 1, 1, 2, 4, 4);
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, previous_digest);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 4, 4),
+            ERR_KITTY_TRANSPORT
+        );
+        assert!(!payload_unchanged(image_id, changed_digest));
+        assert!(payload_unchanged(image_id, previous_digest));
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_failed_output_does_not_commit_digest() {
+        let image_id = 40_004;
+        let rgba = [0x10, 0x20, 0x30, 0xff];
+        let digest = payload_hash(&rgba, 1, 1, 0, 0, 0);
+        force_write_failure(true);
+
+        assert_eq!(
+            emit_direct_rgba_at(&rgba, 1, 1, image_id, 0, 0, 0),
+            ERR_KITTY_TRANSPORT
+        );
+        assert!(!payload_unchanged(image_id, digest));
+        assert!(image_frame(image_id).is_none());
+
+        force_write_failure(false);
+        forget_image_frame(image_id);
+    }
+
+    #[test]
+    fn test_payload_cache_consumes_one_rgba_scan_per_attempt() {
+        let image_id = 40_006;
+        let previous = [0x10, 0x20, 0x30, 0xff];
+        let changed = [0x11, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, previous_digest);
+        reset_hash_scan_count();
+        force_write_failure(false);
+
+        assert_eq!(emit_direct_rgba_at(&changed, 1, 1, image_id, 0, 0, 0), OK);
+        assert_eq!(hash_scan_count(), 1);
+
+        reset_hash_scan_count();
+        let result = emit_shm_rgba_at_with_stats(&changed, 1, 1, image_id, 0, 0, 0);
+        assert_eq!(result.0, OK);
+        assert_eq!(result.1.payload_bytes, 0);
+        assert_eq!(hash_scan_count(), 1);
+
+        forget_image_frame(image_id);
+        cleanup_shm_on_shutdown();
     }
 
     #[test]
     fn test_dimension_change_requires_full_transmit() {
         let image_id = 40_007;
+        force_animation_support(Some(true));
         record_image_frame(image_id, None);
         record_image_geometry(image_id, 200, 120);
 
@@ -1172,13 +1418,28 @@ mod tests {
         assert!(needs_full_transmit(image_id, 320, 180));
 
         forget_image_frame(image_id);
+        force_animation_support(None);
+    }
+
+    #[test]
+    fn test_animation_disabled_by_default_requires_full_transmit() {
+        let image_id = 40_011;
+        record_image_frame(image_id, None);
+        record_image_geometry(image_id, 200, 120);
+
+        assert!(needs_full_transmit(image_id, 200, 120));
+
+        forget_image_frame(image_id);
     }
 
     #[test]
     fn test_failed_resize_transmit_preserves_previous_geometry() {
         let image_id = 40_008;
+        let previous = [0x10, 0x20, 0x30, 0xff];
+        let previous_digest = payload_hash(&previous, 1, 1, 0, 0, 0);
         record_image_frame(image_id, None);
         record_image_geometry(image_id, 1, 1);
+        record_payload(image_id, previous_digest);
         force_write_failure(true);
 
         assert_eq!(
@@ -1195,6 +1456,7 @@ mod tests {
         );
         assert_eq!(image_frame(image_id), Some(1));
         assert_eq!(image_geometry(image_id), Some((1, 1)));
+        assert!(payload_unchanged(image_id, previous_digest));
 
         force_write_failure(false);
         forget_image_frame(image_id);
@@ -1340,13 +1602,11 @@ mod tests {
 
     #[test]
     fn test_animation_supported_detection() {
-        assert!(animation_supported_from_env(false, None, None));
-        assert!(animation_supported_from_env(true, None, None));
-        assert!(animation_supported_from_env(false, Some("ghostty"), None));
-        assert!(animation_supported_from_env(true, Some("ghostty"), Some("1")));
-        assert!(!animation_supported_from_env(false, Some("ghostty"), Some("0")));
-        assert!(!animation_supported_from_env(false, Some("xterm-kitty"), Some("0")));
-        assert!(animation_supported_from_env(false, Some("xterm-kitty"), None));
-        assert!(animation_supported_from_env(false, Some("iTerm.app"), None));
+        assert!(animation_supported_from_env(Some("1")));
+        assert!(!animation_supported_from_env(Some("0")));
+        assert!(!animation_supported_from_env(None));
+        assert!(!animation_supported_from_env(Some("true")));
+        assert!(!animation_supported_from_env(Some("ghostty")));
+        assert!(!animation_supported_from_env(Some("xterm-kitty")));
     }
 }

@@ -23,7 +23,7 @@ const RAW_CHUNK_SIZE: usize = 3072;
 
 /// Compress RGBA bytes with zlib (deflate) and return the compressed bytes.
 pub fn compress_rgba(rgba: &[u8]) -> Result<Vec<u8>, std::io::Error> {
-    let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+    let mut enc = ZlibEncoder::new(Vec::new(), Compression::fast());
     enc.write_all(rgba)?;
     enc.finish()
 }

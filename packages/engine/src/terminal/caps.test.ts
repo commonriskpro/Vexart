@@ -135,6 +135,51 @@ describe("terminal capability replies", () => {
     }
   })
 
+  test("infers POSIX SHM transmissionMode by default for local connections across all Kitty-capable terminals", () => {
+    const origEnv = { ...process.env }
+    try {
+      delete process.env["TMUX"]
+      delete process.env["SSH_CONNECTION"]
+      delete process.env["SSH_CLIENT"]
+      delete process.env["SSH_TTY"]
+
+      for (const kind of ["ghostty", "kitty", "herdr", "wezterm", "foot", "contour"] as const) {
+        const caps = inferCaps(kind)
+        expect(caps.kittyGraphics).toBe(true)
+        expect(caps.transmissionMode).toBe("shm")
+      }
+
+      // Terminals without graphics default to direct
+      for (const kind of ["alacritty", "iterm2", "xterm", "unknown"] as const) {
+        const caps = inferCaps(kind)
+        expect(caps.transmissionMode).toBe("direct")
+      }
+    } finally {
+      for (const key of Object.keys(process.env)) {
+        if (!(key in origEnv)) delete process.env[key]
+      }
+      Object.assign(process.env, origEnv)
+    }
+  })
+
+  test("infers direct transmissionMode when running over SSH", () => {
+    const origEnv = { ...process.env }
+    try {
+      delete process.env["TMUX"]
+      process.env["SSH_CONNECTION"] = "192.168.1.1 12345 192.168.1.2 22"
+
+      for (const kind of ["ghostty", "kitty", "herdr", "wezterm", "foot", "contour"] as const) {
+        const caps = inferCaps(kind)
+        expect(caps.transmissionMode).toBe("direct")
+      }
+    } finally {
+      for (const key of Object.keys(process.env)) {
+        if (!(key in origEnv)) delete process.env[key]
+      }
+      Object.assign(process.env, origEnv)
+    }
+  })
+
   test("createTerminal dispatches startup probes concurrently", async () => {
     const origTmux = process.env.TMUX
     const origTerm = process.env.TERM

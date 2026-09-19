@@ -643,8 +643,8 @@ export function StudioApp(props: StudioAppProps) {
                 <box width="grow" height="100%" direction="column" padding={20} gap={12}>
                   {/* Top Bar: Name + Fit/100% controls */}
                   <box width="100%" height={36} direction="row" alignY="center" alignX="space-between">
-                    <text color="#f1f2f3" fontSize={20} fontWeight={600} fontFamily={ui.sans}>{image().name}</text>
-                    <box direction="row" gap={4}>
+                    <text color="#f1f2f3" fontSize={20} fontWeight={600} fontFamily={ui.sans} flexShrink={0} whiteSpace="nowrap">{image().name}</text>
+                    <box direction="row" gap={4} flexShrink={0}>
                       <Button focusId="studio-fit" onPress={() => model.setFit("fit")} renderButton={(button) => (
                         <box width={69} height={35} {...button.buttonProps} alignX="center" alignY="center" backgroundColor={model.fit() === "fit" ? "#3a3d3f" : "#171a1b"} borderColor={button.focused ? "#f6bd49" : "#55595b"} borderWidth={1} cornerRadius={6}>
                           <text color="#eceeef" fontSize={13} fontFamily={ui.sans}>Fit</text>

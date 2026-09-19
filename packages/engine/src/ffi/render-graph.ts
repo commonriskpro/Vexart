@@ -47,7 +47,7 @@ export type RenderCommand = {
   fontWeight?: number
   fontStyle?: string
   /** @internal Text layout mode forwarded from the TS layout pass. */
-  whiteSpace?: "normal" | "pre-wrap"
+  whiteSpace?: "normal" | "pre-wrap" | "nowrap"
   /** @internal Text word-breaking mode forwarded from the TS layout pass. */
   wordBreak?: "normal" | "keep-all"
   /** Stable node ID for matching render ops to effects/images. */
@@ -150,7 +150,7 @@ export type ImagePaintConfig = {
   renderObjectId?: number
   color: number
   cornerRadius: number
-  imageBuffer: { data: Uint8Array; width: number; height: number }
+  imageBuffer?: { data: Uint8Array; width: number; height: number } | null
   nativeImageHandle?: bigint | null
   objectFit: "contain" | "cover" | "fill" | "none"
 }
@@ -197,7 +197,7 @@ type BaseRenderOpFields = {
   fontWeight?: number
   fontStyle?: string
   /** @internal Text layout mode forwarded from the TS layout pass. */
-  whiteSpace?: "normal" | "pre-wrap"
+  whiteSpace?: "normal" | "pre-wrap" | "nowrap"
   /** @internal Text word-breaking mode forwarded from the TS layout pass. */
   wordBreak?: "normal" | "keep-all"
   nodeId?: number
@@ -219,6 +219,7 @@ export type ImageRenderOp = {
   kind: "image"
   rect: RectangleRenderOp
   image: ImagePaintConfig
+  textureId?: bigint | number | null
 } & BaseRenderOpFields
 
 /** @public */

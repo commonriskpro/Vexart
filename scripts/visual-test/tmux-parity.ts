@@ -610,7 +610,7 @@ export function parsePhysicalCapture(raw: Buffer, route: PhysicalCaptureRoute): 
 }
 
 function ownedShmName(name: string): boolean {
-  return /^\/vx-[0-9a-f]+-[0-9a-f]+$/.test(name) && name.length <= 31
+  return /^\/vx-[0-9a-f]+(?:-[0-9a-f]+|-s[0-9a-f]+-g[0-9a-f]+)$/.test(name) && name.length <= 31
 }
 
 function inspectPhysicalPackets(raw: Buffer, route: "direct" | "tmux", width: number, height: number, expectedCols: number, expectedRows: number): PhysicalPacketReport {

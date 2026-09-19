@@ -17,7 +17,7 @@
  */
 
 import type { Terminal } from "../terminal/index"
-import { CMD, type RenderCommand } from "../ffi/render-graph"
+import { CMD, type RenderCommand, type ImageRenderOp } from "../ffi/render-graph"
 
 import { resolveProps, type TGENode } from "../ffi/node"
 import { isLayoutProp } from "../ffi/flex-sync"
@@ -275,6 +275,39 @@ function syncVisualPropsToOps(buckets: LayerOpBucket[], nodeRefById: Map<number,
         }
       } else if (op.kind === "text") {
         if (typeof resolved.color === "number") op.color = resolved.color >>> 0
+      } else if (op.kind === "image" || (op as any).type === "image") {
+        const imageOp = op as ImageRenderOp
+        const extra = node._imageExtra
+        let textureChanged = false
+        if (extra) {
+          const newHandle = extra.nativeHandle ?? 0
+          if (imageOp.textureId !== newHandle) {
+            imageOp.textureId = newHandle
+            textureChanged = true
+          }
+          if (imageOp.image) {
+            if (imageOp.image.nativeImageHandle !== extra.nativeHandle) {
+              imageOp.image.nativeImageHandle = extra.nativeHandle
+              textureChanged = true
+            }
+            if (extra.buffer && imageOp.image.imageBuffer !== extra.buffer) {
+              imageOp.image.imageBuffer = extra.buffer
+              textureChanged = true
+            }
+          }
+        }
+        if (textureChanged) {
+          markLayerDirtyByKey(bucket.key)
+        }
+        if (typeof resolved.backgroundColor === "number") imageOp.color = resolved.backgroundColor >>> 0
+        if (typeof resolved.cornerRadius === "number") {
+          imageOp.cornerRadius = resolved.cornerRadius
+          if (imageOp.image) imageOp.image.cornerRadius = resolved.cornerRadius
+          if (imageOp.rect) {
+            imageOp.rect.cornerRadius = resolved.cornerRadius
+            imageOp.rect.radius = resolved.cornerRadius
+          }
+        }
       }
     }
   }

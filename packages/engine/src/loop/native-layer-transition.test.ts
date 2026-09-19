@@ -59,7 +59,7 @@ test("keeps moved retained content in the exact complete-frame geometry", async 
   const packets = await runFixture({ VEXART_NATIVE_LAYER_MOVE_ONLY: "1" })
   const headers = packets.map((packet) => packet.header)
   expect(headers.filter((header) => header.includes("s=40,v=40"))).toEqual([])
-  const updates = packets.filter((packet) => packet.header.includes("a=f") && packet.header.includes("s=320,v=200"))
+  const updates = packets.filter((packet) => (packet.header.includes("a=T") || packet.header.includes("a=f")) && packet.header.includes("s=320,v=200"))
   expect(updates.length).toBeGreaterThan(0)
 
   const lastUpdate = updates.at(-1)!

@@ -68,7 +68,7 @@ export type LayoutLine = {
 
 /** Options that affect text measurement and line breaking. */
 export type TextLayoutOptions = {
-  whiteSpace?: "normal" | "pre-wrap"
+  whiteSpace?: "normal" | "pre-wrap" | "nowrap"
   wordBreak?: "normal" | "keep-all"
   fontFamily?: string
   fontWeight?: number
@@ -241,6 +241,10 @@ function layoutWithNativeMeasure(
     if (current) pushLine(current)
   }
 
+  const wrapNowrapParagraph = (para: string) => {
+    lines.push({ text: para, width: Math.ceil(measureWord(para)) })
+  }
+
   const wrapPreformattedParagraph = (para: string) => {
     if (para.length === 0) {
       lines.push({ text: "", width: 0 })
@@ -280,6 +284,7 @@ function layoutWithNativeMeasure(
 
   for (const para of paragraphs) {
     if (whiteSpace === "pre-wrap") wrapPreformattedParagraph(para)
+    else if (whiteSpace === "nowrap") wrapNowrapParagraph(para)
     else wrapNormalParagraph(para)
   }
 
@@ -291,8 +296,8 @@ function layoutWithNativeMeasure(
 }
 
 /** Normalize text before it is measured or sent to the native renderer. */
-export function normalizeTextForLayout(text: string, whiteSpace: "normal" | "pre-wrap" = "normal"): string {
-  return whiteSpace === "normal" ? text.replace(/\s+/g, " ").trim() : text
+export function normalizeTextForLayout(text: string, whiteSpace: "normal" | "pre-wrap" | "nowrap" = "normal"): string {
+  return whiteSpace === "normal" || whiteSpace === "nowrap" ? text.replace(/\s+/g, " ").trim() : text
 }
 
 // ── Native font measurement (Rust FFI) ──

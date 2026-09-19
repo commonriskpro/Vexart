@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { CMD } from "../ffi/render-graph"
+import { CMD, type ImageRenderOp } from "../ffi/render-graph"
 import { registerAnimationDescriptor, markLayerBacked, deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createLayerStore, type Layer } from "../ffi/layers"
-import { createNode, insertChild, parseSizing, type TGENode } from "../ffi/node"
+import { createNode, insertChild, parseSizing, ensureImageExtra, type TGENode } from "../ffi/node"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import {
@@ -488,5 +488,69 @@ describe("compositeFrame interaction sequencing (Decision 9 Option A)", () => {
     expect(box._hovered).toBe(false)
     expect(borderCmd?.extra1).toBe(0)
     expect(borderCmd?.color).toBe(0)
+  })
+
+  test("in-place texture binding updates op.textureId and marks layer dirty when image finishes loading", () => {
+    const layout = createVexartLayoutCtx()
+    layout.setDimensions(200, 120)
+
+    const root = createNode("root")
+    root.props.width = 200
+    root.props.height = 120
+    root._widthSizing = parseSizing(200)
+    root._heightSizing = parseSizing(120)
+    syncAllLayoutProps(root)
+
+    const img = createNode("img")
+    img.props.width = 100
+    img.props.height = 50
+    img._widthSizing = parseSizing(100)
+    img._heightSizing = parseSizing(50)
+    syncAllLayoutProps(img)
+    insertChild(root, img)
+
+    const state = createTestCompositeState(root, layout)
+    const layer = state.layerCache.get("bg")!
+    state.layerCache.set("root", layer)
+    bindLayerDirtyStore(state.layerCache)
+
+    // Initial frame while image is not yet loaded
+    compositeFrame(state)
+
+    const rootBucket = state.lastLayerBuckets?.[0]
+    expect(rootBucket).toBeDefined()
+    const imageOp = rootBucket?.ops.find((op) => op.kind === "image") as ImageRenderOp
+    expect(imageOp).toBeDefined()
+    expect(imageOp.textureId).toBe(0)
+    expect(imageOp.image.nativeImageHandle).toBeNull()
+
+    // Reset dirty state on the layer to simulate stable rendered layer
+    if (layer) {
+      layer.dirty = false
+      layer.damageRect = null
+    }
+
+    // Simulate async decode completion
+    const extra = ensureImageExtra(img)
+    extra.nativeHandle = 9999n
+    extra.buffer = {
+      data: new Uint8Array([255, 0, 0, 255]),
+      width: 10,
+      height: 10,
+    }
+    extra.state = "loaded"
+
+    // Next frame without layout dirty
+    compositeFrame(state)
+
+    // Image op in lastLayerBuckets updated in-place
+    expect(imageOp.textureId).toBe(9999n)
+    expect(imageOp.image.nativeImageHandle).toBe(9999n)
+    expect(imageOp.image.imageBuffer).toBe(extra.buffer)
+
+    // And the layer was marked dirty
+    expect(layer?.dirty).toBe(true)
+
+    unbindLayerDirtyStore(state.layerCache)
   })
 })

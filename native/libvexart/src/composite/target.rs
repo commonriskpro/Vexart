@@ -9,8 +9,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub struct TargetRecord {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
-    /// MAP_READ buffer sized to hold the full frame (padded rows), lazily allocated on first readback.
-    pub readback_buffer: Option<wgpu::Buffer>,
+    /// Storage buffer for compute unpremultiply output (width * height * 4).
+    pub storage_buffer: Option<wgpu::Buffer>,
+    /// Double-buffered MAP_READ staging buffers (width * height * 4) for pipelined readback.
+    pub staging_buffers: [Option<wgpu::Buffer>; 2],
+    /// Current ping-pong staging buffer index (0 or 1).
+    pub staging_index: usize,
+    /// State tracking whether each staging slot is currently in the Mapped state.
+    pub staging_mapped: [bool; 2],
+    /// Uniform buffer holding width and height for unpremultiply pass.
+    pub uniform_buffer: Option<wgpu::Buffer>,
+    /// Cached compute bind group for unpremultiply pass.
+    pub compute_bind_group: Option<wgpu::BindGroup>,
     pub width: u32,
     pub height: u32,
     /// Bytes per row padded to 256-byte WGPU alignment.
@@ -47,7 +57,12 @@ impl TargetRecord {
         Self {
             texture,
             view,
-            readback_buffer,
+            storage_buffer: None,
+            staging_buffers: [readback_buffer, None],
+            staging_index: 0,
+            staging_mapped: [false; 2],
+            uniform_buffer: None,
+            compute_bind_group: None,
             width,
             height,
             padded_bytes_per_row,
@@ -56,21 +71,132 @@ impl TargetRecord {
         }
     }
 
+    /// Safely unmap a staging buffer slot if it is currently mapped.
+    pub fn unmap_staging(&mut self, slot: usize) {
+        if slot < 2 && self.staging_mapped[slot] {
+            if let Some(buf) = &self.staging_buffers[slot] {
+                buf.unmap();
+            }
+            self.staging_mapped[slot] = false;
+        }
+    }
+
+    /// Safely unmap all staging buffers. Called on drop and target recreation.
+    pub fn unmap_all_staging(&mut self) {
+        self.unmap_staging(0);
+        self.unmap_staging(1);
+    }
+
+    /// Advance the ping-pong staging slot (alternating 0 and 1).
+    /// Unmaps the target slot if it was previously mapped so it is ready for copy.
+    pub fn advance_staging_slot(&mut self) -> usize {
+        let slot = self.staging_index;
+        self.staging_index = (self.staging_index + 1) % 2;
+        self.unmap_staging(slot);
+        slot
+    }
+
+    /// Access the primary staging buffer for backwards compatibility.
+    pub fn readback_buffer(&self) -> Option<&wgpu::Buffer> {
+        self.staging_buffers[0].as_ref()
+    }
+
     /// Lazily allocate the MAP_READ readback buffer on first readback call.
     pub fn ensure_readback_buffer(&mut self, device: &wgpu::Device) -> &wgpu::Buffer {
-        if self.readback_buffer.is_none() {
-            let readback_size = (self.padded_bytes_per_row as u64)
+        if self.staging_buffers[0].is_none() {
+            let readback_size = (self.width as u64)
                 .checked_mul(self.height as u64)
+                .and_then(|px| px.checked_mul(4))
                 .expect("overflow in readback_size");
             let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("vexart-readback-buffer"),
+                label: Some("vexart-readback-staging-buffer-0"),
                 size: readback_size,
                 usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-            self.readback_buffer = Some(buffer);
+            self.staging_buffers[0] = Some(buffer);
         }
-        self.readback_buffer.as_ref().unwrap()
+        self.staging_buffers[0].as_ref().unwrap()
+    }
+
+    /// Lazily allocate the storage buffer, double-buffered MAP_READ staging buffers,
+    /// uniform buffer, and compute bind group on first readback call.
+    pub fn ensure_readback_buffers(
+        &mut self,
+        device: &wgpu::Device,
+        bgl: &wgpu::BindGroupLayout,
+    ) -> Option<(&wgpu::Buffer, &wgpu::Buffer, &wgpu::BindGroup)> {
+        let size = (self.width as u64)
+            .checked_mul(self.height as u64)?
+            .checked_mul(4)?;
+
+        if self.storage_buffer.is_none() {
+            let storage_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("vexart-unpremultiply-storage-buffer"),
+                size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            self.storage_buffer = Some(storage_buffer);
+        }
+
+        for i in 0..2 {
+            if self.staging_buffers[i].is_none() {
+                let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some(if i == 0 {
+                        "vexart-readback-staging-buffer-0"
+                    } else {
+                        "vexart-readback-staging-buffer-1"
+                    }),
+                    size,
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                self.staging_buffers[i] = Some(staging_buffer);
+            }
+        }
+
+        if self.uniform_buffer.is_none() {
+            use wgpu::util::DeviceExt;
+            let uniforms: [u32; 4] = [self.width, self.height, 0, 0];
+            let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("vexart-unpremultiply-uniform-buffer"),
+                contents: bytemuck::cast_slice(&uniforms),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            self.uniform_buffer = Some(uniform_buffer);
+        }
+
+        if self.compute_bind_group.is_none() {
+            let storage_buffer = self.storage_buffer.as_ref().unwrap();
+            let uniform_buffer = self.uniform_buffer.as_ref().unwrap();
+            let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vexart-unpremultiply-bind-group"),
+                layout: bgl,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: storage_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: uniform_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            self.compute_bind_group = Some(compute_bind_group);
+        }
+
+        self.unmap_staging(self.staging_index);
+        Some((
+            self.storage_buffer.as_ref().unwrap(),
+            self.staging_buffers[self.staging_index].as_ref().unwrap(),
+            self.compute_bind_group.as_ref().unwrap(),
+        ))
     }
 
     pub fn set_scissor(&mut self, x: u32, y: u32, width: u32, height: u32) {
@@ -85,6 +211,12 @@ impl TargetRecord {
         if let Some(layer) = self.active_layer.as_mut() {
             layer.clear_scissor();
         }
+    }
+}
+
+impl Drop for TargetRecord {
+    fn drop(&mut self) {
+        self.unmap_all_staging();
     }
 }
 
@@ -386,13 +518,13 @@ mod tests {
         assert_eq!(rec.width, 64);
         assert_eq!(rec.height, 64);
         assert_eq!(rec.padded_bytes_per_row, 256);
-        assert!(rec.readback_buffer.is_none(), "readback buffer must be lazily unallocated on create");
+        assert!(rec.staging_buffers[0].is_none(), "readback buffer must be lazily unallocated on create");
         assert!(rec.active_layer.is_none());
         assert_eq!(rec.scissor, None);
         reg.insert(handle, rec);
         let rec_mut = reg.get_mut(handle).unwrap();
         assert!(rec_mut.ensure_readback_buffer(&device).size() >= 256 * 64);
-        assert!(rec_mut.readback_buffer.is_some());
+        assert!(rec_mut.staging_buffers[0].is_some());
         rec_mut.set_scissor(5, 6, 20, 30);
         assert_eq!(rec_mut.scissor, Some([5, 6, 20, 30]));
         rec_mut.clear_scissor();
@@ -595,5 +727,67 @@ mod tests {
         assert!(reg.create(&device, 64, max_dim + 1, &mut handle).is_none());
         assert!(reg.create(&device, 0, 64, &mut handle).is_none());
         assert!(reg.create(&device, 64, 0, &mut handle).is_none());
+    }
+
+    #[cfg(feature = "gpu-tests")]
+    #[test]
+    fn test_staging_double_buffering_and_raii_unmap() {
+        let ctx = crate::paint::context::WgpuContext::new();
+        let device = &ctx.device;
+        let reg = TargetRegistry::new();
+        let mut handle = 0u64;
+        let mut rec = reg.create(device, 64, 64, &mut handle).expect("create target");
+        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("test-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        assert!(rec.ensure_readback_buffers(&device, &bgl).is_some());
+        assert!(rec.staging_buffers[0].is_some());
+        assert!(rec.staging_buffers[1].is_some());
+        assert_eq!(rec.staging_index, 0);
+
+        let slot0 = rec.advance_staging_slot();
+        assert_eq!(slot0, 0);
+        assert_eq!(rec.staging_index, 1);
+
+        let slot1 = rec.advance_staging_slot();
+        assert_eq!(slot1, 1);
+        assert_eq!(rec.staging_index, 0);
+
+        // Safe unmap on idle slots does not panic
+        rec.unmap_all_staging();
+        assert!(!rec.staging_mapped[0]);
+        assert!(!rec.staging_mapped[1]);
     }
 }

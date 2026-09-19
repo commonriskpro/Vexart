@@ -377,7 +377,7 @@ export type TGEProps = {
   fontId?: number
   lineHeight?: number
   wordBreak?: "normal" | "keep-all"
-  whiteSpace?: "normal" | "pre-wrap"
+  whiteSpace?: "normal" | "pre-wrap" | "nowrap"
   fontFamily?: string
   fontWeight?: number
   fontStyle?: "normal" | "italic"

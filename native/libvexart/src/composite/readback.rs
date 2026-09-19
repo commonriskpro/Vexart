@@ -1,9 +1,9 @@
 // native/libvexart/src/composite/readback.rs
-// Real GPU→CPU buffer transfer using wgpu map_async + pollster::block_on.
+// Real GPU→CPU buffer transfer using compute unpremultiply shader + wgpu map_async.
 // Phase 2b Slice 1, task 1.4. Per design decision "Readback uses blocking map_async + pollster".
 
-/// GPU targets are premultiplied; host pixels (including Kitty) are straight
-/// RGBA. Normalize once at the readback boundary, never during GPU composition.
+/// Straight-alpha normalization helper for CPU buffers (e.g. region readback fallback).
+#[inline]
 fn unpremultiply(pixels: &mut [u8]) {
     for pixel in pixels.chunks_exact_mut(4) {
         let alpha = u32::from(pixel[3]);
@@ -20,9 +20,9 @@ fn unpremultiply(pixels: &mut [u8]) {
 
 /// Full-target GPU→CPU readback.
 ///
-/// Copies the entire target texture to `dst` using WGPU copy_texture_to_buffer + map_async.
-/// Handles padded rows: each row in the readback buffer may have padding bytes that are
-/// stripped when copying to `dst`.
+/// Dispatches the compute unpremultiply+pack shader, copies the tightly packed
+/// storage buffer to `readback_buffer` via copy_buffer_to_buffer, maps it, and
+/// copies straight-alpha RGBA bytes directly into `dst`.
 ///
 /// Returns the number of bytes written to `dst`, or 0 on failure.
 ///
@@ -31,19 +31,16 @@ fn unpremultiply(pixels: &mut [u8]) {
 pub fn readback_full(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
+    pipeline: &wgpu::ComputePipeline,
+    bind_group: &wgpu::BindGroup,
+    storage_buffer: &wgpu::Buffer,
+    readback_buffer: &wgpu::Buffer,
     width: u32,
     height: u32,
-    padded_bytes_per_row: u32,
-    readback_buffer: &wgpu::Buffer,
     dst: *mut u8,
     dst_cap: u32,
 ) -> u32 {
-    let unpadded_bytes_per_row = match width.checked_mul(4) {
-        Some(size) => size as usize,
-        None => return 0,
-    };
-    let needed = match unpadded_bytes_per_row.checked_mul(height as usize) {
+    let needed = match (width as usize).checked_mul(height as usize).and_then(|px| px.checked_mul(4)) {
         Some(size) => size,
         None => return 0,
     };
@@ -58,148 +55,115 @@ pub fn readback_full(
     readback_full_mapped(
         device,
         queue,
-        texture,
+        pipeline,
+        bind_group,
+        storage_buffer,
+        readback_buffer,
         width,
         height,
-        padded_bytes_per_row,
-        readback_buffer,
         |mapped| {
-            let mapped_needed = match (padded_bytes_per_row as usize).checked_mul(height as usize) {
-                Some(size) => size,
-                None => return 0,
-            };
-            if mapped.len() < mapped_needed {
-                return 0;
-            }
-            let padded = padded_bytes_per_row as usize;
             let dst_slice: &mut [u8] =
                 // SAFETY: caller guarantees dst is valid for dst_cap bytes.
                 unsafe { std::slice::from_raw_parts_mut(dst, dst_cap as usize) };
-
-            for row in 0..height as usize {
-                let src_start = row * padded;
-                let dst_start = row * unpadded_bytes_per_row;
-                dst_slice[dst_start..dst_start + unpadded_bytes_per_row]
-                    .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
-            }
-            unpremultiply(&mut dst_slice[..needed]);
+            dst_slice[..needed].copy_from_slice(mapped);
             needed_u32
         },
     )
     .unwrap_or(0)
 }
 
-/// Full-target GPU→CPU readback with a callback over packed RGBA bytes.
+/// Full-target GPU→CPU readback with a callback over packed straight-alpha RGBA bytes.
 ///
-/// When the WGPU row pitch is already tightly packed, the callback receives a
-/// view directly into the mapped readback buffer if every pixel is opaque.
-/// Otherwise a straight-alpha packed
-/// fallback is created before the callback runs. The mapping is released after
-/// the callback returns, including when it returns an error value or unwinds.
+/// Because the compute shader writes straight-alpha pixels into a contiguous storage buffer
+/// copied directly to the staging buffer, the mapped buffer is already 100% contiguous and
+/// straight-alpha with no row padding. The callback receives a direct view into the mapped
+/// buffer.
 ///
 /// The callback result is returned as `Some`. `None` indicates that the GPU
-/// copy or mapping failed.
+/// compute, copy or mapping failed.
 pub(crate) fn readback_full_with<R, F>(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
+    pipeline: &wgpu::ComputePipeline,
+    bind_group: &wgpu::BindGroup,
+    storage_buffer: &wgpu::Buffer,
+    readback_buffer: &wgpu::Buffer,
     width: u32,
     height: u32,
-    padded_bytes_per_row: u32,
-    readback_buffer: &wgpu::Buffer,
-    scratch: &mut Vec<u8>,
     callback: F,
 ) -> Option<R>
 where
     F: FnOnce(&[u8]) -> R,
 {
-    let unpadded_bytes_per_row = width.checked_mul(4)? as usize;
-    let needed = unpadded_bytes_per_row.checked_mul(height as usize)?;
-    let padded = padded_bytes_per_row as usize;
-    if padded < unpadded_bytes_per_row {
-        return None;
-    }
-
     readback_full_mapped(
         device,
         queue,
-        texture,
+        pipeline,
+        bind_group,
+        storage_buffer,
+        readback_buffer,
         width,
         height,
-        padded_bytes_per_row,
-        readback_buffer,
-        |mapped| {
-            let mapped_needed = padded.checked_mul(height as usize)?;
-            if mapped.len() < mapped_needed {
-                return None;
-            }
-            if padded == unpadded_bytes_per_row
-                && mapped[..needed].chunks_exact(4).all(|pixel| pixel[3] == 255)
-            {
-                return Some(callback(&mapped[..needed]));
-            }
-
-            scratch.resize(needed, 0);
-            for row in 0..height as usize {
-                let src_start = row * padded;
-                let dst_start = row * unpadded_bytes_per_row;
-                scratch[dst_start..dst_start + unpadded_bytes_per_row]
-                    .copy_from_slice(&mapped[src_start..src_start + unpadded_bytes_per_row]);
-            }
-            unpremultiply(&mut scratch[..needed]);
-            Some(callback(&scratch[..needed]))
-        },
+        callback,
     )
-    .flatten()
 }
 
-/// Submit a full texture copy and run a callback while its readback buffer is
-/// mapped. Callers choose whether to expose mapped rows directly or pack them.
+/// Submit the compute unpremultiply+pack pass and copy the contiguous storage buffer
+/// to the staging buffer via copy_buffer_to_buffer. Runs a callback while the readback
+/// buffer is mapped.
 fn readback_full_mapped<R, F>(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    texture: &wgpu::Texture,
+    pipeline: &wgpu::ComputePipeline,
+    bind_group: &wgpu::BindGroup,
+    storage_buffer: &wgpu::Buffer,
+    readback_buffer: &wgpu::Buffer,
     width: u32,
     height: u32,
-    padded_bytes_per_row: u32,
-    readback_buffer: &wgpu::Buffer,
     callback: F,
 ) -> Option<R>
 where
     F: FnOnce(&[u8]) -> R,
 {
-    let unpadded_bytes_per_row = width.checked_mul(4)? as usize;
-    let padded = padded_bytes_per_row as usize;
-    if padded < unpadded_bytes_per_row {
+    if width == 0 || height == 0 {
         return None;
     }
+    let needed = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+    let needed_u64 = needed as u64;
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("vexart-readback-encoder"),
     });
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: readback_buffer,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded_bytes_per_row),
-                rows_per_image: Some(height),
-            },
-        },
-        wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        },
+
+    {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("vexart-unpremultiply-compute-pass"),
+            timestamp_writes: None,
+        });
+        cpass.set_pipeline(pipeline);
+        cpass.set_bind_group(0, bind_group, &[]);
+        let workgroups_x = width.div_ceil(16);
+        let workgroups_y = height.div_ceil(16);
+        cpass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
+    }
+
+    encoder.copy_buffer_to_buffer(
+        storage_buffer,
+        0,
+        readback_buffer,
+        0,
+        needed_u64,
     );
+
     queue.submit(std::iter::once(encoder.finish()));
-    map_readback(device, readback_buffer, callback)
+
+    map_readback(device, readback_buffer, |mapped| {
+        if mapped.len() < needed {
+            return None;
+        }
+        Some(callback(&mapped[..needed]))
+    })
+    .flatten()
 }
 
 /// Run a callback while a readback buffer is mapped, unmapping it on every
@@ -217,18 +181,26 @@ where
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = tx.send(result);
     });
-    if device
-        .poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        })
-        .is_err()
-    {
-        return None;
-    }
-    match rx.recv() {
+
+    // Try non-blocking poll first to avoid synchronous CPU wait stalls if GPU work is complete.
+    let _ = device.poll(wgpu::PollType::Poll);
+    match rx.try_recv() {
         Ok(Ok(())) => {}
-        Ok(Err(_)) | Err(_) => return None,
+        _ => {
+            if device
+                .poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: None,
+                })
+                .is_err()
+            {
+                return None;
+            }
+            match rx.recv() {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) | Err(_) => return None,
+            }
+        }
     }
 
     // Arm the guard strictly after confirming the buffer entered the Mapped state.
@@ -392,19 +364,61 @@ mod tests {
     #[cfg(feature = "gpu-tests")]
     #[test]
     fn full_callback_and_region_readback_should_return_straight_alpha() {
-        let (ctx, texture, buffer, _) = gpu_fixture(64, 1);
+        use wgpu::util::DeviceExt;
+        let ctx = crate::paint::context::WgpuContext::new();
+        let width = 64;
+        let height = 1;
         let pixels = [128, 64, 0, 128].repeat(64);
+        let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test-straight-alpha-tex"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
         ctx.queue.write_texture(
             texture.as_image_copy(), &pixels,
             wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(1) },
-            wgpu::Extent3d { width: 64, height: 1, depth_or_array_layers: 1 },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
         );
+        let size = (width as u64) * (height as u64) * 4;
+        let storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test-storage"),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let readback = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test-readback"),
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let uniforms: [u32; 4] = [width, height, 0, 0];
+        let uniform_buf = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("test-uniforms"),
+            contents: bytemuck::cast_slice(&uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("test-bg"),
+            layout: &ctx.pipelines.unpremultiply_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+                wgpu::BindGroupEntry { binding: 1, resource: storage.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
         let mut full = vec![0; 256];
-        assert_eq!(readback_full(&ctx.device, &ctx.queue, &texture, 64, 1, 256,
-            &buffer, full.as_mut_ptr(), 256), 256);
+        assert_eq!(readback_full(&ctx.device, &ctx.queue, &ctx.pipelines.unpremultiply_pack,
+            &bind_group, &storage, &readback, 64, 1, full.as_mut_ptr(), 256), 256);
         assert_eq!(full, [255, 128, 0, 128].repeat(64));
-        let callback = readback_full_with(&ctx.device, &ctx.queue, &texture, 64, 1, 256,
-            &buffer, &mut Vec::new(), |bytes| bytes.to_vec());
+        let callback = readback_full_with(&ctx.device, &ctx.queue, &ctx.pipelines.unpremultiply_pack,
+            &bind_group, &storage, &readback, 64, 1, |bytes| bytes.to_vec());
         assert_eq!(callback, Some(full));
         let mut region = [0; 4];
         assert_eq!(readback_region(&ctx.device, &ctx.queue, &texture, 64, 1, 3, 0, 1, 1,
@@ -684,12 +698,23 @@ mod tests {
         crate::paint::context::WgpuContext,
         wgpu::Texture,
         wgpu::Buffer,
+        wgpu::Buffer,
+        wgpu::BindGroup,
         Vec<u8>,
     ) {
+        use wgpu::util::DeviceExt;
         let ctx = crate::paint::context::WgpuContext::new();
         let pixels = (0..(width as usize * height as usize * 4))
             .map(|index| if index % 4 == 3 { 255 } else { (index as u32).wrapping_mul(37) as u8 })
             .collect::<Vec<_>>();
+        let padded_row = (width * 4 + 255) & !255;
+        let mut upload_pixels = vec![0u8; (padded_row * height) as usize];
+        for row in 0..height as usize {
+            let src_start = row * (width as usize * 4);
+            let dst_start = row * (padded_row as usize);
+            upload_pixels[dst_start..dst_start + (width as usize * 4)]
+                .copy_from_slice(&pixels[src_start..src_start + (width as usize * 4)]);
+        }
         let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("readback-copy-test-texture"),
             size: wgpu::Extent3d {
@@ -701,7 +726,7 @@ mod tests {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
         ctx.queue.write_texture(
@@ -711,10 +736,10 @@ mod tests {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &pixels,
+            &upload_pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(width * 4),
+                bytes_per_row: Some(padded_row),
                 rows_per_image: Some(height),
             },
             wgpu::Extent3d {
@@ -723,14 +748,45 @@ mod tests {
                 depth_or_array_layers: 1,
             },
         );
-        let padded = (width * 4 + 255) & !255;
+        let size = (width as u64) * (height as u64) * 4;
+        let storage = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback-storage-test-buffer"),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
         let readback = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback-copy-test-buffer"),
-            size: padded as u64 * height as u64,
+            label: Some("readback-staging-test-buffer"),
+            size,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        (ctx, texture, readback, pixels)
+        let uniforms: [u32; 4] = [width, height, 0, 0];
+        let uniform_buf = ctx.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("readback-uniform-test-buffer"),
+            contents: bytemuck::cast_slice(&uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("readback-test-bind-group"),
+            layout: &ctx.pipelines.unpremultiply_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: storage.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: uniform_buf.as_entire_binding(),
+                },
+            ],
+        });
+        (ctx, texture, storage, readback, bind_group, pixels)
     }
 
     #[cfg(feature = "gpu-tests")]
@@ -738,17 +794,18 @@ mod tests {
     fn test_callback_matches_reference_for_aligned_rows() {
         let width = 64;
         let height = 3;
-        let (ctx, texture, readback, source) = gpu_fixture(width, height);
+        let (ctx, _texture, storage, readback, bind_group, source) = gpu_fixture(width, height);
         let mut expected = vec![0u8; source.len()];
         assert_eq!(
             readback_full(
                 &ctx.device,
                 &ctx.queue,
-                &texture,
+                &ctx.pipelines.unpremultiply_pack,
+                &bind_group,
+                &storage,
+                &readback,
                 width,
                 height,
-                width * 4,
-                &readback,
                 expected.as_mut_ptr(),
                 expected.len() as u32,
             ),
@@ -756,16 +813,15 @@ mod tests {
         );
 
         let mut observed = Vec::new();
-        let mut scratch = Vec::new();
         let result = readback_full_with(
             &ctx.device,
             &ctx.queue,
-            &texture,
+            &ctx.pipelines.unpremultiply_pack,
+            &bind_group,
+            &storage,
+            &readback,
             width,
             height,
-            width * 4,
-            &readback,
-            &mut scratch,
             |bytes| {
                 observed.extend_from_slice(bytes);
                 bytes.len()
@@ -781,18 +837,18 @@ mod tests {
     fn test_callback_matches_reference_for_padded_rows() {
         let width = 50;
         let height = 3;
-        let (ctx, texture, readback, source) = gpu_fixture(width, height);
-        let padded = (width * 4 + 255) & !255;
+        let (ctx, _texture, storage, readback, bind_group, source) = gpu_fixture(width, height);
         let mut expected = vec![0u8; source.len()];
         assert_eq!(
             readback_full(
                 &ctx.device,
                 &ctx.queue,
-                &texture,
+                &ctx.pipelines.unpremultiply_pack,
+                &bind_group,
+                &storage,
+                &readback,
                 width,
                 height,
-                padded,
-                &readback,
                 expected.as_mut_ptr(),
                 expected.len() as u32,
             ),
@@ -800,16 +856,15 @@ mod tests {
         );
 
         let mut observed = Vec::new();
-        let mut scratch = Vec::new();
         let result = readback_full_with(
             &ctx.device,
             &ctx.queue,
-            &texture,
+            &ctx.pipelines.unpremultiply_pack,
+            &bind_group,
+            &storage,
+            &readback,
             width,
             height,
-            padded,
-            &readback,
-            &mut scratch,
             |bytes| {
                 observed.extend_from_slice(bytes);
                 bytes.len()
@@ -825,32 +880,30 @@ mod tests {
     fn test_callback_error_and_panic_release_mapping() {
         let width = 64;
         let height = 2;
-        let (ctx, texture, readback, source) = gpu_fixture(width, height);
-        let mut scratch = Vec::new();
+        let (ctx, _texture, storage, readback, bind_group, source) = gpu_fixture(width, height);
         let callback_error = readback_full_with(
             &ctx.device,
             &ctx.queue,
-            &texture,
+            &ctx.pipelines.unpremultiply_pack,
+            &bind_group,
+            &storage,
+            &readback,
             width,
             height,
-            width * 4,
-            &readback,
-            &mut scratch,
             |_| Err::<(), _>("callback failed"),
         );
         assert_eq!(callback_error, Some(Err("callback failed")));
 
-        let mut scratch = Vec::new();
         let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             readback_full_with(
                 &ctx.device,
                 &ctx.queue,
-                &texture,
+                &ctx.pipelines.unpremultiply_pack,
+                &bind_group,
+                &storage,
+                &readback,
                 width,
                 height,
-                width * 4,
-                &readback,
-                &mut scratch,
                 |_| -> () { panic!("callback panicked") },
             )
         }));
@@ -861,11 +914,12 @@ mod tests {
             readback_full(
                 &ctx.device,
                 &ctx.queue,
-                &texture,
+                &ctx.pipelines.unpremultiply_pack,
+                &bind_group,
+                &storage,
+                &readback,
                 width,
                 height,
-                width * 4,
-                &readback,
                 output.as_mut_ptr(),
                 output.len() as u32,
             ),

@@ -881,21 +881,30 @@ pub fn readback_rgba(
     // Extract fields needed before the mutable borrow of pctx (for device/queue).
     let w = rec.width;
     let h = rec.height;
-    let padded = rec.padded_bytes_per_row;
-    let rb_buf = rec.ensure_readback_buffer(&pctx.wgpu.device);
-    let readback_ptr: *const wgpu::Buffer = rb_buf;
-    let texture_ptr: *const wgpu::Texture = &rec.texture;
+    rec.advance_staging_slot();
+    let (storage_buf, staging_buf, bind_group) = match rec
+        .ensure_readback_buffers(&pctx.wgpu.device, &pctx.wgpu.pipelines.unpremultiply_bgl)
+    {
+        Some(bufs) => bufs,
+        None => return ERR_INVALID_ARG,
+    };
+    let storage_ptr: *const wgpu::Buffer = storage_buf;
+    let readback_ptr: *const wgpu::Buffer = staging_buf;
+    let bg_ptr: *const wgpu::BindGroup = bind_group;
+    let pipeline_ptr: *const wgpu::ComputePipeline = &pctx.wgpu.pipelines.unpremultiply_pack;
 
-    // SAFETY: texture_ptr and readback_ptr point into the TargetRecord in pctx.targets,
-    // which is a stable heap allocation. pctx.wgpu (device/queue) is a disjoint field.
+    // SAFETY: storage_ptr, readback_ptr, bg_ptr point into the TargetRecord in pctx.targets,
+    // which is a stable heap allocation. pipeline_ptr points into pctx.wgpu.pipelines.
+    // pctx.wgpu (device/queue) is a disjoint field.
     let written = readback::readback_full(
         &pctx.wgpu.device,
         &pctx.wgpu.queue,
-        unsafe { &*texture_ptr },
+        unsafe { &*pipeline_ptr },
+        unsafe { &*bg_ptr },
+        unsafe { &*storage_ptr },
+        unsafe { &*readback_ptr },
         w,
         h,
-        padded,
-        unsafe { &*readback_ptr },
         dst,
         dst_cap,
     );

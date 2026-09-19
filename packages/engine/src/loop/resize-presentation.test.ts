@@ -68,9 +68,9 @@ test("native presentation starts a new Kitty canvas after every resize", async (
   expect(parseFrames(stdout)).toEqual([
     { action: "T", width: 200, height: 120, payload: expect.any(String) },
     { action: "T", width: 320, height: 180, payload: expect.any(String) },
-    { action: "f", width: 320, height: 180, payload: expect.any(String) },
+    { action: "T", width: 320, height: 180, payload: expect.any(String) },
     { action: "T", width: 120, height: 80, payload: expect.any(String) },
-    { action: "f", width: 120, height: 80, payload: expect.any(String) },
+    { action: "T", width: 120, height: 80, payload: expect.any(String) },
   ])
 
   const frames = parseFrames(stdout)

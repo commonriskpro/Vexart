@@ -22,8 +22,9 @@ pub mod rect_corners;
 pub mod shadow;
 pub mod shape_rect;
 pub mod starfield;
+pub mod unpremultiply_pack;
 
-use wgpu::{BindGroupLayout, Device, RenderPipeline, TextureFormat};
+use wgpu::{BindGroupLayout, ComputePipeline, Device, RenderPipeline, TextureFormat};
 
 /// Holds all render pipelines indexed by cmd_kind, plus internal image helpers.
 /// cmd_kind allocation per design §17.6 (as-deployed in Slice 5a + 5b + Phase 2b Slice 4 + 5):
@@ -66,6 +67,9 @@ pub struct PipelineRegistry {
     pub glyph: RenderPipeline,
     // ── Phase 4+ ─────────────────────────────────────────────────────────────
     pub shadow: RenderPipeline,
+    // ── Compute Pipelines ───────────────────────────────────────────────────
+    pub unpremultiply_pack: ComputePipeline,
+    pub unpremultiply_bgl: BindGroupLayout,
 }
 
 impl PipelineRegistry {
@@ -79,6 +83,9 @@ impl PipelineRegistry {
         image_bgl: &BindGroupLayout,
         cache: Option<&wgpu::PipelineCache>,
     ) -> Self {
+        let unpremultiply_bgl = unpremultiply_pack::create_bind_group_layout(device);
+        let unpremultiply_pack = unpremultiply_pack::create(device, &unpremultiply_bgl, cache);
+
         Self {
             // Slice 5a
             shape_rect: shape_rect::create(device, format, cache),
@@ -106,6 +113,9 @@ impl PipelineRegistry {
             glyph: glyph::create(device, format, image_bgl, cache),
             // Phase 4+ — analytic box-shadow
             shadow: shadow::create(device, format, cache),
+            // Compute
+            unpremultiply_pack,
+            unpremultiply_bgl,
         }
     }
 }

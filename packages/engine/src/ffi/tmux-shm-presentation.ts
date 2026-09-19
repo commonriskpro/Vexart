@@ -144,36 +144,13 @@ export function createKittyShmPresentation(options: Pick<TmuxShmPresentationOpti
     // Time is not proof of consumption. Retain a bounded transfer until the
     // terminal consumes/rejects it or its owner explicitly cancels the session.
     timeoutMs: Infinity,
-    native: {
-      emit(context, target, params) {
-        const symbols = openKittyShmSymbols()
-        if (!symbols) throw new Error("[vexart] rebuild libvexart: owned SHM ABI unavailable")
-        const handle = new BigUint64Array(1)
-        const stats = allocNativeStatsBuf()
-        const rc = symbols.vexart_kitty_emit_frame_shm_owned(context, target, params[0], ptr(handle), ptr(stats)) as number
-        if (rc !== 0) throw new Error(`[vexart] owned SHM emit failed (${rc}): ${vexartGetLastError()}`)
-        return { handle: handle[0], stats: decodeNativePresentationStats(stats) }
-      },
-      isConsumed(handle) {
-        const symbols = openKittyShmSymbols()
-        if (!symbols) throw new Error("[vexart] owned SHM ABI unavailable")
-        return symbols.vexart_kitty_shm_is_consumed(handle) as number
-      },
-      release(handle) {
-        const symbols = openKittyShmSymbols()
-        if (!symbols) throw new Error("[vexart] owned SHM ABI unavailable")
-        return symbols.vexart_kitty_shm_release(handle, 1) as number
-      },
-      deleteImage(context, imageId) {
-        const stats = allocNativeStatsBuf()
-        return openVexartLibrary().symbols.vexart_kitty_delete_layer(context, imageId, ptr(stats)) as number
-      },
-    },
   })
 }
 
 function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPresentation {
   const label = options.label ?? "tmux SHM"
+  const isPlaceholder = (options.label ?? "tmux SHM") !== "Kitty SHM"
+  const useRing = options.native === undefined
   const pollIntervalMs = Math.max(1, Math.floor(options.pollIntervalMs ?? 4))
   const timeoutMs = Math.max(pollIntervalMs, Math.floor(options.timeoutMs ?? 1000))
   const detachedPollIntervalMs = Math.max(250, Math.min(500, Math.floor(options.detachedPollIntervalMs ?? 350)))
@@ -192,6 +169,7 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
   let pending: TmuxShmFrame | null = null
   let detached: DetachedShmFrame | null = null
   let detachedTimer: ReturnType<typeof setTimeout> | null = null
+  let drainTimer: ReturnType<typeof setTimeout> | null = null
   let gridGeometry: string | null = null
   let imagePresented = false
   let lastContext: bigint | null = null
@@ -239,6 +217,11 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
     drains.clear()
   }
 
+  const stopDrainPoll = () => {
+    if (drainTimer !== null) clearTimeout(drainTimer)
+    drainTimer = null
+  }
+
   const stopDetached = () => {
     if (detachedTimer !== null) clearTimeout(detachedTimer)
     detachedTimer = null
@@ -248,6 +231,7 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
     if (fatal) return
     fatal = error
     stopDetached()
+    stopDrainPoll()
     detached = null
     pending = null
     const current = active
@@ -259,6 +243,9 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
         // Keep the actionable original error; cleanup has already been tried.
         reportError(toError(cleanupError, "shared-memory cleanup failed"))
       }
+    }
+    if (useRing && symbols) {
+      try { symbols.vexart_kitty_shm_cleanup_all() } catch { /* best-effort cleanup */ }
     }
     const imageCleanupError = deleteOwnedImage(false)
     if (imageCleanupError) reportError(imageCleanupError)
@@ -274,13 +261,18 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
     try {
       const rc = native
         ? native.deleteImage(lastContext, imageId)
-        : (() => {
-            if (!placeholderSymbols) placeholderSymbols = options.getPlaceholderSymbols?.() ?? openKittyPlaceholderSymbols()
-            if (!placeholderSymbols) throw actionable(
-              "native cleanup ABI is unavailable; rebuild native/libvexart with vexart_kitty_delete_placeholder",
-            )
-            return placeholderSymbols.vexart_kitty_delete_placeholder(lastContext, imageId) as number
-          })()
+        : isPlaceholder
+          ? (() => {
+              if (!placeholderSymbols) placeholderSymbols = options.getPlaceholderSymbols?.() ?? openKittyPlaceholderSymbols()
+              if (!placeholderSymbols) throw actionable(
+                "native cleanup ABI is unavailable; rebuild native/libvexart with vexart_kitty_delete_placeholder",
+              )
+              return placeholderSymbols.vexart_kitty_delete_placeholder(lastContext, imageId) as number
+            })()
+          : (() => {
+              const stats = allocNativeStatsBuf()
+              return openVexartLibrary().symbols.vexart_kitty_delete_layer(lastContext, imageId, ptr(stats)) as number
+            })()
       if (rc !== 0) throw actionable(`owned image cleanup returned ${rc}: ${getLastError()}`)
     } catch (error) {
       const cleanupError = toError(error, "owned image cleanup failed")
@@ -439,6 +431,137 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
     current.timer = setTimeout(poll, pollIntervalMs)
   }
 
+  const scheduleDrainPoll = () => {
+    if (drainTimer !== null || suspended || destroyed || fatal) return
+    drainTimer = setTimeout(checkDrain, pollIntervalMs)
+  }
+
+  const checkDrain = () => {
+    drainTimer = null
+    if (!useRing || fatal || destroyed || suspended) return
+    if (!symbols) symbols = options.getSymbols?.() ?? openKittyShmSymbols()
+    if (!symbols) return
+
+    const isDrained = symbols.vexart_kitty_shm_is_drained() as number
+    if (isDrained === 1) {
+      active = null
+      if (pending && !suspended && !destroyed && !fatal) {
+        const next = pending
+        pending = null
+        try {
+          startRing(next)
+        } catch {
+          // startRing records and reports the fatal error
+        }
+      }
+      settleDrains(fatal ?? undefined)
+      if (drains.size > 0 && active) {
+        scheduleDrainPoll()
+      }
+      return
+    }
+
+    if (active && timeoutMs !== Infinity && now() - active.startedAt >= timeoutMs) {
+      const currentFrame = active.frame
+      active = null
+      const timeoutError = actionable(`timed out after ${timeoutMs}ms waiting for terminal consumption`)
+      let state: TmuxClientState | null = null
+      if (getClientState) {
+        try { state = getClientState() } catch (error) { state = { kind: "unknown", reason: String(error) } }
+      }
+      if (state?.kind === "zero" && expectedClient !== null && tmuxClientCanReceiveGraphics(expectedClient)) {
+        detached = { frame: pending ?? currentFrame }
+        pending = null
+        lastUpload = null
+        gridGeometry = null
+        scheduleDetachedPoll()
+        return
+      }
+      if (state && state.kind !== "zero") {
+        fail(state.kind === "single" && !sameTmuxClient(expectedClient ?? state.client, state.client)
+          ? actionable("tmux SHM presentation client identity changed; restart Vexart to reprobe the new client")
+          : state.kind === "single" && !tmuxClientCanReceiveGraphics(state.client)
+            ? actionable("tmux SHM presentation client capability is unavailable")
+            : state.kind === "single"
+              ? timeoutError
+              : clientStateError(state))
+        return
+      }
+      fail(timeoutError)
+      return
+    }
+
+    scheduleDrainPoll()
+  }
+
+  function startRing(frame: TmuxShmFrame): NativePresentationStats | null {
+    if (fatal) throw fatal
+    if (suspended || destroyed) return null
+    if (frame.transmissionMode !== "shm") {
+      const error = actionable(`runtime transmissionMode must be "shm" (received "${frame.transmissionMode}")`)
+      fail(error)
+      throw error
+    }
+    try {
+      if (!symbols) symbols = options.getSymbols?.() ?? openKittyShmSymbols()
+      if (!symbols) throw actionable(
+        "native ABI is unavailable; rebuild native/libvexart with vexart_kitty_emit_placeholder_shm_ring and vexart_kitty_shm_is_drained",
+      )
+
+      if (placement === 0xffffffff) throw actionable("placement id exhausted; restart the renderer to allocate a fresh image id")
+      placement = (placement + 1) >>> 0
+
+      const statsBuf = allocNativeStatsBuf()
+      let rc: number
+      if (isPlaceholder) {
+        const params = new Uint32Array(5)
+        params[0] = imageId >>> 0
+        params[1] = placement
+        params[2] = Math.max(0, Math.floor(frame.cols)) >>> 0
+        params[3] = Math.max(0, Math.floor(frame.rows)) >>> 0
+        params[4] = gridGeometry === null || gridGeometry !== frameGeometry(frame) ? 1 : 0
+        rc = symbols.vexart_kitty_emit_placeholder_shm_ring(
+          frame.context,
+          frame.target,
+          ptr(params),
+          params.byteLength,
+          ptr(statsBuf),
+        ) as number
+      } else {
+        rc = symbols.vexart_kitty_emit_frame_shm_ring(
+          frame.context,
+          frame.target,
+          imageId,
+          ptr(statsBuf),
+        ) as number
+      }
+
+      if (rc === -100) {
+        // ERR_SHM_RING_FULL: Ring is saturated awaiting terminal consumption.
+        pending = frame
+        scheduleDrainPoll()
+        return null
+      }
+
+      if (rc !== 0) {
+        throw actionable(`native emit returned ${rc}: ${getLastError()}`)
+      }
+
+      lastContext = frame.context
+      imagePresented = true
+      gridGeometry = frameGeometry(frame)
+      lastUpload = { placement, emittedAt: now() }
+      active = { handle: 0n, placement, startedAt: now(), timer: null, frame }
+      const stats = decodeNativePresentationStats(statsBuf)
+      try { onPresented(stats) } catch { /* telemetry must not break presentation */ }
+      return stats
+    } catch (error) {
+      const result = toError(error, "native emit failed")
+      fail(result)
+      throw result
+    }
+  }
+
   function start(frame: TmuxShmFrame): NativePresentationStats | null {
     if (fatal) throw fatal
     if (suspended || destroyed) return null
@@ -563,6 +686,21 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
         detached.frame = frame
         return null
       }
+      if (useRing) {
+        if (active) {
+          if (!symbols) symbols = options.getSymbols?.() ?? openKittyShmSymbols()
+          const isDrained = symbols ? (symbols.vexart_kitty_shm_is_drained() as number) : 0
+          if (isDrained === 1) {
+            active = null
+            stopDrainPoll()
+          } else {
+            pending = frame
+            scheduleDrainPoll()
+            return null
+          }
+        }
+        return startRing(frame)
+      }
       if (active) {
         // Keep only metadata for the newest complete frame. In particular do
         // not retain a GPU target/readback buffer for every render tick.
@@ -573,6 +711,18 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
     },
     waitForDrain() {
       if (fatal) return Promise.reject(fatal)
+      if (useRing) {
+        if (!symbols) symbols = options.getSymbols?.() ?? openKittyShmSymbols()
+        const isDrained = symbols ? (symbols.vexart_kitty_shm_is_drained() as number) === 1 : true
+        if (isDrained && !pending && !detached) {
+          active = null
+          return Promise.resolve()
+        }
+        return new Promise<void>((resolve, reject) => {
+          drains.add({ resolve, reject })
+          scheduleDrainPoll()
+        })
+      }
       if (!active && !pending && !detached) return Promise.resolve()
       return new Promise<void>((resolve, reject) => drains.add({ resolve, reject }))
     },
@@ -590,9 +740,13 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
       if (destroyed) return
       suspended = true
       stopDetached()
+      stopDrainPoll()
       detached = null
       pending = null
       stopActiveAndCleanupImage()
+      if (useRing && symbols) {
+        try { symbols.vexart_kitty_shm_cleanup_all() } catch { /* best-effort cleanup */ }
+      }
       lastUpload = null
       removeData?.()
       removeData = null
@@ -611,9 +765,13 @@ function createShmPresentation(options: TmuxShmPresentationOptions): TmuxShmPres
       destroyed = true
       suspended = true
       stopDetached()
+      stopDrainPoll()
       detached = null
       pending = null
       stopActiveAndCleanupImage()
+      if (useRing && symbols) {
+        try { symbols.vexart_kitty_shm_cleanup_all() } catch { /* best-effort cleanup */ }
+      }
       removeData?.()
       removeData = null
       settleDrains(fatal ?? undefined)

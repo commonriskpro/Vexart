@@ -191,6 +191,25 @@ describe("Render graph op emission through traverseFrame", () => {
     expect(op.image).toBeDefined()
   })
 
+  test("unloaded img node produces an image op with textureId: 0", () => {
+    const root = createNode("box")
+    const child = createNode("img")
+    child.props = {
+      cornerRadius: 4,
+    }
+    insertChild(root, child)
+    mockFlex(child, 0, 0, 100, 50)
+
+    const ops = renderTree(root)
+    const op = ops.find((o) => o.kind === "image") as ImageRenderOp
+    expect(op).toBeDefined()
+    expect(op.kind).toBe("image")
+    expect(op.textureId).toBe(0)
+    expect(op.image).toBeDefined()
+    expect(op.image.imageBuffer).toBeNull()
+    expect(op.image.nativeImageHandle).toBeNull()
+  })
+
   test("rectangle with canvas produces a canvas op", () => {
     const root = createNode("box")
     const child = createNode("canvas")

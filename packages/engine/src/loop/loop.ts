@@ -259,7 +259,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   function scheduleNextFrame() {
     if (isSuspended || !loopStarted) return
     if (timer !== null) { clearTimeout(timer); timer = null }
-    if (!isDirty() && !hasActiveAnimations()) return
+    if (!isDirty() && !hasActiveAnimations() && dirtyCount() === 0) return
     const interval = (hasActiveAnimations() || hasRecentInteraction()) ? activeInterval : idleInterval
     const now = performance.now()
     if (nextFrameDeadlineMs === 0 || scheduledIntervalMs !== interval) {
@@ -429,7 +429,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
   function frame() {
     tickNativePresentationRecovery()
     if (isRenderingFrame) return
-    if (!isDirty() && !hasActiveAnimations() && !hasRecentInteraction() && pendingInteractionFrameKind === null) return
+    if (!isDirty() && !hasActiveAnimations() && (dirtyCount() === 0 || !hasRecentInteraction()) && pendingInteractionFrameKind === null) return
     isRenderingFrame = true
     const frameStartedAt = performance.now()
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt

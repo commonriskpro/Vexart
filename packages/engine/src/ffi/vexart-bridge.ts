@@ -69,6 +69,8 @@ export const VEXART_SYMBOLS = {
 
   // §5.6 Kitty transport (Phase 2b Slice 3)
   vexart_kitty_set_transport: { args: [FFIType.u64, FFIType.u32],              returns: FFIType.i32  },
+  // §5.6 Kitty SHM helpers (used directly by kitty.ts shm path)
+  vexart_kitty_shm_prepare: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_kitty_shm_release: { args: [FFIType.u64, FFIType.u32],                returns: FFIType.i32  },
   // §5.6 Kitty native presentation (Phase 2b)
   // emit_frame_with_stats: ctx, target, image_id, stats_out → i32
@@ -350,9 +352,19 @@ export function openKittyPlaceholderSymbols(): ReturnType<typeof dlopen<typeof K
  * when this optional group is unavailable.
  */
 export const KITTY_SHM_SYMBOLS = {
+  // Regular Kitty upload via fixed ring buffer with backpressure.
+  vexart_kitty_emit_frame_shm_ring: {
+    args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr],
+    returns: FFIType.i32,
+  },
   // Regular Kitty upload with explicit SHM ownership (no tmux placeholders).
   vexart_kitty_emit_frame_shm_owned: {
     args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32,
+  },
+  // emit_placeholder_shm_ring: ctx, target, params(20 bytes), params_len, stats_out → i32
+  vexart_kitty_emit_placeholder_shm_ring: {
+    args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr],
+    returns: FFIType.i32,
   },
   // emit_placeholder_shm_frame: ctx, target, params(20 bytes), params_len,
   // out_handle, stats_out → i32
@@ -365,9 +377,19 @@ export const KITTY_SHM_SYMBOLS = {
     args: [FFIType.u64],
     returns: FFIType.i32,
   },
+  // shm_is_drained: 1=all slots unlinked/consumed, 0=transfers in flight
+  vexart_kitty_shm_is_drained: {
+    args: [],
+    returns: FFIType.i32,
+  },
   // shm_release: close the registry handle and optionally unlink the name.
   vexart_kitty_shm_release: {
     args: [FFIType.u64, FFIType.u32],
+    returns: FFIType.i32,
+  },
+  // shm_cleanup_all: unlink all active SHM segments and close their descriptors.
+  vexart_kitty_shm_cleanup_all: {
+    args: [],
     returns: FFIType.i32,
   },
 } as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
