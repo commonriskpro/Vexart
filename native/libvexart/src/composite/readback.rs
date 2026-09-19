@@ -82,6 +82,7 @@ pub fn readback_full(
 ///
 /// The callback result is returned as `Some`. `None` indicates that the GPU
 /// compute, copy or mapping failed.
+#[allow(dead_code)]
 pub(crate) fn readback_full_with<R, F>(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -109,23 +110,18 @@ where
     )
 }
 
-/// Submit the compute unpremultiply+pack pass and copy the contiguous storage buffer
-/// to the staging buffer via copy_buffer_to_buffer. Runs a callback while the readback
-/// buffer is mapped.
-fn readback_full_mapped<R, F>(
+/// Submit compute unpremultiply+pack pass and copy storage buffer to staging buffer.
+/// Calls map_async and returns a channel receiver for the completion result.
+pub fn submit_readback_gpu_pass(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     pipeline: &wgpu::ComputePipeline,
     bind_group: &wgpu::BindGroup,
     storage_buffer: &wgpu::Buffer,
-    readback_buffer: &wgpu::Buffer,
+    staging_buffer: &wgpu::Buffer,
     width: u32,
     height: u32,
-    callback: F,
-) -> Option<R>
-where
-    F: FnOnce(&[u8]) -> R,
-{
+) -> Option<std::sync::mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>> {
     if width == 0 || height == 0 {
         return None;
     }
@@ -151,38 +147,37 @@ where
     encoder.copy_buffer_to_buffer(
         storage_buffer,
         0,
-        readback_buffer,
+        staging_buffer,
         0,
         needed_u64,
     );
 
     queue.submit(std::iter::once(encoder.finish()));
 
-    map_readback(device, readback_buffer, |mapped| {
-        if mapped.len() < needed {
-            return None;
-        }
-        Some(callback(&mapped[..needed]))
-    })
-    .flatten()
-}
-
-/// Run a callback while a readback buffer is mapped, unmapping it on every
-/// return path, including unwinding from the callback.
-fn map_readback<R, F>(
-    device: &wgpu::Device,
-    readback_buffer: &wgpu::Buffer,
-    callback: F,
-) -> Option<R>
-where
-    F: FnOnce(&[u8]) -> R,
-{
-    let slice = readback_buffer.slice(..);
+    let slice = staging_buffer.slice(..);
     let (tx, rx) = std::sync::mpsc::channel();
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = tx.send(result);
     });
 
+    Some(rx)
+}
+
+/// Consume a staging buffer slot whose map_async was previously initiated.
+///
+/// Tries non-blocking poll first to avoid CPU wait stalls when GPU work is already
+/// complete; falls back to device.poll(Wait) if needed. Runs the callback over
+/// the mapped bytes and safely unmaps the buffer upon return via UnmapGuard.
+pub fn consume_staging_slot<R, F>(
+    device: &wgpu::Device,
+    staging_buffer: &wgpu::Buffer,
+    rx: std::sync::mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
+    needed: usize,
+    callback: F,
+) -> Option<R>
+where
+    F: FnOnce(&[u8]) -> R,
+{
     // Try non-blocking poll first to avoid synchronous CPU wait stalls if GPU work is complete.
     let _ = device.poll(wgpu::PollType::Poll);
     match rx.try_recv() {
@@ -205,11 +200,44 @@ where
     }
 
     // Arm the guard strictly after confirming the buffer entered the Mapped state.
-    // Declared before `mapped` so Rust's LIFO drop order releases the BufferView
-    // before `UnmapGuard` calls buffer.unmap().
-    let _unmap = UnmapGuard::new(readback_buffer);
+    // Declared before mapped so Rust's LIFO drop order releases the BufferView
+    // before UnmapGuard calls buffer.unmap().
+    let _unmap = UnmapGuard::new(staging_buffer);
+    let slice = staging_buffer.slice(..);
     let mapped = slice.get_mapped_range();
-    Some(callback(&mapped))
+    if mapped.len() < needed {
+        return None;
+    }
+    Some(callback(&mapped[..needed]))
+}
+
+/// Full-target GPU→CPU readback helper using submit_readback_gpu_pass and consume_staging_slot.
+fn readback_full_mapped<R, F>(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &wgpu::ComputePipeline,
+    bind_group: &wgpu::BindGroup,
+    storage_buffer: &wgpu::Buffer,
+    readback_buffer: &wgpu::Buffer,
+    width: u32,
+    height: u32,
+    callback: F,
+) -> Option<R>
+where
+    F: FnOnce(&[u8]) -> R,
+{
+    let needed = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+    let rx = submit_readback_gpu_pass(
+        device,
+        queue,
+        pipeline,
+        bind_group,
+        storage_buffer,
+        readback_buffer,
+        width,
+        height,
+    )?;
+    consume_staging_slot(device, readback_buffer, rx, needed, callback)
 }
 
 pub(crate) trait BufferUnmap {
@@ -357,11 +385,14 @@ pub fn readback_region(
     encoder.copy_buffer_to_buffer(&storage_buf, 0, &staging_buf, 0, needed_u64);
     queue.submit(std::iter::once(encoder.finish()));
 
-    let copied = map_readback(device, &staging_buf, |mapped| {
-        if mapped.len() < needed {
-            return 0;
-        }
-        let dst_slice: &mut [u8] = 
+    let slice = staging_buf.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = tx.send(result);
+    });
+
+    let copied = consume_staging_slot(device, &staging_buf, rx, needed, |mapped| {
+        let dst_slice: &mut [u8] =
             // SAFETY: caller guarantees dst is valid for dst_cap bytes.
             unsafe { std::slice::from_raw_parts_mut(dst, dst_cap as usize) };
         dst_slice[..needed].copy_from_slice(&mapped[..needed]);
@@ -764,6 +795,81 @@ mod tests {
         );
         assert_eq!(written, 16);
         assert_eq!(region_out, [255, 128, 0, 128].repeat(4).as_slice());
+    }
+
+    #[test]
+    fn test_async_double_buffered_submit_and_consume() {
+        use wgpu::util::DeviceExt;
+        let pctx = crate::paint::PaintContext::new();
+        let width = 64;
+        let height = 2;
+        let row_pixels = [128, 64, 0, 128].repeat(width as usize);
+        let pixels: Vec<u8> = row_pixels.repeat(height as usize);
+        let texture = pctx.wgpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("test-async-unpremul-tex"),
+            size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        pctx.wgpu.queue.write_texture(
+            texture.as_image_copy(), &pixels,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(width * 4), rows_per_image: Some(height) },
+            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        );
+        let needed = (width as usize) * (height as usize) * 4;
+        let size = needed as u64;
+        let storage = pctx.wgpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test-async-storage"),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let staging = pctx.wgpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("test-async-staging"),
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let uniforms: [u32; 4] = [width, height, 0, 0];
+        let uniform_buf = pctx.wgpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("test-async-uniforms"),
+            contents: bytemuck::cast_slice(&uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = pctx.wgpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("test-async-bg"),
+            layout: &pctx.wgpu.pipelines.unpremultiply_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&view) },
+                wgpu::BindGroupEntry { binding: 1, resource: storage.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let rx = submit_readback_gpu_pass(
+            &pctx.wgpu.device,
+            &pctx.wgpu.queue,
+            &pctx.wgpu.pipelines.unpremultiply_pack,
+            &bind_group,
+            &storage,
+            &staging,
+            width,
+            height,
+        )
+        .expect("submit readback pass");
+
+        let mut observed = Vec::new();
+        let result = consume_staging_slot(&pctx.wgpu.device, &staging, rx, needed, |bytes| {
+            observed.extend_from_slice(bytes);
+            bytes.len()
+        });
+        assert_eq!(result, Some(needed));
+        assert_eq!(observed, [255, 128, 0, 128].repeat(width as usize * height as usize));
     }
 
     #[cfg(feature = "gpu-tests")]

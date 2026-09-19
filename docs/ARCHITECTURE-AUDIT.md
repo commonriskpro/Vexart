@@ -316,7 +316,7 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 - [x] Texture pooling para offscreen targets
 - [x] Shader unificado para imagen con radius (eliminar 3-stage copy)
 - [x] Usar GPU sampler para scaling en vez de CPU nearest-neighbor
-- [ ] Async double-buffered readback (eliminar `pollster::block_on` stall)
+- [x] Async double-buffered readback (eliminar `pollster::block_on` stall)
 
 ### Fase 4: Componentes (calidad y correctitud)
 

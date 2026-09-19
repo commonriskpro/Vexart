@@ -17,6 +17,10 @@ pub struct TargetRecord {
     pub staging_index: usize,
     /// State tracking whether each staging slot is currently in the Mapped state.
     pub staging_mapped: [bool; 2],
+    /// Pending async mapping receivers for double-buffered readback slots.
+    pub staging_rx: [Option<std::sync::mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>>; 2],
+    /// Whether pipelined presentation is active for this target.
+    pub is_pipelined: bool,
     /// Uniform buffer holding width and height for unpremultiply pass.
     pub uniform_buffer: Option<wgpu::Buffer>,
     /// Cached compute bind group for unpremultiply pass.
@@ -61,6 +65,8 @@ impl TargetRecord {
             staging_buffers: [readback_buffer, None],
             staging_index: 0,
             staging_mapped: [false; 2],
+            staging_rx: [None, None],
+            is_pipelined: false,
             uniform_buffer: None,
             compute_bind_group: None,
             width,
@@ -107,6 +113,7 @@ impl TargetRecord {
             let view = std::ptr::read(&this.view);
             std::ptr::drop_in_place(&mut this.storage_buffer);
             std::ptr::drop_in_place(&mut this.staging_buffers);
+            std::ptr::drop_in_place(&mut this.staging_rx);
             std::ptr::drop_in_place(&mut this.uniform_buffer);
             (texture, view, width, height)
         }
@@ -114,11 +121,14 @@ impl TargetRecord {
 
     /// Safely unmap a staging buffer slot if it is currently mapped.
     pub fn unmap_staging(&mut self, slot: usize) {
-        if slot < 2 && self.staging_mapped[slot] {
-            if let Some(buf) = &self.staging_buffers[slot] {
-                buf.unmap();
+        if slot < 2 {
+            self.staging_rx[slot] = None;
+            if self.staging_mapped[slot] {
+                if let Some(buf) = &self.staging_buffers[slot] {
+                    buf.unmap();
+                }
+                self.staging_mapped[slot] = false;
             }
-            self.staging_mapped[slot] = false;
         }
     }
 
@@ -837,6 +847,9 @@ mod tests {
         assert!(rec.staging_buffers[0].is_some());
         assert!(rec.staging_buffers[1].is_some());
         assert_eq!(rec.staging_index, 0);
+        assert!(!rec.is_pipelined);
+        assert!(rec.staging_rx[0].is_none());
+        assert!(rec.staging_rx[1].is_none());
 
         let slot0 = rec.advance_staging_slot();
         assert_eq!(slot0, 0);

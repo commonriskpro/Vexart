@@ -354,51 +354,17 @@ fn do_readback(
     height: u32,
     dst: &mut Vec<u8>,
 ) -> u32 {
-    use crate::composite::readback::readback_full;
-
     let needed = match (width as usize).checked_mul(height as usize).and_then(|px| px.checked_mul(4)) {
         Some(size) => size,
         None => return 0,
     };
     dst.resize(needed, 0);
 
-    let rec = match pctx.targets.get_mut(target) {
-        Some(r) => r,
-        None => return 0,
-    };
-
-    rec.advance_staging_slot();
-    let (storage_buf, staging_buf, bind_group) = match rec
-        .ensure_readback_buffers(&pctx.wgpu.device, &pctx.wgpu.pipelines.unpremultiply_bgl)
-    {
-        Some(bufs) => bufs,
-        None => return 0,
-    };
-    let storage_ptr: *const wgpu::Buffer = storage_buf;
-    let staging_ptr: *const wgpu::Buffer = staging_buf;
-    let bg_ptr: *const wgpu::BindGroup = bind_group;
-    let device_ptr: *const wgpu::Device = &pctx.wgpu.device;
-    let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue;
-    let pipeline_ptr: *const wgpu::ComputePipeline = &pctx.wgpu.pipelines.unpremultiply_pack;
-
-    // SAFETY: device, queue, pipeline, buffers are all owned by pctx and
-    // are stable (not moved/dropped) during this call. We hold pctx mutably, which
-    // ensures exclusive access. The raw pointers are valid for the duration of
-    // readback_full (a synchronous blocking call).
-    unsafe {
-        readback_full(
-            &*device_ptr,
-            &*queue_ptr,
-            &*pipeline_ptr,
-            &*bg_ptr,
-            &*storage_ptr,
-            &*staging_ptr,
-            width,
-            height,
-            dst.as_mut_ptr(),
-            dst.len() as u32,
-        )
-    }
+    let written = do_readback_with(pctx, target, width, height, |bytes| {
+        dst[..needed].copy_from_slice(bytes);
+        needed as u32
+    });
+    written.unwrap_or(0)
 }
 
 /// Read a full target and consume packed RGBA bytes while the GPU readback
@@ -413,7 +379,7 @@ pub(super) fn do_readback_with<R, F>(
 where
     F: FnOnce(&[u8]) -> R,
 {
-    use crate::composite::readback::readback_full_with;
+    use crate::composite::readback::{consume_staging_slot, submit_readback_gpu_pass};
 
     let device_ptr: *const wgpu::Device = &pctx.wgpu.device;
     let queue_ptr: *const wgpu::Queue = &pctx.wgpu.queue;
@@ -421,15 +387,17 @@ where
     let bgl_ptr: *const wgpu::BindGroupLayout = &pctx.wgpu.pipelines.unpremultiply_bgl;
 
     let rec = pctx.targets.get_mut(target)?;
-    rec.advance_staging_slot();
+    let slot = rec.advance_staging_slot();
     let (storage_buf, staging_buf, bind_group) =
         rec.ensure_readback_buffers(unsafe { &*device_ptr }, unsafe { &*bgl_ptr })?;
     let storage_ptr: *const wgpu::Buffer = storage_buf;
     let staging_ptr: *const wgpu::Buffer = staging_buf;
     let bg_ptr: *const wgpu::BindGroup = bind_group;
 
-    unsafe {
-        readback_full_with(
+    let needed = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
+
+    let rx = unsafe {
+        submit_readback_gpu_pass(
             &*device_ptr,
             &*queue_ptr,
             &*pipeline_ptr,
@@ -438,9 +406,21 @@ where
             &*staging_ptr,
             width,
             height,
+        )?
+    };
+
+    rec.staging_mapped[slot] = true;
+    let res = unsafe {
+        consume_staging_slot(
+            &*device_ptr,
+            &*staging_ptr,
+            rx,
+            needed,
             callback,
         )
-    }
+    };
+    rec.staging_mapped[slot] = false;
+    res
 }
 
 // ─── Native Presentation exports (Phase 2b) ────────────────────────────────
