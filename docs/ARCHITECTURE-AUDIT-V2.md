@@ -12,7 +12,7 @@
 | :--- | :--- | :--- | :--- | :---: |
 | **1.1** | **Native / GPU** | RegionalReadbackPool con doble búfer y zero-copy emission (Completado) | Eliminada alocación y CPU stall en daño regional | ✅ **Hecho** |
 | **2.1** | **Engine Loop** | Doble recorrido DFS por frame (`walkTreeOnce` + `traverseFrame`) (Completado) | Eliminada primera pasada DFS y unificado ciclo en `traverseFrame` | ✅ **Hecho** |
-| **2.2** | **Engine / Native** | MSDF Text sin batchear (1 llamada FFI + 1 draw call por cada texto) | Sobrecarga masiva de draw calls y mutexes | **Alta** |
+| **2.2** | **Engine / Native** | MSDF Text batching con protocolo binario VXTX (Completado) | Eliminadas N llamadas FFI/draw calls; 1 FFI + 1 draw call por capa | ✅ **Hecho** |
 | **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) | Memory leak en procesos largos | **Alta** |
 | **4.1** | **Headless** | `Popover` no tiene trampa de foco (`pushFocusScope`) ni escucha `Escape` | Violación de accesibilidad / fuga de foco | **Alta** |
 | **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados (Completado) | Eliminadas 692 LOC; 3 mutexes reducidos a 1 (`SHARED_PAINT`) | ✅ **Hecho** |
@@ -92,15 +92,20 @@
   2. **Intrinsic Sizing de Imágenes Asíncronas**: En `packages/engine/src/loop/image.ts:publish`, al completarse la decodificación de imagen, si el nodo no posee ancho/alto explícito en sus props de layout, se asignan las dimensiones intrínsecas a `_flexNode` (`setWidth`/`setHeight`), marcando `_flexNode.markDirty()` y `markLayoutDirty()` antes de renderizar el siguiente frame.
   3. **Eliminación de `walkTreeOnce` y Unificación en `traverseFrame`**: En `composite.ts`, se eliminó la pasada redundante `walkTreeOnce(s)` y el vaciado intermedio de las 7 listas acumuladoras (`s.rectNodes.length = 0`, etc.). `traverseFrame` es la única pasada DFS que recorre el árbol, resuelve props, escribe la geometría final y emite las operaciones al render graph.
 
-### Hallazgo 2.2: MSDF Text Rendering sin Batchear (1 FFI + 1 Draw Call por Texto)
-* **Prioridad:** **Alta**
+### Hallazgo 2.2: MSDF Text Rendering sin Batchear (✅ Completado)
+* **Prioridad:** **Alta** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/engine/src/ffi/gpu-renderer-backend.ts:1236–1248` (`flushText`)
-  * `native/libvexart/src/lib.rs:1444–1685` (`vexart_font_render_text`)
+  * `native/libvexart/src/lib.rs` (`vexart_font_render_batch`)
+  * `packages/engine/src/ffi/vexart-bridge.ts` (`MSDF_FONT_SYMBOLS`)
+  * `packages/engine/src/ffi/gpu-renderer-backend.ts` (`flushText`, `ensureBatchCapacity`)
 * **Problema:**
-  En `flushText()`, el motor itera sobre cada texto individualmente y llama a `tryMsdfText`. Por cada texto en pantalla se produce 1 llamada FFI, 1 codificación UTF-8, bloqueos de mutex en Rust y **1 draw call independiente en WGPU**.
-* **Solución Arquitectónica:**
-  Batchear las operaciones de texto en un flujo de comandos binario por capa. En Rust, acumular los cuadriláteros de glifos en el vertex buffer común y despachar un único draw call para toda la tipografía de la capa.
+  En `flushText()`, el motor iteraba sobre cada texto individualmente y llamaba a `tryMsdfText`. Por cada texto en pantalla se producía 1 llamada FFI, 1 codificación UTF-8, re-parseo de métricas TTF, 3 bloqueos de mutex en Rust y **1 draw call independiente en WGPU**.
+* **Solución Arquitectónica Implementada:**
+  1. **Protocolo Binario VXTX**: Se definió un layout binario estructurado con cabecera de 16 bytes (`magic: 0x56585458`, `version: 1`, `item_count`, `total_bytes`) y registros compactos de 32 bytes más cadenas dinámicas UTF-8 para familias y texto.
+  2. **Endpoint FFI Batched (`vexart_font_render_batch`)**: Nuevo export C nativo en `lib.rs` que adquiere los mutexes de font system, context y MSDF atlas **una sola vez por lote**.
+  3. **Caché Local de Face**: Evita re-consultar `font_system` y re-parsear las métricas de la fuente TTF (`units_per_em`, `ascender`) entre textos consecutivos que comparten la misma familia, peso y estilo.
+  4. **Unificación de Instancias y Draw Call**: Acumula todas las instancias `MsdfGlyphInstance` de todos los textos del lote en un único buffer y despacha un solo `dispatch_glyph_instances` a WGPU (1 draw call por atlas).
+  5. **Búfer Elástico Zero-Alloc en Engine**: Prealocación de `_msdfBatchBuf` (64KB) con crecimiento elástico (2x) y serialización in-place usando `DataView` y `TextEncoder.prototype.encodeInto`, manteniendo fallback seguro a `tryMsdfText` para dylibs heredados.
 
 ### Hallazgo 2.3: Alocaciones en `msdfMeasureText` y Cache Reducido (✅ Completado)
 * **Prioridad:** **Media** — *Implementado y Verificado*

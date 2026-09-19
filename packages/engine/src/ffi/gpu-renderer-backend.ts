@@ -284,6 +284,20 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   let _msdfTextBuf = new Uint8Array(4096)
   let _msdfParamsBuf = new Uint8Array(4096)
   const _msdfParamsView = new DataView(_msdfParamsBuf.buffer)
+  let _msdfBatchBuf = new Uint8Array(64 * 1024)
+  let _msdfBatchView = new DataView(_msdfBatchBuf.buffer)
+  const _batchStatsOut = new Uint32Array(1)
+
+  function ensureBatchCapacity(requiredBytes: number) {
+    if (requiredBytes > _msdfBatchBuf.byteLength) {
+      let nextCap = _msdfBatchBuf.byteLength * 2
+      while (nextCap < requiredBytes) nextCap *= 2
+      const nextBuf = new Uint8Array(nextCap)
+      nextBuf.set(_msdfBatchBuf)
+      _msdfBatchBuf = nextBuf
+      _msdfBatchView = new DataView(_msdfBatchBuf.buffer)
+    }
+  }
 
   function getMsdfSymbols() {
     if (_msdfSymbols !== null) return _msdfSymbols
@@ -1235,16 +1249,62 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     const flushText = () => {
       if (deferredMsdfOps.length === 0) return
       ensureLoadedLayer()
-      for (const msdfOp of deferredMsdfOps) {
-        tryMsdfText(
-          vctx, targetHandle,
-          msdfOp.text, msdfOp.x, msdfOp.y,
-          msdfOp.fontSize, msdfOp.lineHeight, msdfOp.maxWidth,
-          msdfOp.colorRgba,
-          ctx.target.width, ctx.target.height,
-          msdfOp.fontFamily, msdfOp.fontWeight, msdfOp.fontStyle,
+      const sym = getMsdfSymbols()
+      if (sym && typeof sym.vexart_font_render_batch === "function") {
+        let offset = 16
+        for (let i = 0; i < deferredMsdfOps.length; i++) {
+          const msdfOp = deferredMsdfOps[i]
+          const family = msdfOp.fontFamily || "sans-serif"
+          const text = msdfOp.text
+          const worstCaseBytes = 32 + (family.length + text.length) * 3
+          ensureBatchCapacity(offset + worstCaseBytes)
+
+          const itemOffset = offset
+          _msdfBatchView.setFloat32(itemOffset + 0, msdfOp.x, true)
+          _msdfBatchView.setFloat32(itemOffset + 4, msdfOp.y, true)
+          _msdfBatchView.setFloat32(itemOffset + 8, msdfOp.fontSize, true)
+          _msdfBatchView.setFloat32(itemOffset + 12, msdfOp.lineHeight, true)
+          _msdfBatchView.setFloat32(itemOffset + 16, msdfOp.maxWidth, true)
+          _msdfBatchView.setUint32(itemOffset + 20, msdfOp.colorRgba >>> 0, true)
+          _msdfBatchView.setUint16(itemOffset + 24, msdfOp.fontWeight ?? 400, true)
+          _msdfBatchView.setUint16(itemOffset + 26, msdfOp.fontStyle === "italic" ? 1 : 0, true)
+
+          const familyRes = _msdfEncoder.encodeInto(family, _msdfBatchBuf.subarray(itemOffset + 32))
+          const familyLen = familyRes.written ?? 0
+          const textRes = _msdfEncoder.encodeInto(text, _msdfBatchBuf.subarray(itemOffset + 32 + familyLen))
+          const textLen = textRes.written ?? 0
+
+          _msdfBatchView.setUint16(itemOffset + 28, familyLen, true)
+          _msdfBatchView.setUint16(itemOffset + 30, textLen, true)
+
+          offset = itemOffset + 32 + familyLen + textLen
+        }
+
+        _msdfBatchView.setUint32(0, 0x56585458, true)
+        _msdfBatchView.setUint32(4, 1, true)
+        _msdfBatchView.setUint32(8, deferredMsdfOps.length, true)
+        _msdfBatchView.setUint32(12, offset, true)
+
+        sym.vexart_font_render_batch(
+          vctx,
+          targetHandle,
+          ptr(_msdfBatchBuf),
+          offset,
+          ptr(_batchStatsOut),
         )
+      } else {
+        for (const msdfOp of deferredMsdfOps) {
+          tryMsdfText(
+            vctx, targetHandle,
+            msdfOp.text, msdfOp.x, msdfOp.y,
+            msdfOp.fontSize, msdfOp.lineHeight, msdfOp.maxWidth,
+            msdfOp.colorRgba,
+            ctx.target.width, ctx.target.height,
+            msdfOp.fontFamily, msdfOp.fontWeight, msdfOp.fontStyle,
+          )
+        }
       }
+      targetMutationVersion += 1
       deferredMsdfOps.length = 0
     }
     const flushAll = () => {
@@ -2960,4 +3020,3 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   if (options.shmPresentation) tmuxPresentationDrainers.set(backend, options.shmPresentation.waitForDrain)
   return backend
 }
-

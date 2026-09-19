@@ -268,6 +268,11 @@ export const MSDF_FONT_SYMBOLS = {
   vexart_font_query: { args: [FFIType.ptr, FFIType.u32, FFIType.u16, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   // font_render_text: ctx, target, text_ptr, text_len, params_ptr, params_len, stats_out → i32
   vexart_font_render_text: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  // font_render_batch: ctx, target, batch_ptr, batch_len, stats_out → i32
+  vexart_font_render_batch: {
+    args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr],
+    returns: FFIType.i32,
+  },
   // font_measure: text_ptr, text_len, families_ptr, families_len, font_size, weight, italic, out_w, out_h → i32
   vexart_font_measure: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.f32, FFIType.u16, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
 } as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
