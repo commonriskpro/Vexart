@@ -10,6 +10,7 @@ import { createSignal } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
+import { useListNavigation } from "../collections/list-navigation"
 
 // ── Types ──
 
@@ -76,7 +77,6 @@ export type ComboboxProps = {
 export function Combobox(props: ComboboxProps) {
   const [open, setOpen] = createSignal(false)
   const [query, setQuery] = createSignal("")
-  const [highlightedIndex, setHighlightedIndex] = createSignal(0)
 
   const disabled = useDisabled(props)
 
@@ -112,6 +112,16 @@ export function Combobox(props: ComboboxProps) {
     setQuery("")
     setOpen(false)
   }
+
+  const nav = useListNavigation({
+    count: () => filtered().length,
+    selectedIndex: 0,
+    orientation: "vertical",
+    vim: true,
+    isItemDisabled: (index) => filtered()[index]?.disabled ?? false,
+  })
+  const highlightedIndex = nav.selectedIndex
+  const setHighlightedIndex = nav.setSelectedIndex
 
   const { focused, focus } = useFocus({
     id: props.focusId,
@@ -162,19 +172,18 @@ export function Combobox(props: ComboboxProps) {
           setHighlightedIndex(firstNonDisabledIndex(filtered()))
           return
         }
-        const opts = filtered()
-        let next = highlightedIndex() + 1
-        while (next < opts.length && opts[next].disabled) next++
-        if (next < opts.length) setHighlightedIndex(next)
+        nav.onKeyDown(e)
         return
       }
 
       if (e.key === "up" || e.key === "k") {
         if (!open()) return
-        const opts = filtered()
-        let prev = highlightedIndex() - 1
-        while (prev >= 0 && opts[prev].disabled) prev--
-        if (prev >= 0) setHighlightedIndex(prev)
+        nav.onKeyDown(e)
+        return
+      }
+
+      if (open() && (e.key === "home" || e.key === "end" || e.key === "pageup" || e.key === "pagedown")) {
+        nav.onKeyDown(e)
         return
       }
     },

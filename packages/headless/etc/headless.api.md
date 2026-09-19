@@ -149,6 +149,9 @@ export type CreateExtmarkOptions = Omit<Extmark, "id">;
 export function createForm<T extends Record<string, any>>(options: FormOptions<T>): FormHandle<T>;
 
 // @public (undocumented)
+export const createListNavigation: typeof useListNavigation;
+
+// @public (undocumented)
 export function createToaster(options: ToasterOptions): ToasterHandle;
 
 // Warning: (ae-forgotten-export) The symbol "DialogRoot" needs to be exported by the entry point index.d.ts
@@ -425,6 +428,35 @@ export type ListItemContext = {
     itemProps: {
         onPress: () => void;
     };
+};
+
+// @public (undocumented)
+export type ListNavigationOptions = {
+    count: number | (() => number);
+    selectedIndex?: number | (() => number);
+    onSelect?: (index: number) => void;
+    onSelectedChange?: (index: number) => void;
+    loop?: boolean;
+    orientation?: ListNavigationOrientation;
+    vim?: boolean;
+    pageSize?: number | (() => number);
+    isItemDisabled?: (index: number) => boolean;
+};
+
+// @public (undocumented)
+export type ListNavigationOrientation = "vertical" | "horizontal" | "both";
+
+// @public (undocumented)
+export type ListNavigationReturn = {
+    selectedIndex: Accessor<number>;
+    setSelectedIndex: (index: number) => void;
+    onKeyDown: (event: KeyEvent) => boolean;
+    next: () => void;
+    prev: () => void;
+    first: () => void;
+    last: () => void;
+    pageNext: () => void;
+    pagePrev: () => void;
 };
 
 // @public (undocumented)
@@ -964,6 +996,9 @@ export const useCodeTokens: typeof createCode;
 
 // @public (undocumented)
 export const useDiff: typeof createDiff;
+
+// @public (undocumented)
+export function useListNavigation(options: ListNavigationOptions): ListNavigationReturn;
 
 // @public (undocumented)
 export function VirtualList<T>(props: VirtualListProps<T>): JSX.Element;

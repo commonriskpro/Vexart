@@ -566,6 +566,9 @@ declare type CreateExtmarkOptions = Omit<Extmark, "id">;
 /** @public */
 export declare function createForm<T extends Record<string, any>>(options: FormOptions<T>): FormHandle<T>;
 
+/** @public */
+export declare const createListNavigation: typeof useListNavigation;
+
 export { createMemo }
 
 /** @public */
@@ -1520,6 +1523,53 @@ export declare type ListItemContext = {
     itemProps: {
         onPress: () => void;
     };
+};
+
+/** @public */
+export declare type ListNavigationOptions = {
+    /** Total number of items or reactive accessor returning total items. */
+    count: number | (() => number);
+    /** Currently selected/highlighted index or accessor. */
+    selectedIndex?: number | (() => number);
+    /** Called when an item is confirmed/selected (e.g. Enter key). */
+    onSelect?: (index: number) => void;
+    /** Called when selected index changes via navigation or programmatic update. */
+    onSelectedChange?: (index: number) => void;
+    /** Whether navigation wraps around at start/end. Default: false. */
+    loop?: boolean;
+    /** Navigation orientation. Default: "vertical". */
+    orientation?: ListNavigationOrientation;
+    /** Whether vim navigation keys (j/k or h/l) are enabled. Default: true. */
+    vim?: boolean;
+    /** Number of items to jump on PageUp / PageDown. Default: 5. */
+    pageSize?: number | (() => number);
+    /** Predicate returning whether an item at index is disabled. */
+    isItemDisabled?: (index: number) => boolean;
+};
+
+/** @public */
+export declare type ListNavigationOrientation = "vertical" | "horizontal" | "both";
+
+/** @public */
+export declare type ListNavigationReturn = {
+    /** Reactive accessor for currently selected/highlighted index. */
+    selectedIndex: Accessor<number>;
+    /** Programmatically set selected index and trigger onSelectedChange. */
+    setSelectedIndex: (index: number) => void;
+    /** Key event handler. Returns true if the key was handled. */
+    onKeyDown: (event: KeyEvent) => boolean;
+    /** Move to next enabled item. */
+    next: () => void;
+    /** Move to previous enabled item. */
+    prev: () => void;
+    /** Move to first enabled item. */
+    first: () => void;
+    /** Move to last enabled item. */
+    last: () => void;
+    /** Jump forward by pageSize. */
+    pageNext: () => void;
+    /** Jump backward by pageSize. */
+    pagePrev: () => void;
 };
 
 /** @public */
@@ -3310,6 +3360,9 @@ export declare function useInput(): () => InputEvent_2 | null;
 
 /** @public */
 export declare function useKeyboard(): KeyboardState;
+
+/** @public */
+export declare function useListNavigation(options: ListNavigationOptions): ListNavigationReturn;
 
 /** @public */
 export declare function useMouse(): MouseState;

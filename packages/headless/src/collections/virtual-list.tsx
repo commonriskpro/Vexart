@@ -11,6 +11,7 @@ import type { JSX } from "solid-js"
 import { useFocus, type SizingUnit } from "@vexart/engine"
 import { onPostScroll } from "@vexart/engine"
 import { useScrollHandle } from "../helpers/use-scroll"
+import { useListNavigation } from "./list-navigation"
 
 // ── Types ──
 
@@ -125,54 +126,34 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
     setScrollTick(t => t + 1)
   }
 
+  const nav = useListNavigation({
+    count: () => props.items.length,
+    selectedIndex: () => (props.selectedIndex !== undefined ? props.selectedIndex : highlightedIndex()),
+    onSelectedChange: (index) => {
+      setHighlightedIndex(index)
+      scrollToIndex(index)
+    },
+    onSelect: (index) => {
+      props.onSelect?.(index)
+    },
+    pageSize: () => viewportItems() || 5,
+    orientation: "vertical",
+    vim: true,
+  })
+
   const keyboard = props.keyboard ?? true
   if (keyboard) {
     useFocus({
       id: props.focusId,
       onKeyDown(e) {
-        if (e.key === "down" || e.key === "j") {
-          const next = Math.min(props.items.length - 1, highlightedIndex() + 1)
-          setHighlightedIndex(next)
-          scrollToIndex(next)
-          return
-        }
-        if (e.key === "up" || e.key === "k") {
-          const prev = Math.max(0, highlightedIndex() - 1)
-          setHighlightedIndex(prev)
-          scrollToIndex(prev)
-          return
-        }
-        if (e.key === "pagedown") {
-          const next = Math.min(props.items.length - 1, highlightedIndex() + viewportItems())
-          setHighlightedIndex(next)
-          scrollToIndex(next)
-          return
-        }
-        if (e.key === "pageup") {
-          const prev = Math.max(0, highlightedIndex() - viewportItems())
-          setHighlightedIndex(prev)
-          scrollToIndex(prev)
-          return
-        }
-        if (e.key === "home") {
-          setHighlightedIndex(0)
-          scrollHandle.scrollTo(0)
-          setScrollTick(t => t + 1)
-          return
-        }
-        if (e.key === "end") {
-          const last = props.items.length - 1
-          setHighlightedIndex(last)
-          scrollToIndex(last)
-          return
-        }
-        if (e.key === "enter" || e.key === " ") {
+        if (e.key === " ") {
           const idx = highlightedIndex()
           if (idx >= 0 && idx < props.items.length) {
             props.onSelect?.(idx)
           }
           return
         }
+        nav.onKeyDown(e)
       },
     })
   }

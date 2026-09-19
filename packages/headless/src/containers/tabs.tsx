@@ -9,6 +9,7 @@
 import { createEffect, createSignal, For, untrack } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
+import { useListNavigation } from "../collections/list-navigation"
 
 // ── Types ──
 
@@ -65,15 +66,20 @@ export function Tabs(props: TabsProps) {
     props.onTabChange?.(index)
   }
 
+  const nav = useListNavigation({
+    count,
+    selectedIndex: () => props.activeTab,
+    onSelectedChange: (index) => {
+      switchTab(index)
+    },
+    loop: true,
+    orientation: "horizontal",
+  })
+
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
-      const total = count()
-      if (total === 0) return
-      if (e.key === "left") { switchTab((active() - 1 + total) % total); return }
-      if (e.key === "right") { switchTab((active() + 1) % total); return }
-      if (e.key === "home") { switchTab(0); return }
-      if (e.key === "end") { switchTab(total - 1); return }
+      nav.onKeyDown(e)
     },
   })
 

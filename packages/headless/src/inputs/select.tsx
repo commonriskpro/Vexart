@@ -10,6 +10,7 @@ import { createSignal, createContext, createEffect, onCleanup, onMount, useConte
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
+import { useListNavigation } from "../collections/list-navigation"
 
 // ── Types ──
 
@@ -113,11 +114,20 @@ function useSelectContext(): SelectContextValue {
 
 function SelectRoot(props: SelectProps) {
   const [open, setOpen] = createSignal(false)
-  const [highlightedIndex, setHighlightedIndex] = createSignal(0)
   const [registeredOptions, setRegisteredOptions] = createSignal<SelectOption[]>([])
 
   const disabled = useDisabled(props)
   const options = () => props.options ?? registeredOptions()
+
+  const nav = useListNavigation({
+    count: () => options().length,
+    selectedIndex: 0,
+    orientation: "vertical",
+    vim: true,
+    isItemDisabled: (index) => options()[index]?.disabled ?? false,
+  })
+  const highlightedIndex = nav.selectedIndex
+  const setHighlightedIndex = nav.setSelectedIndex
 
   const registerOption = (opt: SelectOption) => {
     setRegisteredOptions((prev) => {
@@ -129,13 +139,6 @@ function SelectRoot(props: SelectProps) {
   const unregisterOption = (value: string) => {
     setRegisteredOptions((prev) => prev.filter((o) => o.value !== value))
   }
-
-  createEffect(() => {
-    const opts = options()
-    if (opts.length > 0 && highlightedIndex() >= opts.length) {
-      setHighlightedIndex(Math.max(0, opts.length - 1))
-    }
-  })
 
   const selectValue = (value: string) => {
     const opt = options().find((o) => o.value === value)
@@ -175,21 +178,7 @@ function SelectRoot(props: SelectProps) {
         return
       }
 
-      if (e.key === "down" || e.key === "j") {
-        const opts = options()
-        let next = highlightedIndex() + 1
-        while (next < opts.length && opts[next].disabled) next++
-        if (next < opts.length) setHighlightedIndex(next)
-        return
-      }
-
-      if (e.key === "up" || e.key === "k") {
-        const opts = options()
-        let prev = highlightedIndex() - 1
-        while (prev >= 0 && opts[prev].disabled) prev--
-        if (prev >= 0) setHighlightedIndex(prev)
-        return
-      }
+      nav.onKeyDown(e)
     },
   })
 

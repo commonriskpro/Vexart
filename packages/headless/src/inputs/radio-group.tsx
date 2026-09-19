@@ -9,6 +9,7 @@
 import { For } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
+import { useListNavigation } from "../collections/list-navigation"
 
 // ── Types ──
 
@@ -60,40 +61,42 @@ export function RadioGroup(props: RadioGroupProps) {
   const selectedIndex = () =>
     props.options.findIndex((o) => o.value === props.value)
 
+  const nav = useListNavigation({
+    count: () => props.options.length,
+    selectedIndex,
+    onSelectedChange: (index) => {
+      const opt = props.options[index]
+      if (opt && !opt.disabled) {
+        props.onChange?.(opt.value)
+      }
+    },
+    onSelect: (index) => {
+      const opt = props.options[index]
+      if (opt && !opt.disabled) {
+        props.onChange?.(opt.value)
+      }
+    },
+    loop: true,
+    orientation: "both",
+    vim: true,
+    isItemDisabled: (index) => {
+      const opt = props.options[index]
+      return disabled() || (opt?.disabled ?? false)
+    },
+  })
+
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
-      const opts = props.options
-      if (opts.length === 0) return
-      const current = selectedIndex()
-
-      if (e.key === "down" || e.key === "right" || e.key === "j") {
-        let next = (current + 1) % opts.length
-        let attempts = 0
-        while (opts[next].disabled && attempts < opts.length) {
-          next = (next + 1) % opts.length
-          attempts++
+      if (e.key === " ") {
+        const current = selectedIndex()
+        if (current >= 0 && !props.options[current]?.disabled) {
+          props.onChange?.(props.options[current].value)
         }
-        if (!opts[next].disabled) props.onChange?.(opts[next].value)
         return
       }
-
-      if (e.key === "up" || e.key === "left" || e.key === "k") {
-        let prev = current <= 0 ? opts.length - 1 : current - 1
-        let attempts = 0
-        while (opts[prev].disabled && attempts < opts.length) {
-          prev = prev <= 0 ? opts.length - 1 : prev - 1
-          attempts++
-        }
-        if (!opts[prev].disabled) props.onChange?.(opts[prev].value)
-        return
-      }
-
-      if (e.key === "enter" || e.key === " ") {
-        if (current >= 0) props.onChange?.(opts[current].value)
-        return
-      }
+      nav.onKeyDown(e)
     },
   })
 

@@ -100,6 +100,13 @@ export type { TableColumn, TableCellContext, TableProps } from "./collections/ta
 export { VirtualList } from "./collections/virtual-list"
 export type { VirtualListItemContext, VirtualListProps } from "./collections/virtual-list"
 
+export { useListNavigation, createListNavigation } from "./collections/list-navigation"
+export type {
+  ListNavigationOptions,
+  ListNavigationReturn,
+  ListNavigationOrientation,
+} from "./collections/list-navigation"
+
 // ── Overlays ──────────────────────────────────────────────────────────────────
 
 export { Dialog, DialogOverlay, DialogContent, DialogClose } from "./overlays/dialog"

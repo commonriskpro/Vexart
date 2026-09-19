@@ -321,7 +321,7 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 ### Fase 4: Componentes (calidad y correctitud)
 
 - [ ] Mover `Code`/`Markdown`/`Diff` a `@vexart/styled`; headless queda zero-dep
-- [ ] Extraer `useListNavigation` hook compartido (7 componentes)
+- [x] Extraer `useListNavigation` hook compartido (7 componentes)
 - [ ] Mover `DropdownMenu` headless a `@vexart/headless`
 - [ ] Arreglar theme reactivity en styled wrappers (getters reactivos)
 - [ ] Eliminar wrapper boxes redundantes en Button/Checkbox/Switch

@@ -9,6 +9,7 @@
 import { For } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
+import { useListNavigation } from "./list-navigation"
 
 // ── Types ──
 
@@ -55,29 +56,28 @@ export type TableProps = {
 export function Table(props: TableProps) {
   const disabled = () => props.disabled ?? false
   const showHeader = () => props.showHeader !== false && !!props.renderHeader
+  const count = () => props.data.length
+
+  const nav = useListNavigation({
+    count,
+    selectedIndex: () => props.selectedRow ?? -1,
+    onSelectedChange: (index) => {
+      props.onSelectedRowChange?.(index)
+    },
+    onSelect: (index) => {
+      if (index >= 0 && index < props.data.length) {
+        props.onRowSelect?.(index, props.data[index])
+      }
+    },
+    orientation: "vertical",
+    vim: true,
+  })
 
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
-      const rowCount = props.data.length
-      if (rowCount === 0) return
-      const current = props.selectedRow ?? -1
-
-      if (e.key === "down" || e.key === "j") {
-        props.onSelectedRowChange?.(Math.min(current + 1, rowCount - 1))
-        return
-      }
-      if (e.key === "up" || e.key === "k") {
-        props.onSelectedRowChange?.(Math.max(current - 1, 0))
-        return
-      }
-      if (e.key === "enter") {
-        if (current >= 0 && current < rowCount) {
-          props.onRowSelect?.(current, props.data[current])
-        }
-        return
-      }
+      nav.onKeyDown(e)
     },
   })
 

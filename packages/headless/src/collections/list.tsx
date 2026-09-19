@@ -9,6 +9,7 @@
 import { For } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus } from "@vexart/engine"
+import { useListNavigation } from "./list-navigation"
 
 // ── Types ──
 
@@ -42,17 +43,20 @@ export function List(props: ListProps) {
   const count = () => props.items.length
   const disabled = () => props.disabled ?? false
 
+  const nav = useListNavigation({
+    count,
+    selectedIndex: () => props.selectedIndex,
+    onSelectedChange: props.onSelectedChange,
+    onSelect: props.onSelect,
+    orientation: "vertical",
+    vim: true,
+  })
+
   const { focused } = useFocus({
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
-      if (e.key === "down" || e.key === "j") {
-        props.onSelectedChange?.(Math.min(props.selectedIndex + 1, count() - 1))
-      } else if (e.key === "up" || e.key === "k") {
-        props.onSelectedChange?.(Math.max(props.selectedIndex - 1, 0))
-      } else if (e.key === "enter") {
-        props.onSelect?.(props.selectedIndex)
-      }
+      nav.onKeyDown(e)
     },
   })
 
