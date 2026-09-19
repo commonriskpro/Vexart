@@ -2264,7 +2264,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     }
 
     const stats = emitNativeFinalFrame(vctx, targetHandle, frame)
-    return { output: "native-presented", strategy: lastStrategy, stats }
+    return { output: stats ? "native-presented" : "none", strategy: lastStrategy, stats }
   }
 
   const composeFinalFrame = (frame: RendererBackendFrameContext): RendererBackendFrameResult | null => {

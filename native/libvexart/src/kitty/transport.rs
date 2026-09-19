@@ -938,7 +938,7 @@ fn emit_shm_rgba_at_with_stats(
 
 fn emit_shm_rgba_with_owner(
     rgba: &[u8], width: u32, height: u32, image_id: u32,
-    col: i32, row: i32, z: i32, owner: Option<&mut u64>,
+    col: i32, row: i32, _z: i32, owner: Option<&mut u64>,
 ) -> (i32, ShmTransferStats) {
     use crate::kitty::encoder::PixelPayload;
     use base64::engine::general_purpose::STANDARD as B64;
@@ -950,10 +950,6 @@ fn emit_shm_rgba_with_owner(
     };
     let existing_frame = image_frame(image_id);
     let animation_frame = existing_frame.filter(|_| !needs_full_transmit(image_id, width, height));
-    let digest = payload_hash(rgba, width, height, col, row, z);
-    if owner.is_none() && payload_unchanged(image_id, digest) {
-        return (OK, stats);
-    }
     let compression = shm_compression_enabled();
     let t_compress = Instant::now();
     let encoded = PixelPayload::encode(rgba, compression);
@@ -1009,7 +1005,6 @@ fn emit_shm_rgba_with_owner(
             lease.publish(owner);
             record_image_frame(image_id, target_frame);
             record_image_geometry(image_id, width, height);
-            record_payload(image_id, digest);
             (OK, stats)
         }
         Err(e) => {
@@ -1300,7 +1295,7 @@ mod tests {
     }
 
     #[test]
-    fn test_identical_payload_skips_direct_and_shm_output() {
+    fn test_identical_payload_skips_direct_output() {
         let image_id = 40_001;
         let rgba = [0x10, 0x20, 0x30, 0xff];
         let digest = payload_hash(&rgba, 1, 1, 2, 3, 4);
@@ -1310,10 +1305,6 @@ mod tests {
         record_payload(image_id, digest);
 
         assert_eq!(emit_direct_rgba_at(&rgba, 1, 1, image_id, 2, 3, 4), OK);
-        let result = emit_shm_rgba_at_with_stats(&rgba, 1, 1, image_id, 2, 3, 4);
-        assert_eq!(result.0, OK);
-        assert_eq!(result.1.raw_bytes, rgba.len() as u64);
-        assert_eq!(result.1.payload_bytes, 0);
 
         force_write_failure(false);
         forget_image_frame(image_id);
@@ -1397,11 +1388,10 @@ mod tests {
         assert_eq!(emit_direct_rgba_at(&changed, 1, 1, image_id, 0, 0, 0), OK);
         assert_eq!(hash_scan_count(), 1);
 
+        // SHM mode performs zero hashing on RGBA buffer
         reset_hash_scan_count();
-        let result = emit_shm_rgba_at_with_stats(&changed, 1, 1, image_id, 0, 0, 0);
-        assert_eq!(result.0, OK);
-        assert_eq!(result.1.payload_bytes, 0);
-        assert_eq!(hash_scan_count(), 1);
+        let _ = emit_shm_rgba_at_with_stats(&changed, 1, 1, image_id, 0, 0, 0);
+        assert_eq!(hash_scan_count(), 0);
 
         forget_image_frame(image_id);
         cleanup_shm_on_shutdown();

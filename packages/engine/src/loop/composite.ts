@@ -398,14 +398,10 @@ function updateInteractiveStates(s: CompositeFrameState): { hadClick: boolean; c
     prevActiveNode: s.pointer.prevActiveNode,
     scrollOffsets: s.scrollOffsets,
     onChanged: () => {
-      changed = true
       if (visualNodeIds.size === 0) {
-        // No visual nodes tracked but something changed (e.g. mouseDown dispatch)
-        // — defensively mark all layers dirty.
-        s.dirty.markDirty()
-        s.dirty.markAllDirty()
         return
       }
+      changed = true
       // Mark only the layers that CONTAIN the changed nodes dirty (with
       // full-bounds damage to avoid the "disappearing siblings" bug within
       // each layer). Layers without changed nodes stay clean and are reused.
