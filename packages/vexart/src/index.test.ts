@@ -19,6 +19,8 @@ test("vexart public unified API surface", () => {
   // Headless primitives
   expect(typeof vexart.Button).toBe("function")
   expect(typeof vexart.Input).toBe("function")
+  expect(typeof vexart.useTextEditor).toBe("function")
+  expect(typeof vexart.createTextEditor).toBe("function")
   expect(typeof vexart.ToggleSwitch).toBe("function")
   expect(typeof vexart.DropdownMenu).toBe("function")
   expect(typeof vexart.DropdownMenuTrigger).toBe("function")

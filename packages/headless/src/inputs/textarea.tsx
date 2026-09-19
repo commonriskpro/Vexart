@@ -48,7 +48,7 @@ import type { Highlighter, HighlightToken, Token } from "../display/code"
 import { clearFocus } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
-import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
+import { useTextEditor, previousCodePointOffset, nextCodePointOffset } from "./text-editor"
 
 // ── Theme type ──
 
@@ -313,10 +313,12 @@ export type TextareaProps = {
 
 /** @public */
 export function Textarea(props: TextareaProps) {
-  const [cursor, setCursor] = createSignal(props.value.length)
-  const [selStart, setSelStart] = createSignal(-1)
-  const [selEnd, setSelEnd] = createSignal(-1)
-  const [blink, setBlink] = createSignal(true)
+  const editor = useTextEditor({
+    value: () => props.value,
+    onChange: props.onChange,
+    singleLine: false,
+  })
+
   const [cursorColorSignal, setCursorColorSignal] = createSignal<string | number>(0)
   const [syntaxTokens, setSyntaxTokens] = createSignal<Token[][]>([])
   const [viewportRow, setViewportRow] = createSignal(0)
@@ -342,10 +344,10 @@ export function Textarea(props: TextareaProps) {
 
   // Derived line state
   const lines = () => textToLines(props.value)
-  const cursorPos = () => offsetToRowCol(lines(), cursor())
+  const cursorPos = () => offsetToRowCol(lines(), editor.cursor())
 
   function ensureCursorVisible() {
-    const rc = offsetToRowCol(lines(), cursor())
+    const rc = offsetToRowCol(lines(), editor.cursor())
     const vr = viewportRow()
     const vl = visibleLines()
     if (rc.row < vr) {
@@ -387,59 +389,18 @@ export function Textarea(props: TextareaProps) {
     onCleanup(() => { cancelled = true })
   })
 
-  // Blink timer
-  let blinkTimer: ReturnType<typeof setInterval> | null = null
-  function startBlink() {
-    stopBlink()
-    setBlink(true)
-    blinkTimer = setInterval(() => setBlink((b) => !b), 530)
-  }
-  function stopBlink() {
-    if (blinkTimer) clearInterval(blinkTimer)
-    blinkTimer = null
-  }
-  onCleanup(() => stopBlink())
-
-  // ── Selection helpers ──
-
-  function hasSelection() {
-    return selStart() >= 0 && selEnd() >= 0 && selStart() !== selEnd()
-  }
-  function selRange(): [number, number] {
-    const s = selStart()
-    const e = selEnd()
-    return s < e ? [s, e] : [e, s]
-  }
-  function clearSelection() {
-    setSelStart(-1)
-    setSelEnd(-1)
-  }
-  function deleteSelection(): string {
-    if (!hasSelection()) return props.value
-    const [lo, hi] = selRange()
-    const next = props.value.slice(0, lo) + props.value.slice(hi)
-    setCursor(lo)
-    clearSelection()
-    return next
-  }
-  function selectAll() {
-    setSelStart(0)
-    setSelEnd(props.value.length)
-    setCursor(props.value.length)
-  }
-
   // ── Cursor movement ──
 
   let stickyCol = -1
 
   function moveCursor(offset: number, keepSelection?: boolean) {
     if (keepSelection) {
-      if (!hasSelection()) setSelStart(cursor())
-      setCursor(offset)
-      setSelEnd(offset)
+      if (!editor.hasSelection()) editor.setSelStart(editor.cursor())
+      editor.setCursor(offset)
+      editor.setSelEnd(offset)
     } else {
-      setCursor(offset)
-      clearSelection()
+      editor.setCursor(offset)
+      editor.clearSelection()
     }
     stickyCol = -1
     props.onCursorChange?.(cursorPos().row, cursorPos().col)
@@ -460,12 +421,12 @@ export function Textarea(props: TextareaProps) {
     const newOffset = rowColToOffset(ls, targetRow, targetCol)
 
     if (shift) {
-      if (!hasSelection()) setSelStart(cursor())
-      setCursor(newOffset)
-      setSelEnd(newOffset)
+      if (!editor.hasSelection()) editor.setSelStart(editor.cursor())
+      editor.setCursor(newOffset)
+      editor.setSelEnd(newOffset)
     } else {
-      setCursor(newOffset)
-      clearSelection()
+      editor.setCursor(newOffset)
+      editor.clearSelection()
     }
     props.onCursorChange?.(targetRow, targetCol)
     ensureCursorVisible()
@@ -476,7 +437,7 @@ export function Textarea(props: TextareaProps) {
 
   function executeAction(action: KeyBindingAction, e: KeyEvent) {
     const val = props.value
-    const pos = cursor()
+    const pos = editor.cursor()
     const ls = lines()
     const rc = cursorPos()
 
@@ -485,16 +446,13 @@ export function Textarea(props: TextareaProps) {
         props.onSubmit?.(val)
         return
       case KEY_BINDING_ACTION.NEWLINE: {
-        let base = val
-        let insertAt = pos
-        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-        const next = base.slice(0, insertAt) + "\n" + base.slice(insertAt)
-        moveCursor(insertAt + 1)
-        props.onChange?.(next)
+        editor.insertText("\n")
+        stickyCol = -1
+        ensureCursorVisible()
         return
       }
       case KEY_BINDING_ACTION.SELECT_ALL:
-        selectAll()
+        editor.selectAll()
         return
       case KEY_BINDING_ACTION.BUFFER_START:
         moveCursor(0, e.mods.shift)
@@ -521,28 +479,22 @@ export function Textarea(props: TextareaProps) {
         moveCursor(rowColToOffset(ls, rc.row, ls[rc.row].length), e.mods.shift)
         return
       case KEY_BINDING_ACTION.CURSOR_LEFT:
-        if (!e.mods.shift && hasSelection()) { moveCursor(selRange()[0]) }
+        if (!e.mods.shift && editor.hasSelection()) { moveCursor(editor.selRange()[0]) }
         else if (pos > 0) { moveCursor(previousCodePointOffset(val, pos), e.mods.shift) }
         return
       case KEY_BINDING_ACTION.CURSOR_RIGHT:
-        if (!e.mods.shift && hasSelection()) { moveCursor(selRange()[1]) }
+        if (!e.mods.shift && editor.hasSelection()) { moveCursor(editor.selRange()[1]) }
         else if (pos < val.length) { moveCursor(nextCodePointOffset(val, pos), e.mods.shift) }
         return
       case KEY_BINDING_ACTION.DELETE_BACK:
-        if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos > 0) {
-          const start = previousCodePointOffset(val, pos)
-          setCursor(start); props.onChange?.(val.slice(0, start) + val.slice(pos))
-        }
-        clearSelection(); stickyCol = -1
+        editor.deleteBackward()
+        stickyCol = -1
+        ensureCursorVisible()
         return
       case KEY_BINDING_ACTION.DELETE_FORWARD:
-        if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos < val.length) {
-          const end = nextCodePointOffset(val, pos)
-          props.onChange?.(val.slice(0, pos) + val.slice(end))
-        }
-        clearSelection(); stickyCol = -1
+        editor.deleteForward()
+        stickyCol = -1
+        ensureCursorVisible()
         return
     }
   }
@@ -553,7 +505,7 @@ export function Textarea(props: TextareaProps) {
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
-      startBlink()
+      editor.startBlink()
 
       // Call user's onKeyDown first
       props.onKeyDown?.(e)
@@ -570,12 +522,9 @@ export function Textarea(props: TextareaProps) {
 
       // Printable character → insert
       if (e.char && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
-        let base = props.value
-        let insertAt = cursor()
-        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-        const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
-        moveCursor(insertAt + e.char.length)
-        props.onChange?.(next)
+        editor.insertText(e.char)
+        stickyCol = -1
+        ensureCursorVisible()
         return
       }
     },
@@ -587,17 +536,13 @@ export function Textarea(props: TextareaProps) {
     if (!focusHandle.focused()) return
     if (disabled()) return
 
-    startBlink()
+    editor.startBlink()
     props.onPaste?.(event.text)
 
-    let base = props.value
-    let insertAt = cursor()
-    if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
     const text = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-    const next = base.slice(0, insertAt) + text + base.slice(insertAt)
-    moveCursor(insertAt + text.length)
+    editor.insertText(text)
+    stickyCol = -1
     ensureCursorVisible()
-    props.onChange?.(next)
   })
   onCleanup(() => unsubPaste())
 
@@ -608,11 +553,11 @@ export function Textarea(props: TextareaProps) {
   if (props.ref) {
     const handle: TextareaHandle = {
       get plainText() { return props.value },
-      get cursorOffset() { return cursor() },
+      get cursorOffset() { return editor.cursor() },
       get cursorRow() { return cursorPos().row },
       get cursorCol() { return cursorPos().col },
       get visualCursor(): VisualCursor {
-        return { offset: cursor(), row: cursorPos().row, col: cursorPos().col }
+        return { offset: editor.cursor(), row: cursorPos().row, col: cursorPos().col }
       },
 
       setText(text: string) {
@@ -620,12 +565,9 @@ export function Textarea(props: TextareaProps) {
         moveCursor(text.length)
       },
       insertText(text: string) {
-        let base = props.value
-        let insertAt = cursor()
-        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-        const next = base.slice(0, insertAt) + text + base.slice(insertAt)
-        moveCursor(insertAt + text.length)
-        props.onChange?.(next)
+        editor.insertText(text)
+        stickyCol = -1
+        ensureCursorVisible()
       },
       clear() {
         props.onChange?.("")
@@ -672,11 +614,11 @@ export function Textarea(props: TextareaProps) {
   createEffect(() => {
     const f = focusHandle.focused()
     if (f && !wasFocused.current) {
-      startBlink()
-      setCursor(props.value.length)
+      editor.startBlink()
+      editor.setCursor(props.value.length)
     } else if (!f && wasFocused.current) {
-      stopBlink()
-      clearSelection()
+      editor.stopBlink()
+      editor.clearSelection()
     }
     wasFocused.current = f
   })
@@ -796,7 +738,7 @@ export function Textarea(props: TextareaProps) {
           {beforeSegments.map((seg) => (
             <text color={seg.color} fontSize={14}>{seg.text}</text>
           ))}
-          <box width={2} height={LINE_HEIGHT} backgroundColor={color()} opacity={blink() ? 1 : 0} />
+          <box width={2} height={LINE_HEIGHT} backgroundColor={color()} opacity={editor.blink() ? 1 : 0} />
           {ghostText ? (
             <text color={th().muted} fontSize={14}>{ghostText}</text>
           ) : null}

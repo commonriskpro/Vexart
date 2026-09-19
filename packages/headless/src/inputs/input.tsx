@@ -10,11 +10,11 @@
  * @public
  */
 
-import { createMemo, createSignal, createEffect, onCleanup } from "solid-js"
+import { createMemo, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput, measureTextWidth, type SizingUnit } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
-import { nextCodePointOffset, previousCodePointOffset } from "./text-offset"
+import { useTextEditor, previousCodePointOffset, nextCodePointOffset } from "./text-editor"
 
 // ── Constants ──
 
@@ -108,65 +108,13 @@ export type InputProps = {
 
 /** @public */
 export function Input(props: InputProps) {
-  const [cursor, setCursor] = createSignal(props.value.length)
-  const [selStart, setSelStart] = createSignal(-1)
-  const [selEnd, setSelEnd] = createSignal(-1)
-  const [blink, setBlink] = createSignal(true)
-
   const disabled = useDisabled(props)
 
-  createEffect(() => {
-    const len = props.value.length
-    if (cursor() > len) setCursor(len)
+  const editor = useTextEditor({
+    value: () => props.value,
+    onChange: props.onChange,
+    singleLine: true,
   })
-
-  // ── Blink ──
-
-  let blinkTimer: ReturnType<typeof setInterval> | null = null
-
-  function startBlink() {
-    stopBlink()
-    setBlink(true)
-    blinkTimer = setInterval(() => setBlink((b) => !b), 530)
-  }
-  function stopBlink() {
-    if (blinkTimer) clearInterval(blinkTimer)
-    blinkTimer = null
-  }
-
-  onCleanup(() => stopBlink())
-
-  // ── Selection helpers ──
-
-  function hasSelection() {
-    return selStart() >= 0 && selEnd() >= 0 && selStart() !== selEnd()
-  }
-
-  function selRange(): [number, number] {
-    const s = selStart()
-    const e = selEnd()
-    return s < e ? [s, e] : [e, s]
-  }
-
-  function clearSelection() {
-    setSelStart(-1)
-    setSelEnd(-1)
-  }
-
-  function deleteSelection(): string {
-    if (!hasSelection()) return props.value
-    const [lo, hi] = selRange()
-    const next = props.value.slice(0, lo) + props.value.slice(hi)
-    setCursor(lo)
-    clearSelection()
-    return next
-  }
-
-  function selectAll() {
-    setSelStart(0)
-    setSelEnd(props.value.length)
-    setCursor(props.value.length)
-  }
 
   // ── Keyboard ──
 
@@ -174,77 +122,65 @@ export function Input(props: InputProps) {
     id: props.focusId,
     onKeyDown(e) {
       if (disabled()) return
-      startBlink()
+      editor.startBlink()
 
       const val = props.value
-      const pos = cursor()
+      const pos = editor.cursor()
 
       if (e.key === "enter") { props.onSubmit?.(val); return }
-      if (e.key === "a" && e.mods.ctrl) { selectAll(); return }
+      if (e.key === "a" && e.mods.ctrl) { editor.selectAll(); return }
+      if (e.key === "z" && e.mods.ctrl && !e.mods.shift) { editor.undo(); return }
+      if ((e.key === "y" && e.mods.ctrl) || (e.key === "z" && e.mods.ctrl && e.mods.shift)) { editor.redo(); return }
 
       // Shift+arrow selection
       if (e.mods.shift) {
         if (e.key === "left" && pos > 0) {
-          if (!hasSelection()) setSelStart(pos)
+          if (!editor.hasSelection()) editor.setSelStart(pos)
           const next = previousCodePointOffset(val, pos)
-          setCursor(next); setSelEnd(next); return
+          editor.setCursor(next); editor.setSelEnd(next); return
         }
         if (e.key === "right" && pos < val.length) {
-          if (!hasSelection()) setSelStart(pos)
+          if (!editor.hasSelection()) editor.setSelStart(pos)
           const next = nextCodePointOffset(val, pos)
-          setCursor(next); setSelEnd(next); return
+          editor.setCursor(next); editor.setSelEnd(next); return
         }
         if (e.key === "home") {
-          if (!hasSelection()) setSelStart(pos)
-          setCursor(0); setSelEnd(0); return
+          if (!editor.hasSelection()) editor.setSelStart(pos)
+          editor.setCursor(0); editor.setSelEnd(0); return
         }
         if (e.key === "end") {
-          if (!hasSelection()) setSelStart(pos)
-          setCursor(val.length); setSelEnd(val.length); return
+          if (!editor.hasSelection()) editor.setSelStart(pos)
+          editor.setCursor(val.length); editor.setSelEnd(val.length); return
         }
       }
 
       // Navigation
       if (e.key === "left") {
-        if (hasSelection()) { setCursor(selRange()[0]); clearSelection() }
-        else if (pos > 0) setCursor(previousCodePointOffset(val, pos))
+        if (editor.hasSelection()) { editor.setCursor(editor.selRange()[0]); editor.clearSelection() }
+        else if (pos > 0) editor.setCursor(previousCodePointOffset(val, pos))
         return
       }
       if (e.key === "right") {
-        if (hasSelection()) { setCursor(selRange()[1]); clearSelection() }
-        else if (pos < val.length) setCursor(nextCodePointOffset(val, pos))
+        if (editor.hasSelection()) { editor.setCursor(editor.selRange()[1]); editor.clearSelection() }
+        else if (pos < val.length) editor.setCursor(nextCodePointOffset(val, pos))
         return
       }
-      if (e.key === "home") { setCursor(0); clearSelection(); return }
-      if (e.key === "end") { setCursor(val.length); clearSelection(); return }
+      if (e.key === "home") { editor.setCursor(0); editor.clearSelection(); return }
+      if (e.key === "end") { editor.setCursor(val.length); editor.clearSelection(); return }
 
       // Delete
       if (e.key === "backspace") {
-        if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos > 0) {
-          const start = previousCodePointOffset(val, pos)
-          setCursor(start); props.onChange?.(val.slice(0, start) + val.slice(pos))
-        }
-        clearSelection(); return
+        editor.deleteBackward()
+        return
       }
       if (e.key === "delete") {
-        if (hasSelection()) { props.onChange?.(deleteSelection()) }
-        else if (pos < val.length) {
-          const end = nextCodePointOffset(val, pos)
-          props.onChange?.(val.slice(0, pos) + val.slice(end))
-        }
-        clearSelection(); return
+        editor.deleteForward()
+        return
       }
 
       // Printable character
       if (e.char && !e.mods.ctrl && !e.mods.alt && !e.mods.meta) {
-        let base = val
-        let insertAt = pos
-        if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-        const next = base.slice(0, insertAt) + e.char + base.slice(insertAt)
-        clearSelection()
-        props.onChange?.(next)
-        setCursor(insertAt + e.char.length)
+        editor.insertText(e.char)
         return
       }
     },
@@ -254,15 +190,8 @@ export function Input(props: InputProps) {
 
   const unsubPaste = onInput((event) => {
     if (event.type !== "paste" || !focused() || disabled()) return
-    startBlink()
-    let base = props.value
-    let insertAt = cursor()
-    if (hasSelection()) { base = deleteSelection(); insertAt = cursor() }
-    const text = event.text.replace(/[\r\n\t]/g, " ")
-    const next = base.slice(0, insertAt) + text + base.slice(insertAt)
-    clearSelection()
-    props.onChange?.(next)
-    setCursor(insertAt + text.length)
+    editor.startBlink()
+    editor.insertText(event.text)
   })
   onCleanup(() => unsubPaste())
 
@@ -271,8 +200,8 @@ export function Input(props: InputProps) {
   const wasFocused = { current: false }
   createEffect(() => {
     const f = focused()
-    if (f && !wasFocused.current) { startBlink(); setCursor(props.value.length) }
-    else if (!f && wasFocused.current) { stopBlink(); clearSelection() }
+    if (f && !wasFocused.current) { editor.startBlink(); editor.setCursor(props.value.length) }
+    else if (!f && wasFocused.current) { editor.stopBlink(); editor.clearSelection() }
     wasFocused.current = f
   })
   const checkFocus = () => focused()
@@ -288,11 +217,11 @@ export function Input(props: InputProps) {
       get value() { return props.value },
       get displayText() { return showPlaceholder() ? (props.placeholder ?? "") : props.value },
       get showPlaceholder() { return showPlaceholder() },
-      get cursor() { return cursor() },
-      get blink() { return blink() },
+      get cursor() { return editor.cursor() },
+      get blink() { return editor.blink() },
       get focused() { return checkFocus() },
       get disabled() { return disabled() },
-      get selection() { return hasSelection() ? selRange() : null },
+      get selection() { return editor.selection() },
       inputProps: {
         onPress: () => { if (!disabled()) focus() },
       },
@@ -310,7 +239,7 @@ export function Input(props: InputProps) {
   const rendered = createMemo(() => {
     const isFocused = checkFocus()
     const val = props.value
-    const pos = cursor()
+    const pos = editor.cursor()
     const ph = showPlaceholder()
 
     if (ph) {
@@ -343,7 +272,7 @@ export function Input(props: InputProps) {
             width={1.5}
             height={lineHeight()}
             backgroundColor={cursorColor()}
-            opacity={blink() ? 1 : 0}
+            opacity={editor.blink() ? 1 : 0}
           />
         ) : null}
       </box>

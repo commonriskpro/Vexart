@@ -7,7 +7,7 @@
  * @public
  */
 
-import { Input } from "@vexart/headless"
+import { Input, type InputTheme } from "@vexart/headless"
 import { radius, space, font } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { SizingUnit } from "@vexart/engine"
@@ -21,10 +21,24 @@ export type VoidInputProps = {
   disabled?: boolean
   focusId?: string
   width?: SizingUnit
+  theme?: Partial<InputTheme>
 }
 
 /** @public */
 export function VoidInput(props: VoidInputProps) {
+  const voidTheme = () => ({
+    accent: themeColors.ring,
+    fg: themeColors.foreground,
+    muted: themeColors.mutedForeground,
+    bg: themeColors.card,
+    border: themeColors.input,
+    radius: radius.md,
+    paddingX: space[3],
+    paddingY: 8,
+    fontSize: font.sm,
+    ...props.theme,
+  })
+
   return (
     <Input
       value={props.value}
@@ -34,17 +48,7 @@ export function VoidInput(props: VoidInputProps) {
       disabled={props.disabled}
       focusId={props.focusId}
       width={props.width}
-      theme={{
-        accent: themeColors.ring,
-        fg: themeColors.foreground,
-        muted: themeColors.mutedForeground,
-        bg: themeColors.card,
-        border: themeColors.input,
-        radius: radius.md,
-        paddingX: space[3],
-        paddingY: 8,
-        fontSize: font.sm,
-      }}
+      theme={voidTheme()}
     />
   )
 }

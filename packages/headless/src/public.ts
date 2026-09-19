@@ -51,6 +51,17 @@ export type {
   TextareaProps,
 } from "./inputs/textarea"
 
+export {
+  useTextEditor,
+  createTextEditor,
+  previousCodePointOffset,
+  nextCodePointOffset,
+} from "./inputs/text-editor"
+export type {
+  TextEditorOptions,
+  TextEditorReturn,
+} from "./inputs/text-editor"
+
 // ── Display ───────────────────────────────────────────────────────────────────
 
 export { Code, createCode, useCodeTokens, CODE_DEFAULTS } from "./display/code"
