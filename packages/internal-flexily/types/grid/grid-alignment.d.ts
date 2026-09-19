@@ -25,6 +25,9 @@ export type AlignmentInput = ModelAlignmentInput & {
     readonly contentBox?: number | null;
     readonly columnGap?: number;
     readonly rowGap?: number;
+    /** Zero-based tracks collapsed by auto-fit; their adjacent gutters vanish. */
+    readonly collapsedColumns?: readonly number[];
+    readonly collapsedRows?: readonly number[];
     readonly gap?: number;
     readonly itemStyles?: readonly GridItemStyle[];
     readonly nodeId?: number;
@@ -38,6 +41,8 @@ export type AxisAlignmentInput = {
     readonly contentBox?: number | null;
     readonly gap?: number;
     readonly alignment?: GridContentAlignment | string;
+    /** Zero-based tracks collapsed by auto-fit; their adjacent gutters vanish. */
+    readonly collapsed?: readonly number[];
     readonly nodeId?: number;
 };
 /** Aligned track geometry, including the effective gutter accounting. */

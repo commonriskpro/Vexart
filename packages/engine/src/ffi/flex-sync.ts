@@ -22,6 +22,7 @@ import {
   JUSTIFY_SPACE_BETWEEN,
   MEASURE_MODE_UNDEFINED,
 } from "flexily"
+import { acquireFlexNode } from "./flex-pool"
 import { SIZING, type TGENode, type SizingInfo, type TGEProps } from "./node-types"
 import type {
   GridAreaPlacement,
@@ -761,7 +762,7 @@ function syncGridLayoutProp(node: TGENode, key: string): void {
 
 export function createTextFlexNode(node: TGENode): void {
   if (node._flexNode) return
-  const flex = Node.create()
+  const flex = acquireFlexNode()
   node._flexNode = flex
   setWidthFitContent(flex)
   flex.setMeasureFunc((width, widthMode, _height, _heightMode) => {

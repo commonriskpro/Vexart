@@ -4,7 +4,7 @@
  * Yoga-compatible Node class for flexbox layout.
  */
 import { type BaselineFunc, type FlexInfo, type Layout, type MeasureFunc, type Style, type Value } from "./types.js";
-import type { GridCalculateResult, GridIntrinsicContribution, GridIntrinsicMeasureFunc, GridItemStyle, GridStyle } from "./grid/grid-model.js";
+import type { GridCalculateResult, GridIntrinsicContribution, GridIntrinsicMeasureFunc, GridItemStyle, GridLayoutError, GridStyle } from "./grid/grid-model.js";
 import type { GridIntrinsicCycleCache } from "./grid/grid-intrinsic-cycle.js";
 /**
  * A layout node in the flexbox tree.
@@ -15,6 +15,7 @@ export declare class Node {
     private _style;
     private _layoutMode;
     private _gridMode;
+    private _hasGridDescendant;
     private _gridStyle;
     private _gridItemStyle;
     private _gridIntrinsicMeasureFunc;
@@ -22,6 +23,8 @@ export declare class Node {
     private _gridIntrinsicCache;
     private _gridContributions;
     private _gridResult;
+    private _gridError;
+    private _gridValidationError;
     private static _nextGridNodeId;
     private readonly _gridNodeId;
     private _measureFunc;
@@ -78,6 +81,8 @@ export declare class Node {
      * @returns The parent node, or null if this is a root node
      */
     getParent(): Node | null;
+    /** Update the ancestor bit used to guard Grid error transactions. */
+    private refreshGridDescendant;
     /**
      * Insert a child node at the specified index.
      * If the child already has a parent, it will be removed from that parent first.
@@ -110,6 +115,12 @@ export declare class Node {
      * This does not recursively free child nodes.
      */
     free(): void;
+    /**
+     * Reset this node to a clean initial state for reuse.
+     * Disconnects from parent and children, clears measure/baseline callbacks,
+     * resets styles to default values, resets grid state, and invalidates layout caches.
+     */
+    reset(): void;
     /**
      * Free this node and all descendants recursively.
      * Each node is detached from its parent and cleaned up.
@@ -152,6 +163,7 @@ export declare class Node {
     setLayoutMode(mode: "flex" | "grid"): void;
     getLayoutMode(): "flex" | "grid";
     isGridMode(): boolean;
+    hasGridDescendant(): boolean;
     setGridStyle(style: GridStyle): void;
     setGridItemStyle(style: GridItemStyle): void;
     setGridItem(style: GridItemStyle): void;
@@ -238,6 +250,8 @@ export declare class Node {
      * Clears the hasNewLayout flag.
      */
     markLayoutSeen(): void;
+    private captureGridState;
+    private restoreGridState;
     /**
      * Calculate layout for this node and all descendants.
      * This runs the flexbox layout algorithm to compute positions and sizes.
@@ -340,6 +354,15 @@ export declare class Node {
     setGridContributions(contributions: readonly GridIntrinsicContribution[]): void;
     getGridResult(): GridCalculateResult | null;
     setGridResult(result: GridCalculateResult): void;
+    getGridError(): GridLayoutError | null;
+    setGridError(error: GridLayoutError | null): void;
+    /**
+     * Set a bridge validation error that must be reported by GridCalculateResult.
+     * This is an internal seam for the Vexart adapter, not a public layout API.
+     */
+    setGridValidationError(error: GridLayoutError | null): void;
+    /** Read the pending bridge validation error without exposing solver state. */
+    getGridValidationError(): GridLayoutError | null;
     /**
      * Set the width to a fixed value in points.
      *
@@ -392,6 +415,8 @@ export declare class Node {
      * Set the height to auto (determined by layout algorithm).
      */
     setHeightAuto(): void;
+    /** Set height to the internal fit-content unit used by Grid item sizing. */
+    setHeightFitContent(): void;
     /**
      * Set the minimum width in points.
      *

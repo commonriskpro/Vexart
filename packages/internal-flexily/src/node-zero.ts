@@ -335,6 +335,90 @@ export class Node {
   }
 
   /**
+   * Reset this node to a clean initial state for reuse.
+   * Disconnects from parent and children, clears measure/baseline callbacks,
+   * resets styles to default values, resets grid state, and invalidates layout caches.
+   */
+  reset(): void {
+    if (this._parent !== null) {
+      this._parent.removeChild(this)
+      this._parent = null
+    }
+    for (const child of this._children) {
+      child._parent = null
+    }
+    this._children.length = 0
+    this._hasGridDescendant = false
+
+    this._style = createDefaultStyle()
+
+    this._layoutMode = "flex"
+    this._gridMode = false
+    this._gridStyle = null
+    this._gridItemStyle = {}
+    this._gridIntrinsicMeasureFunc = null
+    this._gridRevision = 0
+    this._gridIntrinsicCache = undefined
+    this._gridContributions = []
+    this._gridResult = null
+    this._gridError = null
+    this._gridValidationError = null
+
+    this._measureFunc = null
+    this._baselineFunc = null
+
+    this._m0 = undefined
+    this._m1 = undefined
+    this._m2 = undefined
+    this._m3 = undefined
+    this._lc0 = undefined
+    this._lc1 = undefined
+    this._measureResult.width = 0
+    this._measureResult.height = 0
+    this._layoutResult.width = 0
+    this._layoutResult.height = 0
+
+    this._layout.left = 0
+    this._layout.top = 0
+    this._layout.width = 0
+    this._layout.height = 0
+
+    this._flex.mainSize = 0
+    this._flex.baseSize = 0
+    this._flex.mainMargin = 0
+    this._flex.flexGrow = 0
+    this._flex.flexShrink = 0
+    this._flex.minMain = 0
+    this._flex.maxMain = Infinity
+    this._flex.mainStartMarginAuto = false
+    this._flex.mainEndMarginAuto = false
+    this._flex.mainStartMarginValue = 0
+    this._flex.mainEndMarginValue = 0
+    this._flex.marginL = 0
+    this._flex.marginT = 0
+    this._flex.marginR = 0
+    this._flex.marginB = 0
+    this._flex.frozen = false
+    this._flex.lineIndex = 0
+    this._flex.relativeIndex = -1
+    this._flex.baseline = 0
+    this._flex.lastAvailW = NaN
+    this._flex.lastAvailH = NaN
+    this._flex.lastOffsetX = NaN
+    this._flex.lastOffsetY = NaN
+    this._flex.lastAbsX = NaN
+    this._flex.lastAbsY = NaN
+    this._flex.layoutValid = false
+    this._flex.lastDir = 0
+
+    this._isDirty = true
+    this._hasNewLayout = false
+    this._lastCalcW = NaN
+    this._lastCalcH = NaN
+    this._lastCalcDir = 0
+  }
+
+  /**
    * Free this node and all descendants recursively.
    * Each node is detached from its parent and cleaned up.
    * Uses iterative traversal to avoid stack overflow on deep trees.

@@ -165,6 +165,29 @@ export class Node {
   }
 
   /**
+   * Reset this node to a clean initial state for reuse.
+   */
+  reset(): void {
+    if (this._parent !== null) {
+      this._parent.removeChild(this)
+      this._parent = null
+    }
+    for (const child of this._children) {
+      child._parent = null
+    }
+    this._children = []
+    this._style = createDefaultStyle()
+    this._measureFunc = null
+    this._baselineFunc = null
+    this._layout.left = 0
+    this._layout.top = 0
+    this._layout.width = 0
+    this._layout.height = 0
+    this._isDirty = true
+    this._hasNewLayout = false
+  }
+
+  /**
    * Free this node and all descendants recursively.
    * Each node is detached from its parent and cleaned up.
    */

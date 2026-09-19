@@ -19,14 +19,19 @@ export type GridRepeatResult = GridExpandedAxes & {
 };
 type RepeatResult = GridRepeatResult | GridLayoutError;
 type Available = GridAvailableSpace | number | undefined;
+type AxisAvailable = {
+    readonly columns?: Available;
+    readonly rows?: Available;
+};
+type AvailableInput = Available | AxisAvailable;
 /**
  * Expand fixed and supported auto-repeat declarations for both axes.
  *
- * A definite numeric `available` is used for both axes; callers that have no
- * definite content-box size may pass `{ kind: "indefinite", constraint: ... }`
- * or omit it, in which case every auto-repeat has exactly one repetition.
+ * A scalar `available` is applied to both axes for compatibility. Callers
+ * with independent content-box constraints should pass `{ columns, rows }`;
+ * an omitted or indefinite axis keeps exactly one auto-repeat track.
  */
-export declare function expandRepeats(snapshot: GridSnapshot, available?: Available, placement?: PlacementResult): RepeatResult;
+export declare function expandRepeats(snapshot: GridSnapshot, available?: AvailableInput, placement?: PlacementResult): RepeatResult;
 /** Alias matching the terminology used by the Grid pipeline. */
 export declare const expandGridRepeats: typeof expandRepeats;
 export declare const expandRepeat: typeof expandRepeats;

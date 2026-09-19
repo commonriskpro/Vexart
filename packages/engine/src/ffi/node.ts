@@ -16,6 +16,12 @@ import { releaseNodeImage } from "./native-image-assets"
 import { Node, FLEX_DIRECTION_ROW, FLEX_DIRECTION_COLUMN } from "flexily"
 import { createTextFlexNode, syncAllLayoutProps } from "./flex-sync"
 import {
+  acquireFlexNode,
+  clearFlexNodePool,
+  getFlexNodePoolSize,
+  releaseFlexNode,
+} from "./flex-pool"
+import {
   ALIGN_X,
   ALIGN_Y,
   DIRECTION,
@@ -55,6 +61,12 @@ export {
   SIZING,
   TGE_NODE_KIND,
 } from "./node-types"
+export {
+  acquireFlexNode,
+  clearFlexNodePool,
+  getFlexNodePoolSize,
+  releaseFlexNode,
+} from "./flex-pool"
 export type {
   CornerRadii,
   FilterConfig,
@@ -112,7 +124,7 @@ export function getThemeEpoch(): number {
 
 /** @public */
 export function createNode(kind: TGENodeKind): TGENode {
-  const flex = kind === "text" ? null : Node.create()
+  const flex = kind === "text" ? null : acquireFlexNode()
   flex?.setFlexDirection(FLEX_DIRECTION_ROW)
   return {
     kind,
@@ -271,7 +283,7 @@ function ensureFlexSubtree(node: TGENode): void {
       }
     } else {
       recreated = true
-      const flex = Node.create()
+      const flex = acquireFlexNode()
       flex.setFlexDirection(FLEX_DIRECTION_ROW)
       node._flexNode = flex
     }
@@ -403,7 +415,7 @@ export function removeChild(parent: TGENode, child: TGENode) {
 
 function freeFlexSubtree(node: TGENode) {
   if (node._flexNode) {
-    node._flexNode.free()
+    releaseFlexNode(node._flexNode)
     node._flexNode = null
   }
   for (const child of node.children) freeFlexSubtree(child)

@@ -79,6 +79,10 @@ export declare class Node {
      */
     free(): void;
     /**
+     * Reset this node to a clean initial state for reuse.
+     */
+    reset(): void;
+    /**
      * Free this node and all descendants recursively.
      * Each node is detached from its parent and cleaned up.
      */
