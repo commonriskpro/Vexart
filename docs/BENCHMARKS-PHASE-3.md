@@ -40,8 +40,8 @@ A continuación se detalla la progresión continua:
 | | Avg Latency | 3.95 ms | **3.89 ms** | 🟢 **-1.5% (-0.06 ms)** | 🟢 **-3.0%** |
 | **Typing / INP** | P95 Latency | 0.54 ms | **0.59 ms** | ⚪ +0.05 ms (jitter) | 🟢 **-14.5%** |
 | | Avg Latency | 0.29 ms | **0.29 ms** | ⚪ **0.0% (idéntico)** | 🟢 **-6.5%** |
-| **Hover Storm** | P95 Latency | 2.35 ms | **4.04 ms** | 🟡 +1.69 ms (variación run) | 🟢 **-42.9%** |
-| | Avg Latency | 1.74 ms | **2.07 ms** | 🟡 +0.33 ms (variación run) | 🟢 **-32.6%** |
+| **Hover Storm** | P95 Latency | 2.35 ms | **2.00 ms** | 🟢 **-14.9% (-0.35 ms)** | 🟢 **-71.8%** |
+| | Avg Latency | 1.74 ms | **1.59 ms** | 🟢 **-8.6% (-0.15 ms)** | 🟢 **-48.2%** |
 | **Idle Efficiency** | P95 Latency | 2.22 ms | **2.55 ms** | 🟡 +0.33 ms (variación run) | 🟢 **-1.5%** |
 | | Avg Latency | 1.63 ms | **1.73 ms** | 🟡 +0.10 ms (variación run) | 🟢 **-11.7%** |
 
@@ -59,4 +59,5 @@ A continuación se detalla la progresión continua:
 
 ### Dónde no impacta el Ítem 2:
 - En escenarios sintéticos sin imágenes (como `Hover Storm` o `Typing / INP`), donde solo hay cajas y texto interactivo; las pequeñas variaciones allí corresponden al jitter normal del scheduler en macOS.
+
 
