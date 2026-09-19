@@ -46,6 +46,15 @@ pub struct ImageRecord {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub bind_group: wgpu::BindGroup,
+    pub width: u32,
+    pub height: u32,
+    pub references: u32,
+}
+
+impl ImageRecord {
+    pub fn size_bytes(&self) -> u64 {
+        (self.width as u64) * (self.height as u64) * 4
+    }
 }
 
 /// Owns the WGPU rendering context, all render pipelines, image registry, and target registry.

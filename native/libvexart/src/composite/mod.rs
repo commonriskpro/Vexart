@@ -847,6 +847,9 @@ pub fn copy_region_to_image(
             texture: dst_texture,
             view,
             bind_group,
+            width: cw,
+            height: ch,
+            references: 1,
         },
     );
 
@@ -1074,12 +1077,16 @@ fn register_effect_output(
         });
 
     let handle = crate::paint::alloc_image_handle();
+    let size = texture.size();
     pctx.images.insert(
         handle,
         crate::paint::ImageRecord {
             texture,
             view,
             bind_group,
+            width: size.width,
+            height: size.height,
+            references: 1,
         },
     );
     handle
@@ -1613,6 +1620,9 @@ fn image_mask_rounded_rect_impl(
             texture: dst_texture,
             view: dst_view,
             bind_group: dst_bind_group,
+            width: src_w,
+            height: src_h,
+            references: 1,
         },
     );
 

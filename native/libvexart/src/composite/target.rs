@@ -341,6 +341,16 @@ impl TargetRegistry {
         }
     }
 
+    pub fn stats(&self) -> (u32, u64) {
+        let count = self.targets.len() as u32;
+        let bytes: u64 = self
+            .targets
+            .values()
+            .map(|t| (t.width as u64) * (t.height as u64) * 4)
+            .sum();
+        (count, bytes)
+    }
+
     pub fn has_active_layers(&self) -> bool {
         self.targets
             .values()

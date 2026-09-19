@@ -6,10 +6,8 @@
 pub mod composite;
 pub mod ffi;
 pub mod font;
-pub mod image_asset;
 pub mod kitty;
 pub mod paint;
-pub mod resource;
 pub mod text;
 pub mod types;
 
@@ -141,22 +139,21 @@ fn upload_image_record(
             texture,
             view,
             bind_group,
+            width,
+            height,
+            references: 1,
         },
     );
     true
 }
 
-// ─── Single shared ResourceManager (lazy-initialized, Phase 2b Slice 6) ──
-// Global GPU memory budget manager. Initialized on first stats/budget call.
-// Phase 2b: single-context model — one manager for all GPU assets.
-// Phase 3: extract into per-context ResourceManager when multi-context lands.
+/// Default memory budget: 512MB (per ARCHITECTURE §8.3).
+pub const DEFAULT_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
+/// Minimum allowed budget: 32MB (per ARCHITECTURE §8.3).
+pub const MIN_BUDGET_BYTES: u64 = 32 * 1024 * 1024;
 
-static SHARED_RESOURCE: LazyLock<Mutex<resource::ResourceManager>> =
-    LazyLock::new(|| Mutex::new(resource::ResourceManager::new()));
-
-fn get_or_init_resource() -> &'static Mutex<resource::ResourceManager> {
-    &SHARED_RESOURCE
-}
+static BUDGET_BYTES: AtomicU64 = AtomicU64::new(DEFAULT_BUDGET_BYTES);
+static HIGH_WATER_MARK: AtomicU64 = AtomicU64::new(0);
 
 static FRAME_COUNT: AtomicU64 = AtomicU64::new(1);
 
@@ -165,17 +162,7 @@ pub fn current_frame() -> u64 {
 }
 
 fn advance_presentation_frame() -> u64 {
-    let frame_count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
-    let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-    res_guard.end_frame(frame_count);
-    frame_count
-}
-
-static SHARED_IMAGE_ASSETS: LazyLock<Mutex<image_asset::ImageAssetRegistry>> =
-    LazyLock::new(|| Mutex::new(image_asset::ImageAssetRegistry::new()));
-
-fn get_or_init_image_assets() -> &'static Mutex<image_asset::ImageAssetRegistry> {
-    &SHARED_IMAGE_ASSETS
+    FRAME_COUNT.fetch_add(1, Ordering::Relaxed)
 }
 
 // ─── §5.1 Version & lifecycle ─────────────────────────────────────────────
@@ -233,24 +220,16 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
             }
             let _ = guard.take();
         }
-        // 2. Symmetrically reset/drain SHARED_RESOURCE
-        {
-            let mut guard = lock_or_recover(&SHARED_RESOURCE);
-            *guard = resource::ResourceManager::new();
-        }
-        // 3. Symmetrically reset/drain SHARED_IMAGE_ASSETS
-        {
-            let mut guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            *guard = image_asset::ImageAssetRegistry::new();
-        }
-        // 5. Symmetrically reset/drain SHARED_MSDF_ATLAS
+        // 2. Symmetrically reset/drain SHARED_MSDF_ATLAS
         {
             let mut guard = lock_or_recover(&SHARED_MSDF_ATLAS);
             *guard = font::msdf_atlas::MsdfAtlasManager::new();
         }
-        // 6. Symmetrically reset frame counter
+        // 3. Symmetrically reset frame counter and budget stats
         FRAME_COUNT.store(1, Ordering::Relaxed);
-        // 7. Release any active SHM mappings
+        BUDGET_BYTES.store(DEFAULT_BUDGET_BYTES, Ordering::Relaxed);
+        HIGH_WATER_MARK.store(0, Ordering::Relaxed);
+        // 4. Release any active SHM mappings
         kitty::transport::cleanup_shm_on_shutdown();
         OK
     })
@@ -318,9 +297,9 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
             }
         };
 
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(bytes);
+        if (image_len as u64) < bytes {
+            *out_image = 0;
+            return ERR_INVALID_ARG;
         }
 
         let rgba = std::slice::from_raw_parts(image_ptr, image_len as usize);
@@ -337,17 +316,6 @@ pub unsafe extern "C" fn vexart_paint_upload_image(
         let handle = paint::alloc_image_handle();
         if !upload_image_record(pctx, handle, rgba, width, height) {
             return ERR_INVALID_ARG;
-        }
-        {
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                handle,
-                resource::ResourceKind::ImageSprite,
-                bytes,
-                current_frame,
-                resource::WgpuHandle::Id(handle),
-            );
         }
 
         *out_image = handle;
@@ -386,8 +354,6 @@ pub extern "C" fn vexart_paint_remove_image(_ctx: u64, image: u64) -> i32 {
                 }
             }
         }
-        let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-        res_guard.remove(image);
         OK
     })
 }
@@ -412,39 +378,12 @@ pub unsafe extern "C" fn vexart_composite_target_create(
         if out_target.is_null() {
             return ERR_INVALID_ARG;
         }
-        let bytes = match (width as u64)
-            .checked_mul(height as u64)
-            .and_then(|px| px.checked_mul(4))
-        {
-            Some(b) => b,
-            None => {
-                *out_target = 0;
-                return ERR_OUT_OF_BUDGET;
-            }
-        };
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(bytes);
-        }
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        let rc = composite::target_create(pctx, width, height, out_target);
-        if rc == OK {
-            let handle = *out_target;
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                handle,
-                resource::ResourceKind::LayerTarget,
-                bytes,
-                current_frame,
-                resource::WgpuHandle::Id(handle),
-            );
-        }
-        rc
+        composite::target_create(pctx, width, height, out_target)
     })
 }
 
@@ -458,12 +397,7 @@ pub extern "C" fn vexart_composite_target_destroy(_ctx: u64, target: u64) -> i32
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        let rc = composite::target_destroy(pctx, target);
-        if rc == OK {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.remove(target);
-        }
-        rc
+        composite::target_destroy(pctx, target)
     })
 }
 
@@ -655,34 +589,7 @@ pub unsafe extern "C" fn vexart_composite_copy_region_to_image(
         if cw == 0 || ch == 0 {
             return ERR_INVALID_ARG;
         }
-        let bytes = match (cw as u64)
-            .checked_mul(ch as u64)
-            .and_then(|px| px.checked_mul(4))
-        {
-            Some(b) => b,
-            None => {
-                *out_image = 0;
-                return ERR_OUT_OF_BUDGET;
-            }
-        };
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(bytes);
-        }
-        let rc = composite::copy_region_to_image(pctx, target, x, y, w, h, out_image);
-        if rc == OK {
-            let handle = *out_image;
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                handle,
-                resource::ResourceKind::ImageSprite,
-                bytes,
-                current_frame,
-                resource::WgpuHandle::Id(handle),
-            );
-        }
-        rc
+        composite::copy_region_to_image(pctx, target, x, y, w, h, out_image)
     })
 }
 
@@ -744,59 +651,14 @@ pub unsafe extern "C" fn vexart_composite_image_filter_backdrop(
                 return ERR_INVALID_ARG;
             }
         };
+        let _ = passes;
 
         let mut guard = get_or_init_paint();
         let pctx = match guard.as_mut() {
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-
-        let (src_w, src_h) = match pctx.images.get(&image) {
-            Some(img) => {
-                let size = img.texture.size();
-                (size.width, size.height)
-            }
-            None => return ERR_INVALID_HANDLE,
-        };
-
-        let single_bytes = match (src_w as u64)
-            .checked_mul(src_h as u64)
-            .and_then(|px| px.checked_mul(4))
-        {
-            Some(b) => b,
-            None => {
-                *out_image = 0;
-                return ERR_OUT_OF_BUDGET;
-            }
-        };
-
-        let total_pass_bytes = match single_bytes.checked_mul(passes) {
-            Some(b) => b,
-            None => {
-                *out_image = 0;
-                return ERR_OUT_OF_BUDGET;
-            }
-        };
-
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(total_pass_bytes);
-        }
-
-        let rc = composite::image_filter_backdrop(pctx, image, params_ptr, params_len, out_image);
-        if rc == OK {
-            let handle = *out_image;
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                handle,
-                resource::ResourceKind::ImageSprite,
-                single_bytes,
-                current_frame,
-                resource::WgpuHandle::Id(handle),
-            );
-        }
-        rc
+        composite::image_filter_backdrop(pctx, image, params_ptr, params_len, out_image)
     })
 }
 
@@ -814,7 +676,7 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
     out_image: *mut u64,
 ) -> i32 {
     ffi_guard!({
-        if out_image.is_null() {
+        if out_image.is_null() || rect_ptr.is_null() {
             return ERR_INVALID_ARG;
         }
         let mut guard = get_or_init_paint();
@@ -822,41 +684,7 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        let (width, height) = match pctx.images.get(&image) {
-            Some(img) => {
-                let size = img.texture.size();
-                (size.width, size.height)
-            }
-            None => return ERR_INVALID_HANDLE,
-        };
-        let bytes = match (width as u64)
-            .checked_mul(height as u64)
-            .and_then(|px| px.checked_mul(4))
-        {
-            Some(b) => b,
-            None => {
-                *out_image = 0;
-                return ERR_OUT_OF_BUDGET;
-            }
-        };
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(bytes);
-        }
-        let rc = composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image);
-        if rc == OK {
-            let handle = *out_image;
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                handle,
-                resource::ResourceKind::ImageSprite,
-                bytes,
-                current_frame,
-                resource::WgpuHandle::Id(handle),
-            );
-        }
-        rc
+        composite::image_mask_rounded_rect(pctx, image, rect_ptr, out_image)
     })
 }
 
@@ -875,7 +703,7 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(
     out_image: *mut u64,
 ) -> i32 {
     ffi_guard!({
-        if out_image.is_null() {
+        if out_image.is_null() || rect_ptr.is_null() {
             return ERR_INVALID_ARG;
         }
         let mut guard = get_or_init_paint();
@@ -883,41 +711,7 @@ pub unsafe extern "C" fn vexart_composite_image_mask_rounded_rect_region(
             Some(c) => c,
             None => return ERR_GPU_DEVICE_LOST,
         };
-        let (width, height) = match pctx.images.get(&image) {
-            Some(img) => {
-                let size = img.texture.size();
-                (size.width, size.height)
-            }
-            None => return ERR_INVALID_HANDLE,
-        };
-        let bytes = match (width as u64)
-            .checked_mul(height as u64)
-            .and_then(|px| px.checked_mul(4))
-        {
-            Some(b) => b,
-            None => {
-                *out_image = 0;
-                return ERR_OUT_OF_BUDGET;
-            }
-        };
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(bytes);
-        }
-        let rc = composite::image_mask_rounded_rect_region(pctx, image, rect_ptr, out_image);
-        if rc == OK {
-            let handle = *out_image;
-            let current_frame = FRAME_COUNT.load(Ordering::Relaxed);
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            res_guard.register(
-                handle,
-                resource::ResourceKind::ImageSprite,
-                bytes,
-                current_frame,
-                resource::WgpuHandle::Id(handle),
-            );
-        }
-        rc
+        composite::image_mask_rounded_rect_region(pctx, image, rect_ptr, out_image)
     })
 }
 
@@ -1206,12 +1000,48 @@ pub unsafe extern "C" fn vexart_resource_get_stats(
             return ERR_INVALID_ARG;
         }
 
-        // Phase 2b: ResourceManager is a static singleton (lazy-initialized).
-        // Statistics are collected from the global manager on every call.
-        let guard = get_or_init_resource();
-        let mgr = guard.lock().unwrap_or_else(|e| e.into_inner());
-        let stats = resource::stats::collect_stats(&mgr);
-        let json = stats.to_json();
+        let mut image_count: u32 = 0;
+        let mut image_bytes: u64 = 0;
+        let mut target_count: u32 = 0;
+        let mut target_bytes: u64 = 0;
+
+        {
+            let guard = get_or_init_paint();
+            if let Some(pctx) = guard.as_ref() {
+                image_count = pctx.images.len() as u32;
+                for img in pctx.images.values() {
+                    image_bytes += img.size_bytes();
+                }
+                let (tc, tb) = pctx.targets.stats();
+                target_count = tc;
+                target_bytes = tb;
+            }
+        }
+
+        let current_usage = image_bytes + target_bytes;
+        let _ = HIGH_WATER_MARK.fetch_max(current_usage, Ordering::Relaxed);
+        let high_water_mark = HIGH_WATER_MARK.load(Ordering::Relaxed).max(current_usage);
+        let budget_bytes = BUDGET_BYTES.load(Ordering::Relaxed);
+
+        let mut kinds = Vec::new();
+        if image_count > 0 {
+            kinds.push(format!(
+                "\"ImageSprite\":{{\"count\":{},\"bytes\":{}}}",
+                image_count, image_bytes
+            ));
+        }
+        if target_count > 0 {
+            kinds.push(format!(
+                "\"LayerTarget\":{{\"count\":{},\"bytes\":{}}}",
+                target_count, target_bytes
+            ));
+        }
+        let kind_json = kinds.join(",");
+
+        let json = format!(
+            "{{\"budgetBytes\":{},\"currentUsage\":{},\"highWaterMark\":{},\"resourcesByKind\":{{{}}},\"evictionsLastFrame\":0,\"evictionsTotal\":0}}",
+            budget_bytes, current_usage, high_water_mark, kind_json,
+        );
         let bytes = json.as_bytes();
 
         let write_len = bytes.len().min(out_cap as usize);
@@ -1222,31 +1052,20 @@ pub unsafe extern "C" fn vexart_resource_get_stats(
     })
 }
 
-/// Set the ResourceManager memory budget.
-///
-/// `budget_mb`: budget in megabytes (minimum 32MB enforced by ResourceManager).
-/// (REQ-2B-703)
+/// Set the GPU memory budget.
 #[no_mangle]
 pub extern "C" fn vexart_resource_set_budget(_ctx: u64, budget_mb: u32) -> i32 {
     ffi_guard!({
-        let budget_bytes = (budget_mb as u64) * 1024 * 1024;
-        let guard = get_or_init_resource();
-        let mut mgr = guard.lock().unwrap_or_else(|e| e.into_inner());
-        mgr.set_budget(budget_bytes);
+        let budget_bytes = ((budget_mb as u64) * 1024 * 1024).max(MIN_BUDGET_BYTES);
+        BUDGET_BYTES.store(budget_bytes, Ordering::Relaxed);
         OK
     })
 }
 
 /// Register or update a native image asset from decoded RGBA bytes.
-///
-/// `meta_ptr` is 8 bytes: width:u32, height:u32.
-/// `out_handle` receives the stable native image handle.
-///
-/// # Safety
-/// All pointers must be valid for their documented lengths.
 #[no_mangle]
 pub unsafe extern "C" fn vexart_image_asset_register(
-    current_frame: u64,
+    _current_frame: u64,
     key_ptr: *const u8,
     key_len: u32,
     rgba_ptr: *const u8,
@@ -1264,9 +1083,6 @@ pub unsafe extern "C" fn vexart_image_asset_register(
         {
             return ERR_INVALID_ARG;
         }
-        let key_bytes = std::slice::from_raw_parts(key_ptr, key_len as usize);
-        let key = String::from_utf8_lossy(key_bytes).to_string();
-        let rgba = std::slice::from_raw_parts(rgba_ptr, rgba_len as usize);
         let meta = std::slice::from_raw_parts(meta_ptr, 8);
         let width = u32::from_le_bytes(meta[0..4].try_into().unwrap_or([0; 4]));
         let height = u32::from_le_bytes(meta[4..8].try_into().unwrap_or([0; 4]));
@@ -1282,10 +1098,12 @@ pub unsafe extern "C" fn vexart_image_asset_register(
             }
         };
 
-        if rgba.len() as u64 != bytes {
+        if rgba_len as u64 != bytes {
             *out_handle = 0;
             return ERR_INVALID_ARG;
         }
+
+        let rgba = std::slice::from_raw_parts(rgba_ptr, rgba_len as usize);
 
         let mut paint_guard = get_or_init_paint();
         let pctx = match paint_guard.as_mut() {
@@ -1293,34 +1111,8 @@ pub unsafe extern "C" fn vexart_image_asset_register(
             None => return ERR_GPU_DEVICE_LOST,
         };
 
-        {
-            let mut res_guard = lock_or_recover(&SHARED_RESOURCE);
-            let _ = res_guard.try_allocate(bytes);
-        }
-
-        let handle = {
-            let mut resources_guard = lock_or_recover(&SHARED_RESOURCE);
-            let mut registry_guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            match registry_guard.register(
-                key,
-                rgba,
-                width,
-                height,
-                current_frame,
-                &mut resources_guard,
-            ) {
-                Some(h) => h,
-                None => {
-                    *out_handle = 0;
-                    return ERR_INVALID_ARG;
-                }
-            }
-        };
-
+        let handle = paint::alloc_image_handle();
         if !upload_image_record(pctx, handle, rgba, width, height) {
-            let mut resources_guard = lock_or_recover(&SHARED_RESOURCE);
-            let mut registry_guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            registry_guard.release(handle, &mut resources_guard);
             *out_handle = 0;
             return ERR_INVALID_ARG;
         }
@@ -1330,13 +1122,17 @@ pub unsafe extern "C" fn vexart_image_asset_register(
 }
 
 #[no_mangle]
-pub extern "C" fn vexart_image_asset_touch(current_frame: u64, handle: u64) -> i32 {
+pub extern "C" fn vexart_image_asset_touch(_current_frame: u64, handle: u64) -> i32 {
     ffi_guard!({
-        let resources = get_or_init_resource();
-        let mut resources_guard = lock_or_recover(resources);
-        let registry = get_or_init_image_assets();
-        let registry_guard = lock_or_recover(registry);
-        if registry_guard.touch(handle, current_frame, &mut resources_guard) {
+        if handle == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let guard = get_or_init_paint();
+        let pctx = match guard.as_ref() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        if pctx.images.contains_key(&handle) {
             OK
         } else {
             ERR_INVALID_ARG
@@ -1348,7 +1144,16 @@ pub extern "C" fn vexart_image_asset_touch(current_frame: u64, handle: u64) -> i
 #[no_mangle]
 pub extern "C" fn vexart_image_asset_retain(handle: u64) -> i32 {
     ffi_guard!({
-        if lock_or_recover(&SHARED_IMAGE_ASSETS).retain(handle) {
+        if handle == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let mut paint_guard = get_or_init_paint();
+        let pctx = match paint_guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        if let Some(img) = pctx.images.get_mut(&handle) {
+            img.references = img.references.saturating_add(1);
             OK
         } else {
             ERR_INVALID_ARG
@@ -1359,23 +1164,24 @@ pub extern "C" fn vexart_image_asset_retain(handle: u64) -> i32 {
 #[no_mangle]
 pub extern "C" fn vexart_image_asset_release(handle: u64) -> i32 {
     ffi_guard!({
-        let mut paint_guard = get_or_init_paint();
-        let released = {
-            let mut resources_guard = lock_or_recover(&SHARED_RESOURCE);
-            let mut registry_guard = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            let released = registry_guard.release(handle, &mut resources_guard);
-            if released && registry_guard.get(handle).is_none() {
-                if let Some(pctx) = paint_guard.as_mut() {
-                    pctx.images.remove(&handle);
-                }
-            }
-            released
-        };
-        if released {
-            OK
-        } else {
-            ERR_INVALID_ARG
+        if handle == 0 {
+            return ERR_INVALID_ARG;
         }
+        let mut paint_guard = get_or_init_paint();
+        let pctx = match paint_guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        if let Some(img) = pctx.images.get_mut(&handle) {
+            if img.references > 1 {
+                img.references -= 1;
+                return OK;
+            }
+        } else {
+            return ERR_INVALID_ARG;
+        }
+        pctx.images.remove(&handle);
+        OK
     })
 }
 
@@ -1764,24 +1570,26 @@ mod tests {
     #[test]
     fn test_context_destroy_cleans_all_registries() {
         let _lock = lock_or_recover(&TEST_LOCK);
-        // Register dummy entries in shared registries
-        {
-            let mut res = lock_or_recover(&SHARED_RESOURCE);
-            res.register(
-                12345,
-                resource::ResourceKind::ImageSprite,
-                2048,
+        let _ = vexart_context_destroy(1);
+
+        // Register an image asset
+        let rgba = [255u8; 16];
+        let meta = [2u32, 2u32];
+        let mut handle = 0u64;
+        let rc = unsafe {
+            vexart_image_asset_register(
                 1,
-                resource::WgpuHandle::Id(12345),
-            );
-            assert!(res.resource_count() > 0);
-        }
-        {
-            let mut img_reg = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            let mut res = lock_or_recover(&SHARED_RESOURCE);
-            let rgba = [255u8; 16];
-            img_reg.register("test.png".to_string(), &rgba, 2, 2, 1, &mut res);
-        }
+                "test.png".as_ptr(),
+                8,
+                rgba.as_ptr(),
+                16,
+                meta.as_ptr() as *const u8,
+                &mut handle,
+            )
+        };
+        assert_eq!(rc, OK);
+        assert_ne!(handle, 0);
+
         // Create a target and set scissor to verify teardown drains it
         {
             let mut target = 0u64;
@@ -1802,18 +1610,10 @@ mod tests {
             assert!(paint_guard.is_none());
         }
 
-        // Verify SHARED_RESOURCE was drained and reset
-        {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.resource_count(), 0);
-            assert_eq!(res.current_usage_bytes(), 0);
-        }
-
-        // Verify SHARED_IMAGE_ASSETS was drained and reset
-        {
-            let img_reg = lock_or_recover(&SHARED_IMAGE_ASSETS);
-            assert!(img_reg.get(1).is_none());
-        }
+        // Verify frame counter and stats were reset
+        assert_eq!(FRAME_COUNT.load(Ordering::Relaxed), 1);
+        assert_eq!(BUDGET_BYTES.load(Ordering::Relaxed), DEFAULT_BUDGET_BYTES);
+        assert_eq!(HIGH_WATER_MARK.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -1943,14 +1743,6 @@ mod tests {
         let rc = unsafe { vexart_composite_target_create(1, 100, 100, &mut target) };
         assert_eq!(rc, OK);
 
-        // Budget is MIN_BUDGET_BYTES (32MB). Target took 40,000 bytes.
-        // Set budget to exactly current_usage + 10,000 bytes (clamped 50×50×4).
-        // If w=2000, h=2000 were not clamped, it would need 16,000,000 bytes and fail with ERR_OUT_OF_BUDGET.
-        {
-            let mut res = lock_or_recover(&SHARED_RESOURCE);
-            res.set_budget(40_000 + 10_000);
-        }
-
         let mut out_image = 0u64;
         // Request x=50, y=50, w=2000, h=2000 -> clamped cw=50, ch=50 -> bytes = 10,000
         let rc = unsafe {
@@ -1959,14 +1751,114 @@ mod tests {
         assert_eq!(rc, OK);
         assert_ne!(out_image, 0);
 
-        // Verify resource size in ResourceManager is exactly 10,000 bytes (not 16MB)
+        // Verify image size in PaintContext is exactly 10,000 bytes (not 16MB)
         {
-            let res = lock_or_recover(&SHARED_RESOURCE);
-            assert_eq!(res.current_usage_bytes(), 50_000);
-            let resource = &res.resources[&out_image];
-            assert_eq!(resource.size_bytes, 10_000);
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            let img = &pctx.images[&out_image];
+            assert_eq!(img.width, 50);
+            assert_eq!(img.height, 50);
+            assert_eq!(img.size_bytes(), 10_000);
         }
 
+        let _ = vexart_context_destroy(1);
+    }
+
+    #[test]
+    fn test_image_asset_lifecycle_in_paint_context() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        let _ = vexart_context_destroy(1);
+
+        let rgba = [255u8; 16];
+        let meta = [2u32, 2u32];
+        let mut handle = 0u64;
+        let rc = unsafe {
+            vexart_image_asset_register(
+                1,
+                "asset.png".as_ptr(),
+                9,
+                rgba.as_ptr(),
+                16,
+                meta.as_ptr() as *const u8,
+                &mut handle,
+            )
+        };
+        assert_eq!(rc, OK);
+        assert_ne!(handle, 0);
+
+        // Verify touch
+        assert_eq!(vexart_image_asset_touch(1, handle), OK);
+        assert_eq!(vexart_image_asset_touch(1, 999999), ERR_INVALID_ARG);
+
+        // Retain increments refcount
+        assert_eq!(vexart_image_asset_retain(handle), OK);
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            assert_eq!(pctx.images[&handle].references, 2);
+        }
+
+        // Release decrements refcount, image still exists
+        assert_eq!(vexart_image_asset_release(handle), OK);
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            assert_eq!(pctx.images[&handle].references, 1);
+        }
+
+        // Second release frees image
+        assert_eq!(vexart_image_asset_release(handle), OK);
+        {
+            let guard = lock_or_recover(&SHARED_PAINT);
+            let pctx = guard.as_ref().unwrap();
+            assert!(!pctx.images.contains_key(&handle));
+        }
+
+        // Third release returns ERR_INVALID_ARG
+        assert_eq!(vexart_image_asset_release(handle), ERR_INVALID_ARG);
+        assert_eq!(vexart_image_asset_retain(handle), ERR_INVALID_ARG);
+
+        let _ = vexart_context_destroy(1);
+    }
+
+    #[test]
+    fn test_resource_stats_reports_images_and_targets() {
+        let _lock = lock_or_recover(&TEST_LOCK);
+        let _ = vexart_context_destroy(1);
+
+        let rgba = [255u8; 16];
+        let meta = [2u32, 2u32];
+        let mut img_handle = 0u64;
+        let rc = unsafe {
+            vexart_image_asset_register(
+                1,
+                "asset.png".as_ptr(),
+                9,
+                rgba.as_ptr(),
+                16,
+                meta.as_ptr() as *const u8,
+                &mut img_handle,
+            )
+        };
+        assert_eq!(rc, OK);
+
+        let mut target = 0u64;
+        let rc = unsafe { vexart_composite_target_create(1, 10, 10, &mut target) };
+        assert_eq!(rc, OK);
+
+        let mut buf = [0u8; 1024];
+        let mut used = 0u32;
+        let rc = unsafe {
+            vexart_resource_get_stats(1, buf.as_mut_ptr(), buf.len() as u32, &mut used)
+        };
+        assert_eq!(rc, OK);
+        let json_str = std::str::from_utf8(&buf[..used as usize]).unwrap();
+        assert!(json_str.contains("\"ImageSprite\":{\"count\":1,\"bytes\":16}"));
+        assert!(json_str.contains("\"LayerTarget\":{\"count\":1,\"bytes\":400}"));
+        assert!(json_str.contains("\"currentUsage\":416"));
+
+        let _ = vexart_composite_target_destroy(1, target);
+        let _ = vexart_image_asset_release(img_handle);
         let _ = vexart_context_destroy(1);
     }
 

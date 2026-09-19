@@ -15,7 +15,7 @@
 | **2.2** | **Engine / Native** | MSDF Text sin batchear (1 llamada FFI + 1 draw call por cada texto) | Sobrecarga masiva de draw calls y mutexes | **Alta** |
 | **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) | Memory leak en procesos largos | **Alta** |
 | **4.1** | **Headless** | `Popover` no tiene trampa de foco (`pushFocusScope`) ni escucha `Escape` | Violación de accesibilidad / fuga de foco | **Alta** |
-| **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados con contención de mutexes | ~692 LOC código muerto; 3 mutexes por imagen | **Media** |
+| **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados (Completado) | Eliminadas 692 LOC; 3 mutexes reducidos a 1 (`SHARED_PAINT`) | ✅ **Hecho** |
 | **1.3** | **Native / Rust** | 6 pipelines WGPU compilados en arranque que nunca se usan | 40–80 ms retraso en cold-start; ~1.200 LOC | **Media** |
 | **2.3** | **Engine / FFI** | 6 alocaciones por miss en `msdfMeasureText` y cache LRU chico (501) | Presión en GC durante word-wrapping | **Media** |
 | **3.2** | **App Framework** | Inversión de capas: Tier 1 `@vexart/app` importa Tier 2 `@vexart/styled` | Acoplamiento indebido de diseño | **Media** |
@@ -45,8 +45,8 @@
 * **Solución Arquitectónica:**
   Implementar un pool acotado de búferes de staging regional en `PaintContext` (o reutilizar los búferes de compute del target con tijeras/scissors), eliminando la creación de búferes por frame y desacoplando el sondeo de terminación.
 
-### Hallazgo 1.2: `ResourceManager` y `ImageAssetRegistry` Desarmados
-* **Prioridad:** **Media**
+### Hallazgo 1.2: `ResourceManager` y `ImageAssetRegistry` Desarmados (✅ Completado)
+* **Prioridad:** **Media** — *Implementado y Verificado*
 * **Archivos:**
   * `native/libvexart/src/resource/mod.rs:1–372`
   * `native/libvexart/src/resource/stats.rs:1–162`
@@ -171,4 +171,3 @@
 * **Prioridad:** **Baja**
 * `scripts/build-dist.ts` referencia `opentype.js` y `@chenglou/pretext` en el array de exclusiones externas cuando ya fueron eliminados del proyecto.
 * **Acción:** Limpiar las referencias obsoletas en el script de empaquetado.
-
