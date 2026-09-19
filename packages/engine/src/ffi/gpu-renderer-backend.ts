@@ -1219,6 +1219,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             inst.opacity,
             inst.fitX ?? 0,
             inst.fitY ?? 0,
+            inst.radius ?? 0,
           )
           vexartCompositeRenderImageTransformLayer(vctx, targetHandle, group.handle, instance)
           first = false
@@ -2068,8 +2069,8 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
           flushAll()
           const fit = op.image.objectFit
           const imageOpacity = op.rect.effect?.opacity ?? 1
-          const hasRadius = op.image.cornerRadius > 0
-          if (fit === "none" || hasRadius) {
+          const radius = clampShapeRadius(op.image.cornerRadius, Math.max(1, Math.round(op.width)), Math.max(1, Math.round(op.height)))
+          if (fit === "none") {
             const styled = renderStyledImage(op, imageHandle, undefined, imageOpacity)
             if (!styled) return { ok: false, rawLayer: null }
             transientFullFrameImages.push(styled.handle)
@@ -2087,10 +2088,11 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
             )
             first = false
             targetMutationVersion += 1
-          } else if (fit === "cover" || fit === "contain") {
+          } else if (fit === "cover" || fit === "contain" || radius > 0) {
             // Keep the decoded source intact. The native transform shader
             // performs centered source cropping (cover) or destination
-            // letterboxing (contain) from these signed fractions.
+            // letterboxing (contain) from these signed fractions, and applies
+            // corner radius masking in a single GPU pass.
             const geometry = getImageFitGeometry(
               fit,
               op.image.imageBuffer?.width ?? Math.max(1, Math.round(op.width)),
@@ -2107,6 +2109,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
               opacity: imageOpacity,
               fitX: geometry.fitX,
               fitY: geometry.fitY,
+              radius,
             })
             transformedImageGroups.set(imageHandle, group)
           } else if (imageOpacity < 1) {
@@ -2423,6 +2426,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     targetWidth: number,
     targetHeight: number,
     opacity = 1,
+    radius = 0,
   ) => {
     const x0 = (geometry.x / targetWidth) * 2 - 1
     const y0 = 1 - (geometry.y / targetHeight) * 2
@@ -2436,6 +2440,7 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
       opacity,
       geometry.fitX,
       geometry.fitY,
+      radius,
     )
   }
 
@@ -2955,3 +2960,4 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
   if (options.shmPresentation) tmuxPresentationDrainers.set(backend, options.shmPresentation.waitForDrain)
   return backend
 }
+

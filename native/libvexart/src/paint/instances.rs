@@ -424,7 +424,8 @@ pub struct BridgeImageTransformInstance {
     /// destination UVs (contain). Zero keeps the historical fill behavior.
     pub fit_x: f32,
     pub fit_y: f32,
-    pub _pad2: f32,
+    /// Corner radius in destination pixels. When 0, the quad has sharp edges.
+    pub radius: f32,
 }
 
 /// Region copy instance for converting a rendered target's premultiplied
@@ -850,3 +851,4 @@ mod tests {
         );
     }
 }
+

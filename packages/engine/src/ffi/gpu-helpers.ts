@@ -83,6 +83,8 @@ export type TransformedImageInstance = TransformQuad & {
   /** Signed object-fit crop/inset fractions consumed by the native shader. */
   fitX?: number
   fitY?: number
+  /** Corner radius in destination pixels for unified single-pass masking. */
+  radius?: number
 }
 
 export type ImageGroup = {
@@ -233,3 +235,4 @@ export function opBounds(op: RenderGraphOp, width: number, height: number) {
   if (right <= left || bottom <= top) return null
   return { left, top, right, bottom, width: right - left, height: bottom - top }
 }
+

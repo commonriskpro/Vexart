@@ -103,6 +103,12 @@ fn create_with_blend(
                         shader_location: 3,
                         format: wgpu::VertexFormat::Float32x2,
                     },
+                    // @location(4) radius: f32 — corner radius in destination pixels.
+                    wgpu::VertexAttribute {
+                        offset: 44,
+                        shader_location: 4,
+                        format: wgpu::VertexFormat::Float32,
+                    },
                 ],
             }],
         },
@@ -123,3 +129,4 @@ fn create_with_blend(
         cache,
     })
 }
+
