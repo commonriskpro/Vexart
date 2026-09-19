@@ -9,6 +9,7 @@
 import { createContext, onCleanup, useContext, type JSX } from "solid-js"
 import { focusedId, onInput, pushFocusScope, setFocus, type SizingUnit } from "@vexart/engine"
 import { Portal } from "../containers/portal"
+import { isTopOverlay, pushOverlayDismiss } from "./overlay-stack"
 
 // ── Types ──
 
@@ -56,7 +57,6 @@ export type DialogCloseProps = {
 // ── Dialog Root ──
 
 const DialogCloseContext = createContext<(() => void) | undefined>()
-const openDialogs: Array<() => void> = []
 
 function DialogRoot(props: DialogProps) {
   const savedFocusId = focusedId()
@@ -66,9 +66,9 @@ function DialogRoot(props: DialogProps) {
   // Escape is a scope-level action. A focused child owns the active focus
   // entry, so registering it on one hidden entry would miss Escape after Tab.
   const close = () => props.onClose?.()
-  openDialogs.push(close)
+  const popDismiss = pushOverlayDismiss(close)
   const unsubscribe = onInput((event) => {
-    if (event.type === "key" && event.key === "escape" && openDialogs[openDialogs.length - 1] === close) {
+    if (event.type === "key" && event.key === "escape" && isTopOverlay(close)) {
       close()
     }
   })
@@ -76,8 +76,7 @@ function DialogRoot(props: DialogProps) {
   // Cleanup: pop the scope when dialog unmounts, restoring previous focus
   onCleanup(() => {
     unsubscribe()
-    const index = openDialogs.indexOf(close)
-    if (index >= 0) openDialogs.splice(index, 1)
+    popDismiss()
     popScope()
     if (savedFocusId) setFocus(savedFocusId)
   })

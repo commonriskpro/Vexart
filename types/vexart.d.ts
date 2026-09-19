@@ -2135,15 +2135,10 @@ export declare type PopoverProps = {
     placement?: "top" | "bottom" | "left" | "right";
     /** Offset from trigger. Default: 4. */
     offset?: number;
+    /** Whether the popover traps focus and blocks background interaction. Default: true. */
+    modal?: boolean;
 };
 
-/**
- * Popover — truly headless popover primitive.
- *
- * Similar to `Tooltip`, but intended for interactive content.
- *
- * @public
- */
 /** @public */
 export declare type PopoverTriggerContext = {
     open: boolean;

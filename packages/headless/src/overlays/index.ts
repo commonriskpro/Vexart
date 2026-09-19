@@ -1,4 +1,6 @@
 export * from "./dialog"
 export * from "./dropdown-menu"
+export * from "./overlay-stack"
+export * from "./popover"
 export * from "./toast"
 export * from "./tooltip"

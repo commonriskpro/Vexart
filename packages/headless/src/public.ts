@@ -156,12 +156,14 @@ export type {
   ToasterHandle,
 } from "./overlays/toast"
 
-export { Tooltip, Popover } from "./overlays/tooltip"
+export { Tooltip } from "./overlays/tooltip"
+export type { TooltipProps } from "./overlays/tooltip"
+
+export { Popover } from "./overlays/popover"
 export type {
-  TooltipProps,
   PopoverTriggerContext,
   PopoverProps,
-} from "./overlays/tooltip"
+} from "./overlays/popover"
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 

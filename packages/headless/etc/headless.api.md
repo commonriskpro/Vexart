@@ -673,6 +673,7 @@ export type PopoverProps = {
     renderContent: () => JSX.Element;
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
+    modal?: boolean;
 };
 
 // @public (undocumented)

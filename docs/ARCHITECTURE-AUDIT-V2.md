@@ -14,7 +14,7 @@
 | **2.1** | **Engine Loop** | Doble recorrido DFS por frame (`walkTreeOnce` + `traverseFrame`) (Completado) | Eliminada primera pasada DFS y unificado ciclo en `traverseFrame` | ✅ **Hecho** |
 | **2.2** | **Engine / Native** | MSDF Text batching con protocolo binario VXTX (Completado) | Eliminadas N llamadas FFI/draw calls; 1 FFI + 1 draw call por capa | ✅ **Hecho** |
 | **3.1** | **App Framework** | Cache no acotado (`new Map`) en `class-name.ts` (`@vexart/app`) (Completado) | Eliminado memory leak con Bounded LRU Cache (2.048 entradas) | ✅ **Hecho** |
-| **4.1** | **Headless** | `Popover` no tiene trampa de foco (`pushFocusScope`) ni escucha `Escape` | Violación de accesibilidad / fuga de foco | **Alta** |
+| **4.1** | **Headless** | Trampa de foco (`pushFocusScope`), descarte `Escape` y stack LIFO en `Popover` (Completado) | Aislamiento de foco, accesibilidad por teclado y dismiss coordinado LIFO | ✅ **Hecho** |
 | **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados (Completado) | Eliminadas 692 LOC; 3 mutexes reducidos a 1 (`SHARED_PAINT`) | ✅ **Hecho** |
 | **1.3** | **Native / Rust** | 6 pipelines WGPU compilados en arranque que nunca se usan | 40–80 ms retraso en cold-start; ~1.200 LOC | **Media** |
 | **2.3** | **Engine / FFI** | Scratch buffers zero-alloc en `msdfMeasureText` y cache ampliado (2048) (Completado) | Eliminadas 6 alocaciones por llamada y ampliado cache LRU a 2048 | ✅ **Hecho** |
@@ -154,15 +154,20 @@
 
 ## 4. Componentes y Accesibilidad (`packages/headless/`)
 
-### Hallazgo 4.1: Falta de Trampa de Foco y Tecla Escape en `Popover`
-* **Prioridad:** **Alta**
+### Hallazgo 4.1: Falta de Trampa de Foco y Tecla Escape en `Popover` (✅ Completado)
+* **Prioridad:** **Alta** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/headless/src/overlays/tooltip.tsx:153–187` (`Popover`)
-  * `packages/headless/src/overlays/dialog.tsx:64–77` (`DialogRoot`)
+  * `packages/headless/src/overlays/overlay-stack.ts` (`pushOverlayDismiss`, `isTopOverlay`)
+  * `packages/headless/src/overlays/popover.tsx` (`Popover`, `PopoverProps`, `PopoverPanel`)
+  * `packages/headless/src/overlays/dialog.tsx` (`DialogRoot`)
+  * `packages/headless/src/overlays/tooltip.tsx`
 * **Problema:**
   `Dialog` implementa correctamente `pushFocusScope()` y escucha `Escape`. `Popover` omite ambos, permitiendo que la navegación por `Tab` se escape a elementos de fondo y no permitiendo cerrar el menú con el teclado.
-* **Solución Arquitectónica:**
-  Incorporar el aislamiento de foco (`pushFocusScope`) y descarte por tecla `Escape` en el componente `Popover`.
+* **Solución Arquitectónica Implementada:**
+  1. Se introdujo una pila compartida LIFO (`overlay-stack.ts`) para coordinar el descarte de múltiples overlays jerárquicos con la tecla `Escape`.
+  2. `DialogRoot` se adaptó para usar `pushOverlayDismiss` e `isTopOverlay(close)`, garantizando que si un `Popover` se abre dentro de un `Dialog`, la primera pulsación de `Escape` descarte únicamente el `Popover`.
+  3. Se creó `packages/headless/src/overlays/popover.tsx` con soporte para `modal?: boolean` (por defecto `true`). Al abrirse en modo modal, captura sincrónicamente `focusedId()` y aísla la navegación mediante `pushFocusScope()`. Al cerrarse, desapila el scope y restaura el foco al disparador.
+  4. Soporte para descarte por `Escape` en modo modal y no modal coordinado vía `overlay-stack`, y descarte por click en backdrop exterior `floating="root"`.
 
 ### Hallazgo 4.2: `ScrollView` Altera Alturas de Layout para Posicionar el Thumb
 * **Prioridad:** **Media**
