@@ -12,7 +12,7 @@
  * Scroll IDs are stable strings shared by scroll containers and handles.
  */
 
-import { markDirty } from "../reconciler/dirty"
+import { DIRTY_KIND, markDirty } from "../reconciler/dirty"
 
 /** @public */
 export type ScrollHandle = {
@@ -92,7 +92,7 @@ export function createScrollHandle(scrollId: string): ScrollHandle {
       const maxScroll = Math.min(0, -(state.contentHeight - state.viewportHeight))
       const clamped = Math.max(maxScroll, Math.min(0, y))
       state.scrollY = clamped
-      markDirty()
+      markDirty({ kind: DIRTY_KIND.INTERACTION })
     },
     scrollBy(dy: number) {
       const state = getState(scrollId)
@@ -100,7 +100,7 @@ export function createScrollHandle(scrollId: string): ScrollHandle {
       const maxScroll = Math.min(0, -(state.contentHeight - state.viewportHeight))
       const clamped = Math.max(maxScroll, Math.min(0, newY))
       state.scrollY = clamped
-      markDirty()
+      markDirty({ kind: DIRTY_KIND.INTERACTION })
     },
     scrollIntoView(y: number, height: number) {
       const state = getState(scrollId)

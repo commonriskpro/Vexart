@@ -20,7 +20,7 @@
 | **2.3** | **Engine / FFI** | Scratch buffers zero-alloc en `msdfMeasureText` y cache ampliado (2048) (Completado) | Eliminadas 6 alocaciones por llamada y ampliado cache LRU a 2048 | ✅ **Hecho** |
 | **3.2** | **App Framework** | Inversión de capas: Tier 1 `@vexart/app` importa Tier 2 `@vexart/styled` | Acoplamiento indebido de diseño | **Media** |
 | **4.2** | **Headless** | Posicionamiento del thumb vía `transform` y colores reactivos en `ScrollView` (Completado) | Eliminados recálculos de Flexily por frame de scroll y desacoplados colores de tema | ✅ **Hecho** |
-| **4.3** | **Engine Loop** | Scroll deja `layer.damageRect = null`, anulando repintado regional | Repintado de capa completa en cada scroll | **Media** |
+| **4.3** | **Engine Loop** | Delimitación de `layer.damageRect` regional en eventos de scroll (Completado) | Repintado regional habilitado y evitado `markAllDirty` indiscriminado en scroll | ✅ **Hecho** |
 | **3.3** | **App Framework** | `keepAliveCache` ordena arrays enteros al desalojar rutas | Alocaciones menores de GC | **Baja** |
 | **5.1** | **Packaging** | Dependencia raíz redundante `marked` | Dependencia innecesaria en raíz | **Baja** |
 | **5.2** | **Tooling** | Paquetes fantasma (`pretext`, `opentype.js`) en externals de bundler | Deuda de configuración en `build-dist.ts` | **Baja** |
@@ -182,15 +182,20 @@
   3. Se añadieron `scrollbarTrackColor?: string | number` y `scrollbarThumbColor?: string | number` a `ScrollViewProps` en `@vexart/headless`, permitiendo inyectar colores personalizados y usando los valores de `SCROLLBAR` solo como fallback.
   4. En `VoidScrollView` (`@vexart/styled`), se añadieron `scrollbarTrackColor` y `scrollbarThumbColor` a `VoidScrollViewProps` y se enlazaron reactivamente a los tokens de tema (`themeColors.muted` y `themeColors.border` por defecto), garantizando reactividad total ante cambios con `setTheme()`.
 
-### Hallazgo 4.3: Inexistencia de `layer.damageRect` en Eventos de Scroll
-* **Prioridad:** **Media**
+### Hallazgo 4.3: Inexistencia de `layer.damageRect` en Eventos de Scroll (✅ Completado)
+* **Prioridad:** **Media** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/engine/src/loop/pipeline-scroll.ts:168–172`
-  * `packages/engine/src/loop/paint.ts:697–705`
+  * `packages/engine/src/loop/pipeline-scroll.ts`
+  * `packages/engine/src/loop/composite.ts`
+  * `packages/engine/src/loop/loop.ts`
+  * `packages/engine/src/loop/scroll.ts`
 * **Problema:**
-  Al scrollear, se marca la capa como sucia pero `damageRect` queda en `null`, anulando la optimización de repintado regional en `paint.ts`. Cada tick de scroll provoca un repintado completo de la capa.
+  Al scrollear, se llamaba a `markDirty()` sin argumentos (disparando `markAllDirty()` global) o se marcaba la capa completa con `damageRect` de 100% de la superficie (`layer.width x layer.height`), anulando la optimización de repintado regional en `paint.ts` (`damageArea < layerArea * 0.5`). Cada tick de scroll provocaba un repintado completo de la capa.
 * **Solución Arquitectónica:**
-  Calcular el área de daño real durante el scroll para permitir el repintado regional, o habilitar blit de texturas con desplazamiento en Rust.
+  1. Se añadió `markDamageLayer?: (key: string, rect: DamageRect) => void` a `ScrollOffsetState` en `pipeline-scroll.ts`.
+  2. En `applyScrollOffsetsToOps`, para cada contenedor con scroll activo o desplazamiento se calcula su posición efectiva en pantalla con `getEffectivePosition(container, offsets)` y se emite un `DamageRect` acotado a los bounds del contenedor mediante `markDamageLayer(layerKey, containerRect)`.
+  3. En `composite.ts`, se inyecta `{ scrollOffsets: s.scrollOffsets, markDamageLayer: markLayerDamageByKey }` en la invocación a `applyScrollOffsetsToOps`.
+  4. En `feedScroll` (`loop.ts`) y en `scrollTo`/`scrollBy` (`scroll.ts`), se utiliza `markDirty({ kind: DIRTY_KIND.INTERACTION })` en lugar de `markDirty()` vacío, evitando invalidaciones globales destructivas en capas no afectadas.
 
 ---
 

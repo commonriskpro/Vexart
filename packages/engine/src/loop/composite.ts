@@ -635,7 +635,10 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
       traversalResult.layerBuckets,
       s.scrollContainers,
       s.nodeRefById,
-      s.scrollOffsets,
+      {
+        scrollOffsets: s.scrollOffsets,
+        markDamageLayer: markLayerDamageByKey,
+      },
     )
     s.scrollOffsets = newScrollOffsets
     if (profile) profile.layoutWritebackMs = performance.now() - layoutWritebackStart

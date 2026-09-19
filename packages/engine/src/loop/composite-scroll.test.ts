@@ -6,7 +6,7 @@ import { createScrollHandle, resetScrollHandles } from "./scroll"
 import { routeScrollDeltas } from "./composite-scroll"
 import { applyScrollOffsetsToOps, getParentScrollContainer } from "./pipeline-scroll"
 import type { LayerOpBucket } from "./pipeline-types"
-import { bindLayerDirtyStore, markLayerDirtyByKey } from "./composite"
+import { bindLayerDirtyStore, markLayerDirtyByKey, markLayerDamageByKey } from "./composite"
 import { getEffectivePosition } from "../reconciler/hit-test"
 
 afterEach(() => {
@@ -103,6 +103,38 @@ describe("applyScrollOffsets scroll geometry", () => {
 
     expect(layer.dirty).toBe(true)
     expect(layer.damageRect).toEqual({ x: 0, y: 0, width: 100, height: 50 })
+  })
+
+  test("limits layer.damageRect to scroll container bounds instead of full layer", () => {
+    const scroller = rect(createNode("box"), 50, 60, 100, 50)
+    scroller.props.scrollY = true
+    scroller.props.scrollId = "regional-damage"
+    child(scroller, rect(createNode("text"), 50, 60, 100, 200))
+
+    const layerStore = createLayerStore()
+    const layer = layerStore.createLayer(0)
+    layer.x = 0
+    layer.y = 0
+    layer.width = 500
+    layer.height = 500
+    bindLayerDirtyStore(new Map([["bg", layer]]))
+
+    const frame = state([scroller])
+    applyScrollOffsetsToOps([], frame.scrollContainers, frame.nodeRefById, {
+      scrollOffsets: frame.scrollOffsets,
+      markDamageLayer: markLayerDamageByKey,
+    })
+    createScrollHandle("regional-damage").scrollTo(-50)
+    layer.dirty = false
+    layer.damageRect = null
+
+    applyScrollOffsetsToOps([], frame.scrollContainers, frame.nodeRefById, {
+      scrollOffsets: frame.scrollOffsets,
+      markDamageLayer: markLayerDamageByKey,
+    })
+
+    expect(layer.dirty).toBe(true)
+    expect(layer.damageRect as unknown).toEqual({ x: 50, y: 60, width: 100, height: 50 })
   })
 })
 

@@ -18,6 +18,8 @@ import {
   type RenderGraphOp,
   getRenderOpClipStack,
 } from "../ffi/render-graph"
+import type { DamageRect } from "../ffi/damage"
+import { getEffectivePosition } from "../reconciler/hit-test"
 import type { LayerOpBucket } from "./pipeline-types"
 import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 
@@ -26,6 +28,7 @@ import { createScrollHandle, updateScrollContainerGeometry } from "./scroll"
 export type ScrollOffsetState = {
   scrollOffsets?: Map<number, { x: number; y: number }>
   markDirtyLayer?: (key: string) => void
+  markDamageLayer?: (key: string, rect: DamageRect) => void
   deltaX?: number
   deltaY?: number
   speedCap?: number
@@ -114,22 +117,25 @@ function intersectOrEmptyBounds(
 
 function resolveScrollOptions(state?: ScrollState) {
   if (typeof state === "function") {
-    return { markDirtyLayer: state, offsets: new Map<number, { x: number; y: number }>() }
+    return { markDirtyLayer: state, markDamageLayer: undefined, offsets: new Map<number, { x: number; y: number }>() }
   }
   if (state instanceof Map) {
     state.clear()
-    return { markDirtyLayer: undefined, offsets: state }
+    return { markDirtyLayer: undefined, markDamageLayer: undefined, offsets: state }
   }
   if (state && typeof state === "object") {
     const markDirtyLayer = "markDirtyLayer" in state && typeof state.markDirtyLayer === "function"
       ? state.markDirtyLayer
       : undefined
+    const markDamageLayer = "markDamageLayer" in state && typeof state.markDamageLayer === "function"
+      ? state.markDamageLayer
+      : undefined
     const offsets = "scrollOffsets" in state && state.scrollOffsets instanceof Map
       ? (state.scrollOffsets.clear(), state.scrollOffsets)
       : new Map<number, { x: number; y: number }>()
-    return { markDirtyLayer, offsets }
+    return { markDirtyLayer, markDamageLayer, offsets }
   }
-  return { markDirtyLayer: undefined, offsets: new Map<number, { x: number; y: number }>() }
+  return { markDirtyLayer: undefined, markDamageLayer: undefined, offsets: new Map<number, { x: number; y: number }>() }
 }
 
 // ── Pass 2: Scroll Offset Application ──────────────────────────────────────
@@ -150,7 +156,7 @@ export function applyScrollOffsetsToOps(
   nodeRefById: Map<number, TGENode>,
   scrollState?: ScrollState,
 ): Map<number, { x: number; y: number }> {
-  const { markDirtyLayer, offsets } = resolveScrollOptions(scrollState)
+  const { markDirtyLayer, markDamageLayer, offsets } = resolveScrollOptions(scrollState)
   const localOffsets = new Map<number, { x: number; y: number }>()
 
   // 1. Measure content extents and update scroll geometry for each container
@@ -191,8 +197,20 @@ export function applyScrollOffsetsToOps(
 
   for (const container of scrollContainers) {
     const total = getCompoundedOffset(container)
-    if (markDirtyLayer && (total.x !== 0 || total.y !== 0)) {
-      markDirtyLayer(container._layerKey ?? "bg")
+    if (total.x !== 0 || total.y !== 0) {
+      const layerKey = container._layerKey ?? "bg"
+      if (markDamageLayer) {
+        const pos = getEffectivePosition(container, offsets)
+        const containerRect: DamageRect = {
+          x: Math.round(pos.x),
+          y: Math.round(pos.y),
+          width: Math.round(container.layout.width),
+          height: Math.round(container.layout.height),
+        }
+        markDamageLayer(layerKey, containerRect)
+      } else if (markDirtyLayer) {
+        markDirtyLayer(layerKey)
+      }
     }
   }
 

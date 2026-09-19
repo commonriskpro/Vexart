@@ -360,7 +360,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     scroll.x += dx; scroll.y += dy
     markInteractionActive("scroll")
     globalMarkLayoutDirty(dirtyTracker)
-    markDirty()
+    markDirty({ kind: DIRTY_KIND.INTERACTION })
   }
 
   function needsPointerRepaint(): boolean {
