@@ -17,7 +17,7 @@
 | **4.1** | **Headless** | `Popover` no tiene trampa de foco (`pushFocusScope`) ni escucha `Escape` | Violación de accesibilidad / fuga de foco | **Alta** |
 | **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados (Completado) | Eliminadas 692 LOC; 3 mutexes reducidos a 1 (`SHARED_PAINT`) | ✅ **Hecho** |
 | **1.3** | **Native / Rust** | 6 pipelines WGPU compilados en arranque que nunca se usan | 40–80 ms retraso en cold-start; ~1.200 LOC | **Media** |
-| **2.3** | **Engine / FFI** | 6 alocaciones por miss en `msdfMeasureText` y cache LRU chico (501) | Presión en GC durante word-wrapping | **Media** |
+| **2.3** | **Engine / FFI** | Scratch buffers zero-alloc en `msdfMeasureText` y cache ampliado (2048) (Completado) | Eliminadas 6 alocaciones por llamada y ampliado cache LRU a 2048 | ✅ **Hecho** |
 | **3.2** | **App Framework** | Inversión de capas: Tier 1 `@vexart/app` importa Tier 2 `@vexart/styled` | Acoplamiento indebido de diseño | **Media** |
 | **4.2** | **Headless** | `ScrollView` muta altura de layout para el thumb y colores hardcodeados | Recalculo de layout en cada tick de scroll | **Media** |
 | **4.3** | **Engine Loop** | Scroll deja `layer.damageRect = null`, anulando repintado regional | Repintado de capa completa en cada scroll | **Media** |
@@ -98,15 +98,20 @@
 * **Solución Arquitectónica:**
   Batchear las operaciones de texto en un flujo de comandos binario por capa. En Rust, acumular los cuadriláteros de glifos en el vertex buffer común y despachar un único draw call para toda la tipografía de la capa.
 
-### Hallazgo 2.3: Alocaciones en `msdfMeasureText` y Cache Reducido
-* **Prioridad:** **Media**
+### Hallazgo 2.3: Alocaciones en `msdfMeasureText` y Cache Reducido (✅ Completado)
+* **Prioridad:** **Media** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/engine/src/ffi/msdf-font.ts:74–105`
-  * `packages/engine/src/ffi/text-layout.ts:315`
+  * `packages/engine/src/ffi/msdf-font.ts` (`msdfMeasureText`)
+  * `packages/engine/src/ffi/text-layout.ts` (`MAX_CACHE`, `nativeMeasure`)
 * **Problema:**
   Cada fallo de caché en medición aloca 6 objetos y typed arrays (`Uint8Array`, `Float32Array`, etc.). Además, `nativeMeasureCache` tiene un tope de solo 501 entradas, lo que produce thrashing constante en logs o tablas dinámicas.
-* **Solución Arquitectónica:**
-  Reutilizar búferes scratch prealocados para la serialización de `msdfMeasureText` y ampliar la capacidad del caché a 2.048 entradas.
+* **Solución Arquitectónica Implementada:**
+  1. Reutilización de scratch buffers elásticos de módulo (`_textScratchBuf`, `_famScratchBuf`) con `TextEncoder.prototype.encodeInto(...)` y crecimiento geométrico factor 2x si `text.length * 3 > buf.byteLength`.
+  2. Fast-path de retorno `{ width: 0, height: 0 }` para `text.length === 0` sin llamar a FFI.
+  3. Fast-path con búfer estático pre-codificado para la familia por defecto (`"sans-serif"`).
+  4. Vistas de bytes y TypedArrays reutilizables (`_outW`, `_outH`, `_outWBytes`, `_outHBytes`) pasadas a `ptr(...)` en Bun FFI, eliminando 4 alocaciones (`Float32Array` y `Uint8Array`) por llamada.
+  5. Optimización de clave en `nativeMeasure` evitando `families.join(",")` cuando `families.length === 1` (caso del 99% de las llamadas).
+  6. Ampliación de la capacidad de `nativeMeasureCache` de 501 a 2.048 entradas para eliminar thrashing en logs y tablas dinámicas.
 
 ---
 

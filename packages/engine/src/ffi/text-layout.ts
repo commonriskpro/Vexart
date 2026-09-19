@@ -75,7 +75,7 @@ export type TextLayoutOptions = {
   fontStyle?: string
 }
 
-const MAX_CACHE = 501
+const MAX_CACHE = 2048
 const MAX_LAYOUT_CACHE = 1000
 const layoutCache = createLRUCache<string, { lines: LayoutLine[]; height: number; lineCount: number }>(MAX_LAYOUT_CACHE)
 
@@ -310,7 +310,8 @@ function nativeMeasure(text: string, fontSize: number, families: string[] = ["sa
   if (_nativeAvailable === null) _nativeAvailable = isMsdfFontAvailable()
   if (!_nativeAvailable) throw new Error("Vexart native font system unavailable — libvexart.dylib not loaded")
 
-  const key = `native\0${fontSize}\0${weight}\0${italic ? 1 : 0}\0${families.join(",")}\0${text}`
+  const famKey = families.length === 1 ? families[0] : families.join(",")
+  const key = `native\0${fontSize}\0${weight}\0${italic ? 1 : 0}\0${famKey}\0${text}`
   return nativeMeasureCache.get(key, () => {
     const result = msdfMeasureText(text, families, fontSize, weight, italic)
     if (!result) throw new Error(`Vexart font measurement failed for families=[${families}] size=${fontSize}`)
