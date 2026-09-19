@@ -224,19 +224,19 @@ function applyBackendProfile(profile: PaintProfiler | undefined, backend: Render
 }
 
 function computeSubtreeTransformQuad(node: TGENode) {
-  if (!node._transform) return null
+  if (!node._transforms?.local) return null
   const layout = node.layout
   const chain: TGENode[] = []
   let current: TGENode | null = node
   while (current) {
-    if (current._transform) chain.push(current)
+    if (current._transforms?.local) chain.push(current)
     current = current.parent
   }
   const transformAbsolutePoint = (x: number, y: number) => {
     let point = { x, y }
     for (const target of chain) {
       const l = target.layout
-      const absolute = multiply(multiply(translate(l.x, l.y), target._transform!), translate(-l.x, -l.y))
+      const absolute = multiply(multiply(translate(l.x, l.y), target._transforms!.local!), translate(-l.x, -l.y))
       point = transformPoint(absolute, point.x, point.y)
     }
     return point

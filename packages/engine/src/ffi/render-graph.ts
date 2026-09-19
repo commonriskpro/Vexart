@@ -335,8 +335,9 @@ function createBaseRenderOpFields(cmd: RenderCommand, renderObjectId: number | n
 function resolveEffectTransform(effect: EffectConfig): EffectConfig {
   const node = effect._node
   if (!node) return effect
-  const transform = node._transform ?? undefined
-  const transformInverse = node._transformInverse ?? undefined
+  const transforms = node._transforms
+  const transform = transforms?.local ?? undefined
+  const transformInverse = transforms?.localInverse ?? undefined
   if (effect.transform === transform && effect.transformInverse === transformInverse) return effect
   return { ...effect, transform, transformInverse }
 }
@@ -428,8 +429,10 @@ function fnv1a(data: ArrayLike<number>): number {
 
 function getTransformMatrix(effect: EffectConfig) {
   const node = effect._node
-  if (node?._accTransform) return node._accTransform
-  if (node?._transform) return node._transform
+  if (node?._transforms) {
+    if (node._transforms.acc) return node._transforms.acc
+    if (node._transforms.local) return node._transforms.local
+  }
   if (effect.transform) return effect.transform
   return null
 }

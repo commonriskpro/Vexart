@@ -43,7 +43,8 @@ function effectiveVisualBounds(
   offsets: Map<number, { x: number; y: number }> | null | undefined = _activeScrollOffsets,
 ) {
   const pos = getEffectivePosition(node, offsets)
-  const transform = node._accTransform ?? node._transform
+  const transforms = node._transforms
+  const transform = transforms ? (transforms.acc ?? transforms.local) : null
   if (!transform) {
     return {
       x: pos.x,
@@ -67,7 +68,8 @@ export function buildNodeMouseEvent(node: TGENode, pointerX: number, pointerY: n
   const pos = getEffectivePosition(node)
   const relX = pointerX - pos.x
   const relY = pointerY - pos.y
-  const inverse = node._accTransformInverse ?? node._transformInverse
+  const transforms = node._transforms
+  const inverse = transforms ? (transforms.accInverse ?? transforms.localInverse) : null
   if (inverse) {
     const w = inverse[6] * relX + inverse[7] * relY + inverse[8]
     if (Math.abs(w) > 1e-12) {
@@ -113,7 +115,8 @@ export function isPointInsideScrollViewports(
   while (scrollParent) {
     if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
       const pos = getEffectivePosition(scrollParent, offsets)
-      const inverse = scrollParent._accTransformInverse ?? scrollParent._transformInverse
+      const transforms = scrollParent._transforms
+      const inverse = transforms ? (transforms.accInverse ?? transforms.localInverse) : null
       const relX = pointerX - pos.x
       const relY = pointerY - pos.y
       let localX = relX

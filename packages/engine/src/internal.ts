@@ -17,6 +17,8 @@ export {
   clearFlexNodePool,
   createNode,
   createPressEvent,
+  ensureCompositorExtra,
+  ensureTransformExtra,
   getClassNameResolver,
   getFlexNodePoolSize,
   getGridLayoutError,
@@ -31,11 +33,14 @@ export {
   removeChild,
   resolveProps,
   setClassNameResolver,
+  TGENodeImpl,
 } from "./ffi/node"
 export type {
   ClassNameResolver,
   NodeCanvasExtra,
+  NodeCompositorExtra,
   NodeImageExtra,
+  NodeTransformExtra,
   TGENode,
   TGENodeKind,
 } from "./ffi/node"

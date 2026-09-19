@@ -328,7 +328,7 @@ tokens de `@vexart/styled` (Tier 2). Inversión arquitectónica.
 - [x] Fix stale `<For>` index closures en List/Table
 - [x] Unificar text editing engine entre Input y Textarea
 - [x] Agregar outside-click a Select
-- [ ] Slim TGENode shape (core + lazy bags)
+- [x] Slim TGENode shape (core + lazy bags)
 - [x] Pool de Flexily nodes desattachados
 
 ---

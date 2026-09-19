@@ -3,7 +3,7 @@ import type { InteractionMode, TGENode } from "../ffi/node"
 import { getHandleNode, type NodeHandle } from "./handle"
 
 function getNodeInteractionMode(node: TGENode): InteractionMode {
-  return (node.props.interactionMode as InteractionMode | undefined) ?? node._interactionMode
+  return (node.props.interactionMode as InteractionMode | undefined) ?? node._interactionMode ?? "none"
 }
 
 /** @public */

@@ -38,8 +38,10 @@ import type {
   InteractiveStyleProps,
   LayoutRect,
   NodeCanvasExtra,
+  NodeCompositorExtra,
   NodeImageExtra,
   NodeMouseEvent,
+  NodeTransformExtra,
   PressEvent,
   ShadowConfig,
   SizingInfo,
@@ -76,8 +78,10 @@ export type {
   InteractiveStyleProps,
   LayoutRect,
   NodeCanvasExtra,
+  NodeCompositorExtra,
   NodeImageExtra,
   NodeMouseEvent,
+  NodeTransformExtra,
   PressEvent,
   ShadowConfig,
   SizingInfo,
@@ -122,50 +126,147 @@ export function getThemeEpoch(): number {
   return currentThemeEpoch
 }
 
+/** Retained scene graph node implementation with prototype accessors for lazy extras. */
+export class TGENodeImpl implements TGENode {
+  kind: TGENodeKind
+  props: TGEProps = {}
+  text: string = ""
+  children: TGENode[] = []
+  parent: TGENode | null = null
+  id: number
+  destroyed: boolean = false
+  layout: LayoutRect = { x: 0, y: 0, width: 0, height: 0 }
+  _flexNode: Node | null
+  _hovered: boolean = false
+  _active: boolean = false
+  _focused: boolean = false
+  _widthSizing: SizingInfo | null = null
+  _heightSizing: SizingInfo | null = null
+  _vp: TGEProps | null = null
+  _vpDirty: boolean = true
+  _vpEpoch: number = 0
+  _siblingIndex: number = 0
+  _focusableCount: number = 0
+  _dfsIndex: number = 0
+  _depth: number = 0
+  _scrollContainerId: number = 0
+  _layerKey: string | null = null
+
+  declare _transforms?: NodeTransformExtra | null
+  declare _compositor?: NodeCompositorExtra | null
+  declare _imageExtra?: NodeImageExtra | null
+  declare _canvasExtra?: NodeCanvasExtra | null
+  declare _styleKeys?: Set<string>
+  declare _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
+  declare _rawInteractionMode?: InteractionMode
+
+  constructor(kind: TGENodeKind, flex: Node | null) {
+    this.kind = kind
+    this.id = nextNodeId++
+    this._flexNode = flex
+    if (kind === "img") {
+      this._imageExtra = { buffer: null, state: "idle", nativeHandle: null }
+    } else if (kind === "canvas") {
+      this._canvasExtra = { displayListCommands: null, displayListHash: null, drawCacheKey: null }
+    }
+  }
+
+  get _transform(): Float64Array | null {
+    return this._transforms?.local ?? null
+  }
+  set _transform(val: Float64Array | null) {
+    if (!this._transforms && val === null) return
+    ensureTransformExtra(this).local = val
+  }
+
+  get _transformInverse(): Float64Array | null {
+    return this._transforms?.localInverse ?? null
+  }
+  set _transformInverse(val: Float64Array | null) {
+    if (!this._transforms && val === null) return
+    ensureTransformExtra(this).localInverse = val
+  }
+
+  get _accTransform(): Float64Array | null {
+    return this._transforms?.acc ?? null
+  }
+  set _accTransform(val: Float64Array | null) {
+    if (!this._transforms && val === null) return
+    ensureTransformExtra(this).acc = val
+  }
+
+  get _accTransformInverse(): Float64Array | null {
+    return this._transforms?.accInverse ?? null
+  }
+  set _accTransformInverse(val: Float64Array | null) {
+    if (!this._transforms && val === null) return
+    ensureTransformExtra(this).accInverse = val
+  }
+
+  get _stableFrameCount(): number {
+    return this._compositor?.stableFrames ?? 0
+  }
+  set _stableFrameCount(val: number) {
+    if (!this._compositor && val === 0) return
+    ensureCompositorExtra(this).stableFrames = val
+  }
+
+  get _unstableFrameCount(): number {
+    return this._compositor?.unstableFrames ?? 0
+  }
+  set _unstableFrameCount(val: number) {
+    if (!this._compositor && val === 0) return
+    ensureCompositorExtra(this).unstableFrames = val
+  }
+
+  get _autoLayer(): boolean {
+    return this._compositor?.autoLayer ?? false
+  }
+  set _autoLayer(val: boolean) {
+    if (!this._compositor && !val) return
+    ensureCompositorExtra(this).autoLayer = val
+  }
+
+  get _interactionMode(): InteractionMode {
+    return this._rawInteractionMode ?? "none"
+  }
+  set _interactionMode(val: InteractionMode | undefined) {
+    if (!val || val === "none") {
+      delete this._rawInteractionMode
+    } else {
+      this._rawInteractionMode = val
+    }
+  }
+}
+
 /** @public */
 export function createNode(kind: TGENodeKind): TGENode {
   const flex = kind === "text" ? null : acquireFlexNode()
   flex?.setFlexDirection(FLEX_DIRECTION_ROW)
-  return {
-    kind,
-    props: {},
-    text: "",
-    children: [],
-    parent: null,
-    id: nextNodeId++,
-    destroyed: false,
-    layout: { x: 0, y: 0, width: 0, height: 0 },
-    _flexNode: flex,
-    _hovered: false,
-    _active: false,
-    _focused: false,
-    _imageExtra: kind === "img" ? { buffer: null, state: "idle", nativeHandle: null } : null,
-    _canvasExtra: kind === "canvas" ? { displayListCommands: null, displayListHash: null, drawCacheKey: null } : null,
-    _widthSizing: null,
-    _heightSizing: null,
-    _transform: null,
-    _transformInverse: null,
-    _accTransform: null,
-    _accTransformInverse: null,
-    _interactionMode: "none",
-    _vp: null,
-    _vpDirty: true,
-    _vpEpoch: 0,
-    _siblingIndex: 0,
-    _focusableCount: 0,
-    _dfsIndex: 0,
-    _depth: 0,
-    _scrollContainerId: 0,
-    _stableFrameCount: 0,
-    _unstableFrameCount: 0,
-    _autoLayer: false,
-    _layerKey: null,
-    _lastMeasuredText: null,
-    _lastMeasuredFontId: -1,
-    _lastMeasuredFontSize: -1,
-    _lastMeasurement: null,
-    _dirtyTracker: null,
+  return new TGENodeImpl(kind, flex)
+}
+
+export function ensureTransformExtra(node: TGENode): NodeTransformExtra {
+  if (!node._transforms) {
+    node._transforms = {
+      local: null,
+      localInverse: null,
+      acc: null,
+      accInverse: null,
+    }
   }
+  return node._transforms
+}
+
+export function ensureCompositorExtra(node: TGENode): NodeCompositorExtra {
+  if (!node._compositor) {
+    node._compositor = {
+      stableFrames: 0,
+      unstableFrames: 0,
+      autoLayer: false,
+    }
+  }
+  return node._compositor
 }
 
 export function ensureImageExtra(node: TGENode): NodeImageExtra {

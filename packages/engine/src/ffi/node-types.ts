@@ -50,6 +50,19 @@ export const INTERACTION_MODE = { NONE: "none", DRAG: "drag" } as const
 /** @public */
 export type InteractionMode = (typeof INTERACTION_MODE)[keyof typeof INTERACTION_MODE]
 
+export type NodeTransformExtra = {
+  local: Float64Array | null
+  localInverse: Float64Array | null
+  acc: Float64Array | null
+  accInverse: Float64Array | null
+}
+
+export type NodeCompositorExtra = {
+  stableFrames: number
+  unstableFrames: number
+  autoLayer: boolean
+}
+
 export type NodeImageExtra = {
   source?: string
   revision?: number
@@ -403,25 +416,27 @@ export type TGENode = {
   _active: boolean
   _focused: boolean
   /** Image-only extra data, allocated lazily for img nodes. */
-  _imageExtra: NodeImageExtra | null
+  _imageExtra?: NodeImageExtra | null
   /** Canvas-only extra data, allocated lazily for canvas nodes. */
-  _canvasExtra: NodeCanvasExtra | null
+  _canvasExtra?: NodeCanvasExtra | null
   /** Pre-parsed width sizing — resolved once in setProperty, read every frame */
   _widthSizing: SizingInfo | null
   /** Pre-parsed height sizing — resolved once in setProperty, read every frame */
   _heightSizing: SizingInfo | null
   /** Prop keys applied from the JSX style object during the previous style merge. */
   _styleKeys?: Set<string>
-  /** Computed LOCAL transform matrix — set after layout if node has transform prop */
+  /** Lazy transform matrices (local & accumulated). */
+  _transforms?: NodeTransformExtra | null
+  /** Computed LOCAL transform matrix — backwards compatibility accessor */
   _transform: Float64Array | null
-  /** Inverse LOCAL transform matrix — for local-space calculations */
+  /** Inverse LOCAL transform matrix — backwards compatibility accessor */
   _transformInverse: Float64Array | null
-  /** Accumulated transform matrix — local × parent's accumulated (hierarchy) */
+  /** Accumulated transform matrix — backwards compatibility accessor */
   _accTransform: Float64Array | null
-  /** Inverse accumulated transform — for hit-testing (screen → local coords) */
+  /** Inverse accumulated transform — backwards compatibility accessor */
   _accTransformInverse: Float64Array | null
   /** Transient engine-managed interaction mode for compositor optimizations. */
-  _interactionMode: InteractionMode
+  _interactionMode?: InteractionMode
   /** Cached effective visual props from resolveProps(). */
   _vp: TGEProps | null
   /** True when cached effective visual props must be recomputed. */
@@ -438,19 +453,16 @@ export type TGENode = {
   _depth: number
   /** Nearest scroll-container ancestor id, or 0 when none. */
   _scrollContainerId: number
-  /** Consecutive frames where this node's layer/subtree stayed clean. */
+  /** Lazy compositor stability heuristics. */
+  _compositor?: NodeCompositorExtra | null
+  /** Consecutive frames where this node's layer/subtree stayed clean — backwards compatibility accessor */
   _stableFrameCount: number
-  /** Consecutive frames where this node's layer/subtree changed. */
+  /** Consecutive frames where this node's layer/subtree changed — backwards compatibility accessor */
   _unstableFrameCount: number
-  /** True when this node was promoted by automatic compositor heuristics. */
+  /** True when this node was promoted by automatic compositor heuristics — backwards compatibility accessor */
   _autoLayer: boolean
   /** Key of the owning compositor layer, or "bg" for the default layer. */
   _layerKey: string | null
-  /** Last text measurement cache key and result for per-node frame reuse. */
-  _lastMeasuredText: string | null
-  _lastMeasuredFontId: number
-  _lastMeasuredFontSize: number
-  _lastMeasurement: { width: number; height: number } | null
   /** Per-loop dirty tracker attached to root node. */
   _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
 }

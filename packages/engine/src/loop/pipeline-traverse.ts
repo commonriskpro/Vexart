@@ -17,6 +17,8 @@ import {
   type TGEProps,
   resolveProps,
   parseColor,
+  ensureTransformExtra,
+  ensureCompositorExtra,
   ensureImageExtra,
   ensureCanvasExtra,
   getGridLayoutError,
@@ -185,8 +187,10 @@ function createClipStateId(stack: ClipEntry[]): number {
 
 function getTransformMatrix(effect: EffectConfig): Matrix3 | Float64Array | null {
   const node = effect._node
-  if (node?._accTransform) return node._accTransform
-  if (node?._transform) return node._transform
+  if (node?._transforms) {
+    if (node._transforms.acc) return node._transforms.acc
+    if (node._transforms.local) return node._transforms.local
+  }
   if (effect.transform) return effect.transform
   return null
 }
@@ -661,30 +665,34 @@ function visitNode(
     }
   }
 
-  node._transform = nodeLocalTransform
-  node._transformInverse = nodeLocalInverse
+  if (nodeLocalTransform || parentAbsForward) {
+    const t = ensureTransformExtra(node)
+    t.local = nodeLocalTransform
+    t.localInverse = nodeLocalInverse
 
-  if (nodeLocalTransform) {
-    const mNodeAbs = multiply(multiply(translate(absX, absY), nodeLocalTransform), translate(-absX, -absY))
-    if (parentAbsForward) {
-      nodeAbsForward = multiply(parentAbsForward, mNodeAbs)
-      const forwardLocal = multiply(multiply(translate(-absX, -absY), nodeAbsForward), translate(absX, absY))
-      node._accTransform = forwardLocal
-      node._accTransformInverse = invert(forwardLocal)
+    if (nodeLocalTransform) {
+      const mNodeAbs = multiply(multiply(translate(absX, absY), nodeLocalTransform), translate(-absX, -absY))
+      if (parentAbsForward) {
+        nodeAbsForward = multiply(parentAbsForward, mNodeAbs)
+        const forwardLocal = multiply(multiply(translate(-absX, -absY), nodeAbsForward), translate(absX, absY))
+        t.acc = forwardLocal
+        t.accInverse = invert(forwardLocal)
+      } else {
+        nodeAbsForward = mNodeAbs
+        t.acc = nodeLocalTransform
+        t.accInverse = nodeLocalInverse
+      }
     } else {
-      nodeAbsForward = mNodeAbs
-      node._accTransform = nodeLocalTransform
-      node._accTransformInverse = nodeLocalInverse
+      nodeAbsForward = parentAbsForward
+      const forwardLocal = multiply(multiply(translate(-absX, -absY), nodeAbsForward!), translate(absX, absY))
+      t.acc = forwardLocal
+      t.accInverse = invert(forwardLocal)
     }
-  } else if (parentAbsForward) {
-    nodeAbsForward = parentAbsForward
-    const forwardLocal = multiply(multiply(translate(-absX, -absY), nodeAbsForward), translate(absX, absY))
-    node._accTransform = forwardLocal
-    node._accTransformInverse = invert(forwardLocal)
   } else {
     nodeAbsForward = null
-    node._accTransform = null
-    node._accTransformInverse = null
+    if (node._transforms) {
+      node._transforms = null
+    }
   }
 
   const hasSubtreeTransform = !!(props.transform && node.children.length > 0)
@@ -695,19 +703,19 @@ function visitNode(
 
   let shouldBoundary = false
   if (transformedInsideScroll || insideTransformedScrollSubtree) {
-    node._autoLayer = false
+    if (node._compositor) node._compositor.autoLayer = false
   } else if (!insideIsolation && shouldPromoteToLayer(node)) {
-    node._autoLayer = false
+    if (node._compositor) node._compositor.autoLayer = false
     shouldBoundary = true
   } else if (!insideIsolation && !insideScroll && (isInteractionLayer || hasSubtreeTransform)) {
-    node._autoLayer = false
+    if (node._compositor) node._compositor.autoLayer = false
     shouldBoundary = true
-  } else if (node._autoLayer === true && node._unstableFrameCount >= 3) {
-    node._autoLayer = false
-    node._stableFrameCount = 0
-    node._unstableFrameCount = 0
-  } else if (!insideIsolation && !hasBackdrop && node._stableFrameCount >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
-    node._autoLayer = true
+  } else if (node._compositor?.autoLayer === true && node._compositor.unstableFrames >= 3) {
+    node._compositor.autoLayer = false
+    node._compositor.stableFrames = 0
+    node._compositor.unstableFrames = 0
+  } else if (!insideIsolation && !hasBackdrop && (node._compositor?.stableFrames ?? 0) >= 3 && hasPromotableArea(node) && autoLayerCount < AUTO_LAYER_BUDGET) {
+    ensureCompositorExtra(node).autoLayer = true
     autoLayerCount++
     shouldBoundary = true
   }
@@ -845,8 +853,10 @@ function visitNode(
       if (props.cornerRadii) effectConfig.cornerRadii = props.cornerRadii
       if (props.filter) effectConfig.filter = props.filter
 
-      effectConfig.transform = node._transform ?? undefined
-      effectConfig.transformInverse = node._transformInverse ?? undefined
+      if (node._transforms) {
+        effectConfig.transform = node._transforms.local ?? undefined
+        effectConfig.transformInverse = node._transforms.localInverse ?? undefined
+      }
     }
 
     const rectOp: RectangleRenderOp = {
@@ -1020,8 +1030,10 @@ function visitNode(
       if (props.cornerRadii) effectConfig.cornerRadii = props.cornerRadii
       if (props.filter) effectConfig.filter = props.filter
 
-      effectConfig.transform = node._transform ?? undefined
-      effectConfig.transformInverse = node._transformInverse ?? undefined
+      if (node._transforms) {
+        effectConfig.transform = node._transforms.local ?? undefined
+        effectConfig.transformInverse = node._transforms.localInverse ?? undefined
+      }
     }
 
     const rectOp: RectangleRenderOp = {
@@ -1241,16 +1253,17 @@ export function traverseFrame(
       }
     }
 
-    root._transform = rootLocalTransform
-    root._transformInverse = rootLocalInverse
-
     if (rootLocalTransform) {
+      const t = ensureTransformExtra(root)
+      t.local = rootLocalTransform
+      t.localInverse = rootLocalInverse
       rootAbsForward = rootLocalTransform
-      root._accTransform = rootLocalTransform
-      root._accTransformInverse = rootLocalInverse
+      t.acc = rootLocalTransform
+      t.accInverse = rootLocalInverse
     } else {
-      root._accTransform = null
-      root._accTransformInverse = null
+      if (root._transforms) {
+        root._transforms = null
+      }
     }
 
     const rootBg = rootProps.backgroundColor !== undefined ? (parseColor(rootProps.backgroundColor) >>> 0) : 0

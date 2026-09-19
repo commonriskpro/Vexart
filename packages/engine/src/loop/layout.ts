@@ -111,7 +111,8 @@ function hitTestNode(
   const effectiveY = effectivePosition.y
 
   // Transform-aware hit-test: use accumulated inverse matrix if present
-  const hitInverse = node._accTransformInverse ?? node._transformInverse
+  const transforms = node._transforms
+  const hitInverse = transforms ? (transforms.accInverse ?? transforms.localInverse) : null
   if (hitInverse) {
     const relX = pointerX - effectiveX
     const relY = pointerY - effectiveY
