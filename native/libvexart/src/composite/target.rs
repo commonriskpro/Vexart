@@ -25,6 +25,8 @@ pub struct TargetRecord {
     pub uniform_buffer: Option<wgpu::Buffer>,
     /// Cached compute bind group for unpremultiply pass.
     pub compute_bind_group: Option<wgpu::BindGroup>,
+    /// Cached sample bind group for sampling this target as a texture in composite passes.
+    pub sample_bind_group: Option<wgpu::BindGroup>,
     pub width: u32,
     pub height: u32,
     /// Bytes per row padded to 256-byte WGPU alignment.
@@ -69,6 +71,7 @@ impl TargetRecord {
             is_pipelined: false,
             uniform_buffer: None,
             compute_bind_group: None,
+            sample_bind_group: None,
             width,
             height,
             padded_bytes_per_row,
@@ -102,6 +105,7 @@ impl TargetRecord {
             layer.finish_pass();
         }
         self.compute_bind_group = None;
+        self.sample_bind_group = None;
         self.unmap_all_staging();
         let width = self.width;
         let height = self.height;
@@ -168,6 +172,33 @@ impl TargetRecord {
             self.staging_buffers[0] = Some(buffer);
         }
         self.staging_buffers[0].as_ref().unwrap()
+    }
+
+    /// Ensure sample bind group is created and cached for texture sampling.
+    pub fn ensure_sample_bind_group(
+        &mut self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+    ) -> &wgpu::BindGroup {
+        if self.sample_bind_group.is_none() {
+            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vexart-target-sample-bind-group"),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&self.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                ],
+            });
+            self.sample_bind_group = Some(bg);
+        }
+        self.sample_bind_group.as_ref().unwrap()
     }
 
     /// Lazily allocate the storage buffer, double-buffered MAP_READ staging buffers,

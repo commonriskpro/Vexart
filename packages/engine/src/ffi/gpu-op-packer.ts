@@ -894,13 +894,11 @@ export function createGpuOpPacker(options: GpuOpPackerOptions): GpuOpPacker {
         const sw = Math.max(0, Math.min(ctx.target.width - sx, Math.round(clipBounds.width)))
         const sh = Math.max(0, Math.min(ctx.target.height - sy, Math.round(clipBounds.height)))
         if (!activeScissor || activeScissor.x !== sx || activeScissor.y !== sy || activeScissor.width !== sw || activeScissor.height !== sh) {
-          flushAll()
-          vexartCompositeTargetSetScissor(vctx, targetHandle, sx, sy, sw, sh)
+          geometryStream.appendScissor(sx, sy, sw, sh)
           activeScissor = { x: sx, y: sy, width: sw, height: sh }
         }
       } else if (activeScissor !== null) {
-        flushAll()
-        vexartCompositeTargetResetScissor(vctx, targetHandle)
+        geometryStream.appendResetScissor()
         activeScissor = null
       }
     }
@@ -920,7 +918,7 @@ export function createGpuOpPacker(options: GpuOpPackerOptions): GpuOpPacker {
       vexartCompositeTargetBeginLayer(vctx, targetHandle, 1, 0x00000000)
       layerOpen = true
       if (activeScissor !== null) {
-        vexartCompositeTargetSetScissor(vctx, targetHandle, activeScissor.x, activeScissor.y, activeScissor.width, activeScissor.height)
+        geometryStream.appendScissor(activeScissor.x, activeScissor.y, activeScissor.width, activeScissor.height)
       }
     }
 
@@ -1698,10 +1696,7 @@ export function createGpuOpPacker(options: GpuOpPackerOptions): GpuOpPacker {
       }
       flushAll()
     } finally {
-      if (activeScissor !== null) {
-        vexartCompositeTargetResetScissor(vctx, targetHandle)
-        activeScissor = null
-      }
+      activeScissor = null
       if (layerOpen) vexartCompositeTargetEndLayer(vctx, targetHandle)
       for (const handle of transientFullFrameImages) {
         targetManager.instanceImageHandles.delete(handle)

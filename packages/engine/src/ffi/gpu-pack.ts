@@ -92,6 +92,22 @@ export const STRIDE_RADIAL_GRADIENT = 80
 export const CMD_SHADOW = 20
 export const STRIDE_SHADOW = 80
 
+export const CMD_SCISSOR_SET = 21
+export const STRIDE_SCISSOR_SET = 16
+
+/**
+ * Pack in-stream scissor rect (4 u32s: x, y, w, h) directly into DataView for cmd_kind=21.
+ */
+export function packScissorDirect(
+  v: DataView, offset: number,
+  x: number, y: number, w: number, h: number,
+): void {
+  vu32(v, offset, x >>> 0)
+  vu32(v, offset + 4, y >>> 0)
+  vu32(v, offset + 8, w >>> 0)
+  vu32(v, offset + 12, h >>> 0)
+}
+
 /**
  * Pack BridgeShapeRectInstance (20 floats, 80 bytes) directly into DataView for cmd_kind=1.
  */
@@ -275,4 +291,3 @@ export function packImageTransformInstance(
   vf32(v, 32, opacity); vf32(v, 36, fitX); vf32(v, 40, fitY); vf32(v, 44, radius)
   return _packU8.subarray(0, 48)
 }
-

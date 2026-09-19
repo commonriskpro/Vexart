@@ -158,7 +158,10 @@ pub(crate) fn dispatch_glyph_instances(
                         None => false,
                     }
                 }
-                None => true,
+                None => {
+                    pass.set_scissor_rect(0, 0, target_dims.0, target_dims.1);
+                    true
+                }
             };
 
             if should_draw {
@@ -215,7 +218,10 @@ pub(crate) fn dispatch_glyph_instances(
                         None => false,
                     }
                 }
-                None => true,
+                None => {
+                    pass.set_scissor_rect(0, 0, target_dims.0, target_dims.1);
+                    true
+                }
             };
 
             if should_draw {

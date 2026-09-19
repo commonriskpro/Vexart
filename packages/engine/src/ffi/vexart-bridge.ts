@@ -57,6 +57,7 @@ export const VEXART_SYMBOLS = {
   vexart_composite_render_image_layer:  { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.f32, FFIType.u32, FFIType.u32], returns: FFIType.i32 },
   vexart_composite_render_image_transform_layer: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
   vexart_composite_update_uniform: { args: [FFIType.u64, FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
+  vexart_composite_layers_batch: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
   vexart_composite_copy_region_to_image:{ args: [FFIType.u64, FFIType.u64, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_image_filter_backdrop:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
   vexart_composite_image_mask_rounded_rect:{ args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.ptr],           returns: FFIType.i32 },

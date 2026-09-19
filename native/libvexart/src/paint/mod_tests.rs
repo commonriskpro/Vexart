@@ -651,3 +651,115 @@ fn test_lazy_pipelines_cold_start() {
     );
     assert!(std::ptr::eq(conic_pipeline, conic_pipeline_again));
 }
+
+#[test]
+fn test_instream_scissor_stride() {
+    assert_eq!(instance_stride_for_kind(CMD_SCISSOR_SET), 16);
+}
+
+#[test]
+fn test_instream_scissor_dispatch_lifecycle() {
+    let mut ctx = PaintContext::new();
+    let mut target = 0u64;
+    assert_eq!(crate::composite::target_create(&mut ctx, 64, 64, &mut target), OK);
+    assert_eq!(crate::composite::target_begin_layer(&mut ctx, target, 0, 0), OK);
+
+    // Build a multi-command graph:
+    // 1. Rect: full red
+    // 2. Scissor: (32, 0, 32, 64)
+    // 3. Rect: full green
+    // 4. Scissor reset: (0, 0, 0, 0)
+    let rect_size = std::mem::size_of::<instances::BridgeShapeRectInstance>();
+    let scissor_size = 16usize;
+    let total_payload = (8 + rect_size) + (8 + scissor_size) + (8 + rect_size) + (8 + scissor_size);
+    let mut buf = vec![0u8; 16 + total_payload];
+
+    buf[0..4].copy_from_slice(&GRAPH_MAGIC.to_le_bytes());
+    buf[4..8].copy_from_slice(&GRAPH_VERSION.to_le_bytes());
+    buf[8..12].copy_from_slice(&4u32.to_le_bytes()); // cmd_count = 4
+    buf[12..16].copy_from_slice(&(total_payload as u32).to_le_bytes());
+
+    let mut off = 16usize;
+
+    // Cmd 1: ShapeRect red
+    let red_rect = instances::BridgeShapeRectInstance {
+        x: -1.0,
+        y: 1.0,
+        w: 2.0,
+        h: -2.0,
+        fill_r: 1.0,
+        fill_g: 0.0,
+        fill_b: 0.0,
+        fill_a: 1.0,
+        has_fill: 1.0,
+        ..Default::default()
+    };
+    buf[off..off + 2].copy_from_slice(&1u16.to_le_bytes()); // cmd_kind = 1
+    buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
+    buf[off + 8..off + 8 + rect_size].copy_from_slice(bytemuck::bytes_of(&red_rect));
+    off += 8 + rect_size;
+
+    // Cmd 2: Scissor (32, 0, 32, 64)
+    buf[off..off + 2].copy_from_slice(&21u16.to_le_bytes()); // cmd_kind = 21
+    buf[off + 4..off + 8].copy_from_slice(&(scissor_size as u32).to_le_bytes());
+    buf[off + 8..off + 12].copy_from_slice(&32u32.to_le_bytes());
+    buf[off + 12..off + 16].copy_from_slice(&0u32.to_le_bytes());
+    buf[off + 16..off + 20].copy_from_slice(&32u32.to_le_bytes());
+    buf[off + 20..off + 24].copy_from_slice(&64u32.to_le_bytes());
+    off += 8 + scissor_size;
+
+    // Cmd 3: ShapeRect green
+    let green_rect = instances::BridgeShapeRectInstance {
+        x: -1.0,
+        y: 1.0,
+        w: 2.0,
+        h: -2.0,
+        fill_r: 0.0,
+        fill_g: 1.0,
+        fill_b: 0.0,
+        fill_a: 1.0,
+        has_fill: 1.0,
+        ..Default::default()
+    };
+    buf[off..off + 2].copy_from_slice(&1u16.to_le_bytes()); // cmd_kind = 1
+    buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
+    buf[off + 8..off + 8 + rect_size].copy_from_slice(bytemuck::bytes_of(&green_rect));
+    off += 8 + rect_size;
+
+    // Cmd 4: Reset scissor (0, 0, 0, 0)
+    buf[off..off + 2].copy_from_slice(&21u16.to_le_bytes()); // cmd_kind = 21
+    buf[off + 4..off + 8].copy_from_slice(&(scissor_size as u32).to_le_bytes());
+    buf[off + 8..off + 12].copy_from_slice(&0u32.to_le_bytes());
+    buf[off + 12..off + 16].copy_from_slice(&0u32.to_le_bytes());
+    buf[off + 16..off + 20].copy_from_slice(&0u32.to_le_bytes());
+    buf[off + 20..off + 24].copy_from_slice(&0u32.to_le_bytes());
+
+    let mut stats = FrameStats::default();
+    assert_eq!(ctx.dispatch(target, &buf, &mut stats), OK);
+    assert_eq!(stats.draw_calls, 2);
+    assert_eq!(stats.primitives, 2);
+
+    assert_eq!(crate::composite::target_end_layer(&mut ctx, target), OK);
+
+    let mut pixels = vec![0u8; 64 * 64 * 4];
+    assert_eq!(
+        crate::composite::readback_rgba(
+            &mut ctx,
+            target,
+            pixels.as_mut_ptr(),
+            pixels.len() as u32,
+            std::ptr::null_mut()
+        ),
+        OK
+    );
+
+    // Left half (16, 32) must be red (255, 0, 0, 255)
+    let left_pixel_idx = (32 * 64 + 16) * 4;
+    assert_eq!(&pixels[left_pixel_idx..left_pixel_idx + 4], &[255, 0, 0, 255]);
+
+    // Right half (48, 32) must be green (0, 255, 0, 255)
+    let right_pixel_idx = (32 * 64 + 48) * 4;
+    assert_eq!(&pixels[right_pixel_idx..right_pixel_idx + 4], &[0, 255, 0, 255]);
+
+    assert_eq!(crate::composite::target_destroy(&mut ctx, target), OK);
+}

@@ -7,6 +7,14 @@ use crate::paint::instances::{BridgeImageInstance, BridgeImageTransformInstance}
 use crate::paint::PaintContext;
 use bytemuck::bytes_of;
 
+/// Binary item layout for batched layer composition (56 bytes: 8-byte source target handle + 48-byte instance).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct BridgeLayerBatchItem {
+    pub source_target: u64,
+    pub instance: BridgeImageTransformInstance,
+}
+
 /// Composite a source image onto a target at the given position.
 /// The image is rendered using the image pipeline (cmd_kind=9).
 /// x, y, w, h are pixel coordinates within the target.
@@ -386,27 +394,17 @@ pub fn composite_update_uniform(
         return ERR_INVALID_ARG;
     }
 
-    let bind_group = {
-        let source_rec = match pctx.targets.get(source_target) {
+    let bind_group_ptr: *const wgpu::BindGroup = {
+        let source_rec = match pctx.targets.get_mut(source_target) {
             Some(r) => r,
             None => return ERR_INVALID_HANDLE,
         };
-        pctx.wgpu
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("vexart-composite-uniform-bind-group"),
-                layout: &pctx.wgpu.image_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&source_rec.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&pctx.wgpu.cached_sampler),
-                    },
-                ],
-            })
+        let bg = source_rec.ensure_sample_bind_group(
+            &pctx.wgpu.device,
+            &pctx.wgpu.image_bind_group_layout,
+            &pctx.wgpu.cached_sampler,
+        );
+        bg as *const wgpu::BindGroup
     };
 
     let instance = bytemuck::pod_read_unaligned::<BridgeImageTransformInstance>(
@@ -483,7 +481,7 @@ pub fn composite_update_uniform(
             pctx.vertex_buffer
                 .slice(offset as u64..(offset + instance_bytes.len()) as u64),
         );
-        pass.set_bind_group(0, &bind_group, &[]);
+        pass.set_bind_group(0, unsafe { &*bind_group_ptr }, &[]);
         pass.draw(0..6, 0..1);
     } else {
         let mut encoder =
@@ -526,7 +524,7 @@ pub fn composite_update_uniform(
             pctx.vertex_buffer
                 .slice(offset as u64..(offset + instance_bytes.len()) as u64),
         );
-        pass.set_bind_group(0, &bind_group, &[]);
+        pass.set_bind_group(0, unsafe { &*bind_group_ptr }, &[]);
         pass.draw(0..6, 0..1);
         drop(pass);
 
@@ -537,3 +535,188 @@ pub fn composite_update_uniform(
     OK
 }
 
+/// Composite a batch of layers onto a target in a single render pass.
+/// Loads the `image_transform_premultiplied` pipeline once, uploads all vertex instances
+/// in a single slice, and draws each layer with its cached bind group.
+pub fn composite_layers_batch(
+    pctx: &mut PaintContext,
+    target: u64,
+    items: &[BridgeLayerBatchItem],
+) -> i32 {
+    if target == 0 {
+        return ERR_INVALID_ARG;
+    }
+    if items.is_empty() {
+        return OK;
+    }
+
+    let (tw_u32, th_u32, scissor, target_view_ptr) = match pctx.targets.get(target) {
+        Some(r) => (
+            r.width,
+            r.height,
+            r.active_layer
+                .as_ref()
+                .and_then(|l| l.scissor)
+                .or(r.scissor),
+            &r.view as *const wgpu::TextureView,
+        ),
+        None => return ERR_INVALID_HANDLE,
+    };
+
+    // Ensure sample bind groups for all source targets and collect them.
+    let mut bind_group_ptrs = Vec::with_capacity(items.len());
+    let mut instances = Vec::with_capacity(items.len());
+    for item in items {
+        if item.source_target == 0 {
+            return ERR_INVALID_ARG;
+        }
+        let source_rec = match pctx.targets.get_mut(item.source_target) {
+            Some(r) => r,
+            None => return ERR_INVALID_HANDLE,
+        };
+        let bg = source_rec.ensure_sample_bind_group(
+            &pctx.wgpu.device,
+            &pctx.wgpu.image_bind_group_layout,
+            &pctx.wgpu.cached_sampler,
+        );
+        bind_group_ptrs.push(bg as *const wgpu::BindGroup);
+        instances.push(item.instance);
+    }
+
+    let instance_bytes = bytemuck::cast_slice::<BridgeImageTransformInstance, u8>(&instances);
+    let offset = pctx.alloc_vertex_space(instance_bytes.len());
+    pctx.wgpu
+        .queue
+        .write_buffer(&pctx.vertex_buffer, offset as u64, instance_bytes);
+
+    if pctx.targets.get(target).unwrap().active_layer.is_some() {
+        let rec_ptr: *mut target::TargetRecord = pctx.targets.get_mut(target).unwrap();
+        let view_ref: &wgpu::TextureView = unsafe { &(*rec_ptr).view };
+        let layer = unsafe {
+            (*rec_ptr)
+                .active_layer
+                .as_mut()
+                .expect("active layer disappeared")
+        };
+
+        let clear_op = if layer.first_pass {
+            layer.first_pass = false;
+            if layer.first_load_mode == 0 {
+                let c = layer.clear_rgba;
+                wgpu::LoadOp::Clear(wgpu::Color {
+                    r: ((c >> 24) & 0xff) as f64 / 255.0,
+                    g: ((c >> 16) & 0xff) as f64 / 255.0,
+                    b: ((c >> 8) & 0xff) as f64 / 255.0,
+                    a: (c & 0xff) as f64 / 255.0,
+                })
+            } else {
+                wgpu::LoadOp::Load
+            }
+        } else {
+            wgpu::LoadOp::Load
+        };
+
+        layer.finish_pass();
+        let mut pass = layer
+            .encoder
+            .begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("vexart-composite-layers-batch-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: view_ref,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: clear_op,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform_premultiplied);
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
+
+        let should_draw = if let Some(s) = scissor {
+            if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        };
+
+        if should_draw {
+            for (i, &bg_ptr) in bind_group_ptrs.iter().enumerate() {
+                // SAFETY: bg_ptr points to a cached wgpu::BindGroup in source target.
+                pass.set_bind_group(0, unsafe { &*bg_ptr }, &[]);
+                pass.draw(0..6, i as u32..(i as u32 + 1));
+            }
+        }
+    } else {
+        let mut encoder =
+            pctx.wgpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("vexart-composite-layers-batch-encoder"),
+                });
+
+        let view_ref: &wgpu::TextureView = unsafe { &*target_view_ptr };
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("vexart-composite-layers-batch-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: view_ref,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+
+        pass.set_pipeline(&pctx.wgpu.pipelines.image_transform_premultiplied);
+        pass.set_vertex_buffer(
+            0,
+            pctx.vertex_buffer
+                .slice(offset as u64..(offset + instance_bytes.len()) as u64),
+        );
+
+        let should_draw = if let Some(s) = scissor {
+            if let Some([sx, sy, sw, sh]) = target::clamp_scissor(s, tw_u32, th_u32) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        };
+
+        if should_draw {
+            for (i, &bg_ptr) in bind_group_ptrs.iter().enumerate() {
+                // SAFETY: bg_ptr points to a cached wgpu::BindGroup in source target.
+                pass.set_bind_group(0, unsafe { &*bg_ptr }, &[]);
+                pass.draw(0..6, i as u32..(i as u32 + 1));
+            }
+        }
+        drop(pass);
+
+        let cmd = encoder.finish();
+        pctx.wgpu.queue.submit(std::iter::once(cmd));
+    }
+
+    OK
+}

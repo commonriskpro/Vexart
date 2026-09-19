@@ -507,3 +507,58 @@ fn test_blur_intermediate_texture_pooled() {
     remove_temp_image(&mut pctx, blur_handle);
     assert_eq!(pctx.texture_pool.available_count(), 2);
 }
+
+#[test]
+fn test_bridge_layer_batch_item_layout() {
+    assert_eq!(std::mem::size_of::<BridgeLayerBatchItem>(), 56);
+    assert_eq!(std::mem::align_of::<BridgeLayerBatchItem>(), 8);
+}
+
+#[test]
+fn test_composite_layers_batch_lifecycle() {
+    let mut pctx = PaintContext::new();
+    let mut target = 0u64;
+    assert_eq!(target_create(&mut pctx, 64, 64, &mut target), OK);
+
+    let mut layer1 = 0u64;
+    assert_eq!(target_create(&mut pctx, 32, 32, &mut layer1), OK);
+
+    let mut layer2 = 0u64;
+    assert_eq!(target_create(&mut pctx, 32, 32, &mut layer2), OK);
+
+    // Empty batch returns OK
+    assert_eq!(composite_layers_batch(&mut pctx, target, &[]), OK);
+
+    // Invalid target returns ERR_INVALID_ARG
+    assert_eq!(composite_layers_batch(&mut pctx, 0, &[]), ERR_INVALID_ARG);
+
+    // Invalid layer returns ERR_INVALID_HANDLE
+    let invalid_item = BridgeLayerBatchItem {
+        source_target: 999999,
+        instance: Default::default(),
+    };
+    assert_eq!(composite_layers_batch(&mut pctx, target, &[invalid_item]), ERR_INVALID_HANDLE);
+
+    let items = vec![
+        BridgeLayerBatchItem {
+            source_target: layer1,
+            instance: Default::default(),
+        },
+        BridgeLayerBatchItem {
+            source_target: layer2,
+            instance: Default::default(),
+        },
+    ];
+
+    // Standalone encoder mode
+    assert_eq!(composite_layers_batch(&mut pctx, target, &items), OK);
+
+    // Active layer mode
+    assert_eq!(target_begin_layer(&mut pctx, target, 0, 0), OK);
+    assert_eq!(composite_layers_batch(&mut pctx, target, &items), OK);
+    assert_eq!(target_end_layer(&mut pctx, target), OK);
+
+    assert_eq!(target_destroy(&mut pctx, layer1), OK);
+    assert_eq!(target_destroy(&mut pctx, layer2), OK);
+    assert_eq!(target_destroy(&mut pctx, target), OK);
+}

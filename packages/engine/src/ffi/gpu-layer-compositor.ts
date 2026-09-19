@@ -11,12 +11,13 @@ import type {
   RendererBackendProfile,
   RendererBackendRetainedLayer,
 } from "./renderer-backend"
-import { packImageTransformInstance } from "./gpu-pack"
+import { packImageTransformInstance, vf32 } from "./gpu-pack"
 import {
   getSymbols,
   vexartCompositeTargetBeginLayer,
   vexartCompositeTargetEndLayer,
   compositeTargetUniformToTarget,
+  vexartCompositeLayersBatch,
 } from "./gpu-composite-ops"
 import { vexartGetLastError } from "./vexart-functions"
 import {
@@ -30,6 +31,20 @@ import type { GpuLayerStrategyMode } from "./gpu-layer-strategy"
 import type { GpuTargetManager } from "./gpu-target-manager"
 
 const PROFILE_ENABLED = process.env.VEXART_PROFILE !== "0"
+
+let _layerBatchBuf: ArrayBuffer | null = null
+let _layerBatchView: DataView | null = null
+let _layerBatchU8: Uint8Array | null = null
+
+function ensureLayerBatchBuf(count: number) {
+  const size = count * 56
+  if (!_layerBatchBuf || _layerBatchBuf.byteLength < size) {
+    _layerBatchBuf = new ArrayBuffer(Math.max(size, 1024))
+    _layerBatchView = new DataView(_layerBatchBuf)
+    _layerBatchU8 = new Uint8Array(_layerBatchBuf)
+  }
+  return { view: _layerBatchView!, u8: _layerBatchU8! }
+}
 
 const tmuxPresentationDrainers = new WeakMap<object, () => Promise<void>>()
 
@@ -204,29 +219,63 @@ export function createGpuLayerCompositor(options: GpuLayerCompositorOptions): Gp
     vexartCompositeTargetBeginLayer(vctx, targetHandle, 0, 0x00000000)
     addBackendProfile("compositeMs", compositeStart)
     try {
-      for (const layer of orderedLayers) {
-        const quad = layer.subtreeTransform ?? {
-          p0: { x: layer.x, y: layer.y },
-          p1: { x: layer.x + layer.width, y: layer.y },
-          p2: { x: layer.x, y: layer.y + layer.height },
-          p3: { x: layer.x + layer.width, y: layer.y + layer.height },
+      let batchSucceeded = false
+      const symbols = getSymbols()
+      if (typeof symbols.vexart_composite_layers_batch === "function") {
+        const { view, u8 } = ensureLayerBatchBuf(orderedLayers.length)
+        let offset = 0
+        for (const layer of orderedLayers) {
+          const quad = layer.subtreeTransform ?? {
+            p0: { x: layer.x, y: layer.y },
+            p1: { x: layer.x + layer.width, y: layer.y },
+            p2: { x: layer.x, y: layer.y + layer.height },
+            p3: { x: layer.x + layer.width, y: layer.y + layer.height },
+          }
+          view.setBigUint64(offset, layer.handle, true)
+          vf32(view, offset + 8, (quad.p0.x / frame.viewportWidth) * 2 - 1)
+          vf32(view, offset + 12, 1 - (quad.p0.y / frame.viewportHeight) * 2)
+          vf32(view, offset + 16, (quad.p1.x / frame.viewportWidth) * 2 - 1)
+          vf32(view, offset + 20, 1 - (quad.p1.y / frame.viewportHeight) * 2)
+          vf32(view, offset + 24, (quad.p2.x / frame.viewportWidth) * 2 - 1)
+          vf32(view, offset + 28, 1 - (quad.p2.y / frame.viewportHeight) * 2)
+          vf32(view, offset + 32, (quad.p3.x / frame.viewportWidth) * 2 - 1)
+          vf32(view, offset + 36, 1 - (quad.p3.y / frame.viewportHeight) * 2)
+          vf32(view, offset + 40, layer.opacity)
+          vf32(view, offset + 44, 0)
+          vf32(view, offset + 48, 0)
+          vf32(view, offset + 52, 0)
+          offset += 56
         }
-        const inst = packImageTransformInstance(
-          (quad.p0.x / frame.viewportWidth) * 2 - 1,
-          1 - (quad.p0.y / frame.viewportHeight) * 2,
-          (quad.p1.x / frame.viewportWidth) * 2 - 1,
-          1 - (quad.p1.y / frame.viewportHeight) * 2,
-          (quad.p2.x / frame.viewportWidth) * 2 - 1,
-          1 - (quad.p2.y / frame.viewportHeight) * 2,
-          (quad.p3.x / frame.viewportWidth) * 2 - 1,
-          1 - (quad.p3.y / frame.viewportHeight) * 2,
-          layer.opacity,
-        )
         const uniformStart = PROFILE_ENABLED ? performance.now() : 0
-        const uniformUpdated = compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
+        batchSucceeded = vexartCompositeLayersBatch(vctx, targetHandle, u8, orderedLayers.length)
         addBackendProfile("uniformUpdateMs", uniformStart)
-        if (!uniformUpdated) {
-          return null
+      }
+
+      if (!batchSucceeded) {
+        for (const layer of orderedLayers) {
+          const quad = layer.subtreeTransform ?? {
+            p0: { x: layer.x, y: layer.y },
+            p1: { x: layer.x + layer.width, y: layer.y },
+            p2: { x: layer.x, y: layer.y + layer.height },
+            p3: { x: layer.x + layer.width, y: layer.y + layer.height },
+          }
+          const inst = packImageTransformInstance(
+            (quad.p0.x / frame.viewportWidth) * 2 - 1,
+            1 - (quad.p0.y / frame.viewportHeight) * 2,
+            (quad.p1.x / frame.viewportWidth) * 2 - 1,
+            1 - (quad.p1.y / frame.viewportHeight) * 2,
+            (quad.p2.x / frame.viewportWidth) * 2 - 1,
+            1 - (quad.p2.y / frame.viewportHeight) * 2,
+            (quad.p3.x / frame.viewportWidth) * 2 - 1,
+            1 - (quad.p3.y / frame.viewportHeight) * 2,
+            layer.opacity,
+          )
+          const uniformStart = PROFILE_ENABLED ? performance.now() : 0
+          const uniformUpdated = compositeTargetUniformToTarget(vctx, targetHandle, layer.handle, inst)
+          addBackendProfile("uniformUpdateMs", uniformStart)
+          if (!uniformUpdated) {
+            return null
+          }
         }
       }
     } finally {

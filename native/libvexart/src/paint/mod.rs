@@ -22,6 +22,8 @@ pub const BASE_VERTEX_BUFFER_CAPACITY: usize = 2 * 1024 * 1024;
 pub const VERTEX_BUFFER_COOLDOWN_FRAMES: u32 = 120;
 /// Byte alignment requirement for vertex buffer slices.
 pub const VERTEX_BUFFER_ALIGNMENT: usize = 16;
+/// In-stream hardware scissor command (kind 21). Payload: x, y, w, h: u32 (16 bytes).
+pub const CMD_SCISSOR_SET: u16 = 21;
 
 /// Monotonic image handle allocator. Shared between paint (upload_image) and
 /// composite (copy_region_to_image / filter / mask operations).
@@ -356,8 +358,8 @@ impl PaintContext {
             let payload = &graph[offset..payload_end];
             offset = payload_end;
 
-            // cmd_kind 11 is the legacy glyph slot (unused); 21+ are future — silently skip.
-            if cmd_kind == 11 || cmd_kind > 20 {
+            // cmd_kind 11 is the legacy glyph slot (unused); 22+ are future — silently skip.
+            if cmd_kind == 11 || cmd_kind > 21 {
                 continue;
             }
             if payload.is_empty() {
@@ -508,42 +510,63 @@ impl PaintContext {
 
             let pass = layer.pass.as_mut().unwrap();
 
-            let should_draw = if let Some(s) = target_scissor {
-                if let Some([sx, sy, sw, sh]) =
-                    crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
-                {
+            let mut current_can_draw = match resolve_scissor(None, target_scissor, target_dims.0, target_dims.1) {
+                Some([sx, sy, sw, sh]) => {
                     pass.set_scissor_rect(sx, sy, sw, sh);
                     true
-                } else {
-                    false
                 }
-            } else {
-                pass.set_scissor_rect(0, 0, target_dims.0, target_dims.1);
-                true
+                None => false,
             };
 
-            if should_draw {
-                let mut active_kind: Option<u16> = None;
-                for b in &self.prepared_batches {
-                    if active_kind != Some(b.kind) {
-                        let pipeline = pipeline_for_kind(
-                            b.kind,
-                            &self.wgpu.pipelines,
-                            &self.wgpu.device,
-                            wgpu::TextureFormat::Rgba8Unorm,
-                            self.wgpu.pipeline_cache.as_ref(),
-                        );
-                        pass.set_pipeline(pipeline);
-                        if needs_fallback_bind_group(b.kind) {
-                            pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+            let mut active_kind: Option<u16> = None;
+            for b in &self.prepared_batches {
+                if b.kind == CMD_SCISSOR_SET {
+                    for i in 0..b.instance_count {
+                        let off = b.staging_offset + (i as usize * 16);
+                        let sx = u32::from_le_bytes(self.staging_buffer[off..off + 4].try_into().unwrap());
+                        let sy = u32::from_le_bytes(self.staging_buffer[off + 4..off + 8].try_into().unwrap());
+                        let sw = u32::from_le_bytes(self.staging_buffer[off + 8..off + 12].try_into().unwrap());
+                        let sh = u32::from_le_bytes(self.staging_buffer[off + 12..off + 16].try_into().unwrap());
+                        match resolve_scissor(Some([sx, sy, sw, sh]), target_scissor, target_dims.0, target_dims.1) {
+                            Some([rx, ry, rw, rh]) => {
+                                pass.set_scissor_rect(rx, ry, rw, rh);
+                                current_can_draw = true;
+                            }
+                            None => {
+                                current_can_draw = false;
+                            }
                         }
-                        active_kind = Some(b.kind);
                     }
-                    let start = (base_offset + b.staging_offset) as u64;
-                    let end = start + b.bytes_len as u64;
-                    pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
-                    pass.draw(0..6, 0..b.instance_count);
+                    continue;
                 }
+
+                if !current_can_draw {
+                    continue;
+                }
+
+                if active_kind != Some(b.kind) {
+                    let pipeline = pipeline_for_kind(
+                        b.kind,
+                        &self.wgpu.pipelines,
+                        &self.wgpu.device,
+                        wgpu::TextureFormat::Rgba8Unorm,
+                        self.wgpu.pipeline_cache.as_ref(),
+                    );
+                    pass.set_pipeline(pipeline);
+                    if needs_fallback_bind_group(b.kind) {
+                        pass.set_bind_group(0, &self.fallback_bind_group, &[]);
+                    }
+                    active_kind = Some(b.kind);
+                }
+                let start = (base_offset + b.staging_offset) as u64;
+                let end = start + b.bytes_len as u64;
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
+                pass.draw(0..6, 0..b.instance_count);
+            }
+
+            // Restore scissor baseline at end of dispatch
+            if let Some([sx, sy, sw, sh]) = resolve_scissor(None, target_scissor, target_dims.0, target_dims.1) {
+                pass.set_scissor_rect(sx, sy, sw, sh);
             }
             // Do NOT drop the pass! It stays open for subsequent dispatches.
             // Do NOT submit or complete frame here — happens in target_end_layer.
@@ -573,8 +596,40 @@ impl PaintContext {
                 multiview_mask: None,
             });
 
+            let mut current_can_draw = match resolve_scissor(None, target_scissor, target_dims.0, target_dims.1) {
+                Some([sx, sy, sw, sh]) => {
+                    pass.set_scissor_rect(sx, sy, sw, sh);
+                    true
+                }
+                None => false,
+            };
+
             let mut active_kind: Option<u16> = None;
             for b in &self.prepared_batches {
+                if b.kind == CMD_SCISSOR_SET {
+                    for i in 0..b.instance_count {
+                        let off = b.staging_offset + (i as usize * 16);
+                        let sx = u32::from_le_bytes(self.staging_buffer[off..off + 4].try_into().unwrap());
+                        let sy = u32::from_le_bytes(self.staging_buffer[off + 4..off + 8].try_into().unwrap());
+                        let sw = u32::from_le_bytes(self.staging_buffer[off + 8..off + 12].try_into().unwrap());
+                        let sh = u32::from_le_bytes(self.staging_buffer[off + 12..off + 16].try_into().unwrap());
+                        match resolve_scissor(Some([sx, sy, sw, sh]), target_scissor, target_dims.0, target_dims.1) {
+                            Some([rx, ry, rw, rh]) => {
+                                pass.set_scissor_rect(rx, ry, rw, rh);
+                                current_can_draw = true;
+                            }
+                            None => {
+                                current_can_draw = false;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if !current_can_draw {
+                    continue;
+                }
+
                 if active_kind != Some(b.kind) {
                     let pipeline = pipeline_for_kind(
                         b.kind,
@@ -592,16 +647,7 @@ impl PaintContext {
                 let start = (base_offset + b.staging_offset) as u64;
                 let end = start + b.bytes_len as u64;
                 pass.set_vertex_buffer(0, self.vertex_buffer.slice(start..end));
-                if let Some(s) = target_scissor {
-                    if let Some([sx, sy, sw, sh]) =
-                        crate::composite::target::clamp_scissor(s, target_dims.0, target_dims.1)
-                    {
-                        pass.set_scissor_rect(sx, sy, sw, sh);
-                        pass.draw(0..6, 0..b.instance_count);
-                    }
-                } else {
-                    pass.draw(0..6, 0..b.instance_count);
-                }
+                pass.draw(0..6, 0..b.instance_count);
             }
             drop(pass);
 
@@ -615,16 +661,63 @@ impl PaintContext {
 
         // Step 6: Write stats.
         if !stats_out.is_null() {
-            let total_prims: u32 = self.prepared_batches.iter().map(|b| b.instance_count).sum();
+            let total_prims: u32 = self
+                .prepared_batches
+                .iter()
+                .filter(|b| b.kind != CMD_SCISSOR_SET)
+                .map(|b| b.instance_count)
+                .sum();
+            let draw_calls: u32 = self
+                .prepared_batches
+                .iter()
+                .filter(|b| b.kind != CMD_SCISSOR_SET)
+                .count() as u32;
             unsafe {
                 (*stats_out).gpu_time_us = gpu_us;
                 (*stats_out).cpu_time_us = cpu_us;
-                (*stats_out).draw_calls = self.prepared_batches.len() as u32;
+                (*stats_out).draw_calls = draw_calls;
                 (*stats_out).primitives = total_prims;
             }
         }
 
         OK
+    }
+}
+
+/// Resolve in-stream scissor rectangle against target baseline scissor and target dimensions.
+/// Returns None if the scissor rectangle has zero area or is completely out of bounds.
+fn resolve_scissor(
+    cmd_scissor: Option<[u32; 4]>,
+    target_scissor: Option<[u32; 4]>,
+    target_w: u32,
+    target_h: u32,
+) -> Option<[u32; 4]> {
+    let base = if let Some(ts) = target_scissor {
+        crate::composite::target::clamp_scissor(ts, target_w, target_h)?
+    } else {
+        if target_w == 0 || target_h == 0 {
+            return None;
+        }
+        [0, 0, target_w, target_h]
+    };
+
+    if let Some([cx, cy, cw, ch]) = cmd_scissor {
+        if cw == 0 && ch == 0 {
+            Some(base)
+        } else {
+            let [bx, by, bw, bh] = base;
+            let left = cx.max(bx);
+            let top = cy.max(by);
+            let right = (cx.saturating_add(cw)).min(bx.saturating_add(bw)).min(target_w);
+            let bottom = (cy.saturating_add(ch)).min(by.saturating_add(bh)).min(target_h);
+            if right <= left || bottom <= top {
+                None
+            } else {
+                Some([left, top, right - left, bottom - top])
+            }
+        }
+    } else {
+        Some(base)
     }
 }
 
@@ -663,6 +756,8 @@ fn instance_stride_for_kind(kind: u16) -> usize {
         19 => size_of::<SelfFilterInstance>(),
         // Phase 4+ — analytic box-shadow pipeline
         20 => size_of::<BridgeShadowInstance>(),
+        // In-stream scissor command (x, y, w, h: u32)
+        21 => 16,
         _ => 0,
     }
 }
@@ -697,6 +792,7 @@ fn pipeline_for_kind<'a>(
         18 => &reg.glyph,
         // Phase 4+ — analytic box-shadow pipeline
         20 => &reg.shadow,
+        21 => &reg.shape_rect,
         _ => &reg.shape_rect,
     }
 }

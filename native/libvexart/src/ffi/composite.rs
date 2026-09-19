@@ -194,6 +194,39 @@ pub unsafe extern "C" fn vexart_composite_update_uniform(
     })
 }
 
+/// Composite a batch of layer items onto a target in a single render pass.
+/// Each item is 56 bytes: `source_target: u64` (8 bytes) + `BridgeImageTransformInstance` (48 bytes).
+///
+/// # Safety
+/// `items_ptr` must point to `count` consecutive `BridgeLayerBatchItem` structs (56 bytes each).
+#[no_mangle]
+pub unsafe extern "C" fn vexart_composite_layers_batch(
+    _ctx: u64,
+    target: u64,
+    items_ptr: *const u8,
+    count: u32,
+) -> i32 {
+    ffi_guard!({
+        if count == 0 {
+            return crate::ffi::panic::OK;
+        }
+        if items_ptr.is_null() {
+            return ERR_INVALID_ARG;
+        }
+        let items: &[crate::composite::image_layer::BridgeLayerBatchItem] =
+            std::slice::from_raw_parts(
+                items_ptr as *const crate::composite::image_layer::BridgeLayerBatchItem,
+                count as usize,
+            );
+        let mut guard = crate::get_or_init_paint();
+        let pctx = match guard.as_mut() {
+            Some(c) => c,
+            None => return ERR_GPU_DEVICE_LOST,
+        };
+        composite::composite_layers_batch(pctx, target, items)
+    })
+}
+
 /// Extract a rectangular region from a target into a new image handle.
 /// (REQ-2B-004)
 ///

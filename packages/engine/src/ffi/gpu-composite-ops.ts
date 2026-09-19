@@ -22,6 +22,8 @@ import {
   CMD_LINEAR_GRADIENT, STRIDE_LINEAR_GRADIENT,
   CMD_RADIAL_GRADIENT, STRIDE_RADIAL_GRADIENT,
   CMD_SHADOW, STRIDE_SHADOW,
+  CMD_SCISSOR_SET, STRIDE_SCISSOR_SET,
+  packScissorDirect,
   type WgpuCanvasCornerRadii,
 } from "./gpu-pack"
 import type { BackdropFilterParams } from "./render-graph"
@@ -336,6 +338,20 @@ export function compositeTargetUniformToTarget(ctx: bigint, target: bigint, sour
   return rc === 0
 }
 
+export function vexartCompositeLayersBatch(
+  vctx: bigint,
+  target: bigint,
+  instanceData: Uint8Array,
+  count: number,
+): boolean {
+  const symbols = getSymbols()
+  if (typeof symbols.vexart_composite_layers_batch !== "function") {
+    return false
+  }
+  const rc = symbols.vexart_composite_layers_batch(vctx, target, ptr(instanceData), count) as number
+  return rc === 0
+}
+
 // ── Geometry Stream ──────────────────────────────────────────────────────
 
 /**
@@ -407,7 +423,7 @@ export class GeometryStream {
    * @returns The byte offset in this.view / this.u8 where instance data should be written.
    */
   public reserve(cmdKind: number, stride: number): number {
-    if (cmdKind === this._currentCmdKind) {
+    if (cmdKind !== CMD_SCISSOR_SET && cmdKind === this._currentCmdKind) {
       this.ensureCapacity(this._writeHead + stride)
       this._currentCmdPayloadBytes += stride
       vu32(this.view, this._currentCmdLengthOffset, this._currentCmdPayloadBytes)
@@ -438,7 +454,7 @@ export class GeometryStream {
   public reserveInstances(cmdKind: number, stride: number, count: number): number {
     if (count <= 0) return -1
     const totalStride = stride * count
-    if (cmdKind === this._currentCmdKind) {
+    if (cmdKind !== CMD_SCISSOR_SET && cmdKind === this._currentCmdKind) {
       this.ensureCapacity(this._writeHead + totalStride)
       this._currentCmdPayloadBytes += totalStride
       vu32(this.view, this._currentCmdLengthOffset, this._currentCmdPayloadBytes)
@@ -538,6 +554,16 @@ export class GeometryStream {
   ): void {
     const off = this.reserve(CMD_RADIAL_GRADIENT, STRIDE_RADIAL_GRADIENT)
     packRadialGradientDirect(this.view, off, x, y, w, h, boxW, boxH, radius, from, to)
+  }
+
+  public appendScissor(x: number, y: number, w: number, h: number): void {
+    const off = this.reserve(CMD_SCISSOR_SET, STRIDE_SCISSOR_SET)
+    packScissorDirect(this.view, off, x, y, w, h)
+  }
+
+  public appendResetScissor(): void {
+    const off = this.reserve(CMD_SCISSOR_SET, STRIDE_SCISSOR_SET)
+    packScissorDirect(this.view, off, 0, 0, 0, 0)
   }
 
   /**

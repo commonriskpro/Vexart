@@ -19,8 +19,9 @@ pub use target_ops::{
 
 // Re-export image layer blitting and affine quad transforms
 pub use image_layer::{
-    composite_render_image_layer, composite_render_image_transform_layer,
-    composite_update_uniform,
+    composite_layers_batch, composite_render_image_layer,
+    composite_render_image_transform_layer, composite_update_uniform,
+    BridgeLayerBatchItem,
 };
 
 // Re-export region copy and GPU readback
