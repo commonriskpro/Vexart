@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.0.0-beta.11](https://github.com/commonriskpro/Vexart/compare/v1.0.0-beta.10...v1.0.0-beta.11) (2026-09-19)
+
+
+### Features
+
+* **headless:** add focus trap and escape dismiss to popover with lifo overlay stack ([4a87b75](https://github.com/commonriskpro/Vexart/commit/4a87b75a68b3b7610323d4f799d636c1a5e50cd1))
+* **native:** implement unified native text layout and word-wrapping via C-ABI ([a062782](https://github.com/commonriskpro/Vexart/commit/a062782b014a1017a7a76606083da6051e490437))
+
+
+### Bug Fixes
+
+* **engine:** resolve auto-layer demotion churn and stale texture reuse on scroll ([2468bda](https://github.com/commonriskpro/Vexart/commit/2468bdae1e40103bb3b1753e94177f88694cd53a))
+* **engine:** resolve layer promotion churn and stale texture reuse on scroll ([246adc4](https://github.com/commonriskpro/Vexart/commit/246adc42729cec7b3a69070b9fb181aedfa3c4ac))
+* **engine:** resolve scroll culling lag and eager offset synchronization ([f3b5af8](https://github.com/commonriskpro/Vexart/commit/f3b5af8806103d1389e5f2f2109d1c2cbec13e72))
+* **headless:** standardize on createTextEditor and sync api reports ([9a30680](https://github.com/commonriskpro/Vexart/commit/9a30680a63fd8ead49b539b9b8b4fa974d2d5b89))
+
+
+### Performance Improvements
+
+* **app:** enforce bounded lru cache on class-name resolver ([a5fd29d](https://github.com/commonriskpro/Vexart/commit/a5fd29dc6afbd29de3057fa7d4edfa77ace34abb))
+* **engine:** batch msdf text rendering with binary vxtx stream and single draw pass ([70fdd62](https://github.com/commonriskpro/Vexart/commit/70fdd62c243981a2701408743c9b7b89ddac31a7))
+* **engine:** bound scroll damage rect to container viewport and scope scroll invalidation ([f6feeeb](https://github.com/commonriskpro/Vexart/commit/f6feeeb15b3bde207c5c1a5992a074d4b7c7bdbb))
+* **engine:** eliminate walkTreeOnce DFS pass and unify pipeline in traverseFrame ([c323ece](https://github.com/commonriskpro/Vexart/commit/c323ece5820f0f5a9ec0e8e011598406d4f2ed58))
+* **engine:** enable scroll-aware aabb culling with subtree early exit and reuse layout snapshot buffer ([7d51d29](https://github.com/commonriskpro/Vexart/commit/7d51d2991a7f857f06406e6d4e0145eab36ba1f8))
+* **engine:** reuse scratch buffers for msdf measure text and expand lru cache ([11e9068](https://github.com/commonriskpro/Vexart/commit/11e90689316019f3d09f2000214f1c9a8ccb7fdb))
+* **headless:** position scrollbar thumb with transform translateY and decouple theme colors ([9737563](https://github.com/commonriskpro/Vexart/commit/97375638e4bc18331730a505665f4fa86872c7e5))
+* **native:** add regional readback buffer pool and zero-copy emission ([6c8f5e2](https://github.com/commonriskpro/Vexart/commit/6c8f5e2cb347ef4b3e616ff03490cf8aa388ccb5))
+* **native:** batch layer composite in single pass, cache target bind groups and add in-stream scissor ([2bdf15b](https://github.com/commonriskpro/Vexart/commit/2bdf15b86ca66f049819df81d561bbefe827f833))
+* **native:** prune legacy resource manager and consolidate image assets under shared paint mutex ([54b2911](https://github.com/commonriskpro/Vexart/commit/54b291198afec4db727741a34ea0be4d451f252b))
+
 ## [1.0.0-beta.10](https://github.com/commonriskpro/Vexart/compare/v1.0.0-beta.9...v1.0.0-beta.10) (2026-09-19)
 
 
