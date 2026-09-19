@@ -52,7 +52,6 @@ export type {
 } from "./inputs/textarea"
 
 export {
-  useTextEditor,
   createTextEditor,
   previousCodePointOffset,
   nextCodePointOffset,

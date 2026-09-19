@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import {
-  useTextEditor,
+  createTextEditor,
   previousCodePointOffset,
   nextCodePointOffset,
 } from "./text-editor"
@@ -42,11 +42,11 @@ describe("text-editor UTF-16 code point helpers", () => {
   })
 })
 
-describe("useTextEditor core engine", () => {
+describe("createTextEditor core engine", () => {
   test("manages cursor and clamps to text boundaries", () => {
     createRoot((dispose) => {
       const [val, setVal] = createSignal("hello")
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: val,
         onChange: setVal,
       })
@@ -73,7 +73,7 @@ describe("useTextEditor core engine", () => {
   test("handles selection lifecycle: selectAll, clearSelection, selRange, deleteSelection", () => {
     createRoot((dispose) => {
       let text = "hello world"
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: () => text,
         onChange: (v) => { text = v },
       })
@@ -111,7 +111,7 @@ describe("useTextEditor core engine", () => {
   test("insertText inserts at cursor and replaces active selection", () => {
     createRoot((dispose) => {
       let text = "hello"
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: () => text,
         onChange: (v) => { text = v },
         initialCursor: 5,
@@ -135,7 +135,7 @@ describe("useTextEditor core engine", () => {
   test("singleLine mode collapses newlines and tabs to space", () => {
     createRoot((dispose) => {
       let text = ""
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: () => text,
         onChange: (v) => { text = v },
         singleLine: true,
@@ -150,7 +150,7 @@ describe("useTextEditor core engine", () => {
   test("deleteBackward and deleteForward respect code point boundaries and selections", () => {
     createRoot((dispose) => {
       let text = "a👋b"
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: () => text,
         onChange: (v) => { text = v },
         initialCursor: 4,
@@ -185,7 +185,7 @@ describe("useTextEditor core engine", () => {
   test("undo and redo history stack works correctly", () => {
     createRoot((dispose) => {
       let text = "foo"
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: () => text,
         onChange: (v) => { text = v },
         initialCursor: 3,
@@ -226,7 +226,7 @@ describe("useTextEditor core engine", () => {
 
   test("blink timer toggles blink state", () => {
     createRoot((dispose) => {
-      const editor = useTextEditor({
+      const editor = createTextEditor({
         value: "test",
         blinkInterval: 10,
       })

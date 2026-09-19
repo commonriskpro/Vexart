@@ -90,7 +90,7 @@ export type TextEditorReturn = {
  *
  * @public
  */
-export function useTextEditor(options: TextEditorOptions): TextEditorReturn {
+export function createTextEditor(options: TextEditorOptions): TextEditorReturn {
   const getValue = () => (typeof options.value === "function" ? options.value() : options.value)
 
   const initialVal = getValue()
@@ -325,6 +325,3 @@ export function useTextEditor(options: TextEditorOptions): TextEditorReturn {
     canRedo,
   }
 }
-
-/** @public */
-export const createTextEditor = useTextEditor

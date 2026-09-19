@@ -248,7 +248,6 @@ export {
   Slider,
   Switch as ToggleSwitch,
   Textarea,
-  useTextEditor,
   createTextEditor,
   previousCodePointOffset,
   nextCodePointOffset,

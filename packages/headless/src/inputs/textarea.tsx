@@ -48,7 +48,7 @@ import type { Highlighter, HighlightToken, Token } from "../display/code"
 import { clearFocus } from "@vexart/engine"
 import type { KeyEvent } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
-import { useTextEditor, previousCodePointOffset, nextCodePointOffset } from "./text-editor"
+import { createTextEditor, previousCodePointOffset, nextCodePointOffset } from "./text-editor"
 
 // ── Theme type ──
 
@@ -313,7 +313,7 @@ export type TextareaProps = {
 
 /** @public */
 export function Textarea(props: TextareaProps) {
-  const editor = useTextEditor({
+  const editor = createTextEditor({
     value: () => props.value,
     onChange: props.onChange,
     singleLine: false,

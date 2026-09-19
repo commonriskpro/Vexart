@@ -14,7 +14,7 @@ import { createMemo, createEffect, onCleanup } from "solid-js"
 import type { JSX } from "solid-js"
 import { useFocus, onInput, measureTextWidth, type SizingUnit } from "@vexart/engine"
 import { useDisabled } from "../helpers/disabled"
-import { useTextEditor, previousCodePointOffset, nextCodePointOffset } from "./text-editor"
+import { createTextEditor, previousCodePointOffset, nextCodePointOffset } from "./text-editor"
 
 // ── Constants ──
 
@@ -110,7 +110,7 @@ export type InputProps = {
 export function Input(props: InputProps) {
   const disabled = useDisabled(props)
 
-  const editor = useTextEditor({
+  const editor = createTextEditor({
     value: () => props.value,
     onChange: props.onChange,
     singleLine: true,

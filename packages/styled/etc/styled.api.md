@@ -656,6 +656,7 @@ export type VoidInputProps = {
     disabled?: boolean;
     focusId?: string;
     width?: SizingUnit;
+    theme?: Partial<InputTheme>;
 };
 
 // @public (undocumented)
@@ -863,6 +864,7 @@ export type VoidTextareaProps = {
     keyBindings?: KeyBinding[];
     highlighter?: Highlighter;
     language?: string;
+    theme?: Partial<TextareaTheme>;
     ref?: (handle: TextareaHandle) => void;
 };
 
@@ -921,10 +923,12 @@ export const weight: {
 // <repo>/.api-extractor-temp/packages/styled/src/components/code.d.ts:14:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/diff.d.ts:15:5 - (ae-forgotten-export) The symbol "DiffTheme" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/diff.d.ts:17:5 - (ae-forgotten-export) The symbol "DiffLine" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/input.d.ts:20:5 - (ae-forgotten-export) The symbol "InputTheme" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/scroll-view.d.ts:14:5 - (ae-forgotten-export) The symbol "ScrollHandle" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:16:5 - (ae-forgotten-export) The symbol "KeyEvent" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:23:5 - (ae-forgotten-export) The symbol "KeyBinding" needs to be exported by the entry point index.d.ts
-// <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:26:5 - (ae-forgotten-export) The symbol "TextareaHandle" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:26:5 - (ae-forgotten-export) The symbol "TextareaTheme" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/styled/src/components/textarea.d.ts:27:5 - (ae-forgotten-export) The symbol "TextareaHandle" needs to be exported by the entry point index.d.ts
 // <repo>/.api-extractor-temp/packages/styled/src/components/virtual-list.d.ts:24:5 - (ae-forgotten-export) The symbol "VirtualListItemContext" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

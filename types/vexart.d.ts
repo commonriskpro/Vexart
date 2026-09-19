@@ -609,6 +609,13 @@ export declare function createStyles<T extends Record<string, VexartStyleProps>>
 };
 
 /**
+ * Shared hook managing text editing primitives for singleline and multiline inputs.
+ *
+ * @public
+ */
+export declare function createTextEditor(options: TextEditorOptions): TextEditorReturn;
+
+/**
  * Create a theme definition from partial overrides.
  * Overrides are merged with the default void tokens.
  */
@@ -1468,7 +1475,7 @@ export declare type InputRenderContext = {
 export declare type InputSubscriber = (event: InputEvent_2) => void;
 
 /** @public */
-declare type InputTheme = {
+export declare type InputTheme = {
     /** Cursor / focused border accent color. */
     accent: string | number;
     /** Primary text color. */
@@ -1941,6 +1948,9 @@ declare type NebulaCmd = {
     dust: number;
 };
 
+/** Return the next UTF-16 offset on a Unicode codepoint boundary. */
+export declare function nextCodePointOffset(text: string, offset: number): number;
+
 /** @public */
 export declare type NodeHandle = {
     readonly id: number;
@@ -2155,6 +2165,9 @@ export declare type PressEvent = {
     /** Whether stopPropagation() was called. */
     readonly propagationStopped: boolean;
 };
+
+/** Return the previous UTF-16 offset on a Unicode codepoint boundary. */
+export declare function previousCodePointOffset(text: string, offset: number): number;
 
 /** @public */
 export declare function ProgressBar(props: ProgressBarProps): JSX.Element;
@@ -3011,6 +3024,72 @@ declare type TextCmd = {
     y: number;
     text: string;
     color: number;
+};
+
+/** @public */
+export declare type TextEditorOptions = {
+    /** Current text value, or reactive accessor returning the value. */
+    value: string | (() => string);
+    /** Called when text changes through editor operations. */
+    onChange?: (value: string) => void;
+    /** Initial cursor position. Defaults to value length. */
+    initialCursor?: number;
+    /** Whether single-line mode is enforced (collapses newlines and tabs to space). Default: false. */
+    singleLine?: boolean;
+    /** Maximum undo/redo history stack size. Default: 100. */
+    maxHistory?: number;
+    /** Blink interval in milliseconds. Default: 530. */
+    blinkInterval?: number;
+};
+
+/** @public */
+export declare type TextEditorReturn = {
+    /** Reactive accessor for cursor position (offset from buffer start). */
+    cursor: Accessor<number>;
+    /** Set cursor position, clamped within [0, text.length]. */
+    setCursor: (pos: number) => void;
+    /** Reactive accessor for normalized selection range [start, end] or null. */
+    selection: Accessor<[number, number] | null>;
+    /** Raw selection start offset (-1 if inactive). */
+    selStart: Accessor<number>;
+    /** Raw selection end offset (-1 if inactive). */
+    selEnd: Accessor<number>;
+    /** Set raw selection start offset. */
+    setSelStart: (pos: number) => void;
+    /** Set raw selection end offset. */
+    setSelEnd: (pos: number) => void;
+    /** Returns true if there is an active selection range. */
+    hasSelection: () => boolean;
+    /** Returns normalized [min, max] selection range. */
+    selRange: () => [number, number];
+    /** Programmatically set selection range or null to clear. */
+    setSelection: (range: [number, number] | null) => void;
+    /** Select all text. */
+    selectAll: () => void;
+    /** Clear active selection. */
+    clearSelection: () => void;
+    /** Delete active selection and return resulting string without committing. */
+    deleteSelection: () => string;
+    /** Insert text at cursor, replacing selection if active. */
+    insertText: (text: string) => void;
+    /** Delete backward (backspace) on code point boundary or remove selection. */
+    deleteBackward: () => void;
+    /** Delete forward (delete) on code point boundary or remove selection. */
+    deleteForward: () => void;
+    /** Reactive accessor for cursor blink state. */
+    blink: Accessor<boolean>;
+    /** Start or restart blinking. */
+    startBlink: () => void;
+    /** Stop blinking. */
+    stopBlink: () => void;
+    /** Undo last edit. */
+    undo: () => void;
+    /** Redo last undone edit. */
+    redo: () => void;
+    /** True if undo is available. */
+    canUndo: Accessor<boolean>;
+    /** True if redo is available. */
+    canRedo: Accessor<boolean>;
 };
 
 /** @public */
@@ -3904,6 +3983,7 @@ export declare type VoidInputProps = {
     disabled?: boolean;
     focusId?: string;
     width?: SizingUnit;
+    theme?: Partial<InputTheme>;
 };
 
 /** @public */
@@ -4118,6 +4198,7 @@ export declare type VoidTextareaProps = {
     keyBindings?: KeyBinding[];
     highlighter?: Highlighter;
     language?: string;
+    theme?: Partial<TextareaTheme>;
     ref?: (handle: TextareaHandle) => void;
 };
 

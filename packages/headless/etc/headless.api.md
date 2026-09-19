@@ -151,6 +151,9 @@ export function createForm<T extends Record<string, any>>(options: FormOptions<T
 // @public (undocumented)
 export const createListNavigation: typeof useListNavigation;
 
+// @public
+export function createTextEditor(options: TextEditorOptions): TextEditorReturn;
+
 // @public (undocumented)
 export function createToaster(options: ToasterOptions): ToasterHandle;
 
@@ -629,6 +632,9 @@ export type Modifiers = {
 };
 
 // @public
+export function nextCodePointOffset(text: string, offset: number): number;
+
+// @public
 export type NodeMouseEvent = {
     x: number;
     y: number;
@@ -682,6 +688,9 @@ export function Portal(props: PortalProps): JSX.Element;
 export type PortalProps = {
     children?: JSX.Element;
 };
+
+// @public
+export function previousCodePointOffset(text: string, offset: number): number;
 
 // @public (undocumented)
 export function ProgressBar(props: ProgressBarProps): JSX.Element;
@@ -1029,6 +1038,43 @@ export type TextareaTheme = {
     border: string | number;
     radius: number;
     padding: number;
+};
+
+// @public (undocumented)
+export type TextEditorOptions = {
+    value: string | (() => string);
+    onChange?: (value: string) => void;
+    initialCursor?: number;
+    singleLine?: boolean;
+    maxHistory?: number;
+    blinkInterval?: number;
+};
+
+// @public (undocumented)
+export type TextEditorReturn = {
+    cursor: Accessor<number>;
+    setCursor: (pos: number) => void;
+    selection: Accessor<[number, number] | null>;
+    selStart: Accessor<number>;
+    selEnd: Accessor<number>;
+    setSelStart: (pos: number) => void;
+    setSelEnd: (pos: number) => void;
+    hasSelection: () => boolean;
+    selRange: () => [number, number];
+    setSelection: (range: [number, number] | null) => void;
+    selectAll: () => void;
+    clearSelection: () => void;
+    deleteSelection: () => string;
+    insertText: (text: string) => void;
+    deleteBackward: () => void;
+    deleteForward: () => void;
+    blink: Accessor<boolean>;
+    startBlink: () => void;
+    stopBlink: () => void;
+    undo: () => void;
+    redo: () => void;
+    canUndo: Accessor<boolean>;
+    canRedo: Accessor<boolean>;
 };
 
 // @public (undocumented)
