@@ -6,7 +6,8 @@
  * measurement receives the resolved column inline width.
  */
 
-import { layoutText, measureForLayout, normalizeTextForLayout, type TextLayoutOptions } from "./text-layout"
+import { isMsdfLayoutAvailable, msdfLayoutMeasure } from "./msdf-font"
+import { getFont, layoutText, measureForLayout, normalizeTextForLayout, type TextLayoutOptions } from "./text-layout"
 import type { GridAxis, GridIntrinsicMeasureFunc, GridIntrinsicSizes } from "./grid-types"
 
 export type GridTextIntrinsicOptions = {
@@ -111,10 +112,44 @@ export function createGridTextIntrinsicMeasure(options: GridTextIntrinsicOptions
   const whiteSpace = options.whiteSpace ?? "normal"
   const wordBreak = options.wordBreak ?? "normal"
   const normalized = normalizeTextForLayout(options.text, whiteSpace)
-  const maxContent = maxUnwrappedLineWidth(normalized, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
-  const minContent = whiteSpace === "nowrap"
-    ? maxContent
-    : minContentWidth(normalized, wordBreak, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
+
+  let minContent: number
+  let maxContent: number
+
+  if (isMsdfLayoutAvailable()) {
+    const desc = getFont(fontId)
+    const families = options.fontFamily ? [options.fontFamily] : (fontId === 0 ? ["sans-serif"] : [desc.family])
+    const weight = options.fontWeight ?? desc.weight ?? 400
+    const italic = options.fontStyle === "italic" ? true : (options.fontStyle !== undefined ? false : desc.style === "italic")
+
+    const layout = msdfLayoutMeasure(
+      normalized,
+      families,
+      fontSize,
+      lineHeight,
+      0,
+      weight,
+      italic,
+      whiteSpace,
+      wordBreak,
+      false,
+    )
+    if (layout) {
+      minContent = Math.ceil(layout.minContentWidth)
+      maxContent = Math.ceil(layout.maxContentWidth)
+    } else {
+      maxContent = maxUnwrappedLineWidth(normalized, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
+      minContent = whiteSpace === "nowrap"
+        ? maxContent
+        : minContentWidth(normalized, wordBreak, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
+    }
+  } else {
+    maxContent = maxUnwrappedLineWidth(normalized, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
+    minContent = whiteSpace === "nowrap"
+      ? maxContent
+      : minContentWidth(normalized, wordBreak, fontId, fontSize, options.fontFamily, options.fontWeight, options.fontStyle)
+  }
+
   const layoutOptions = optionsForLayout(options)
   const cache = new Map<string, GridIntrinsicSizes>()
 

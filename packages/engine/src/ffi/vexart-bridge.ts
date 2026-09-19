@@ -275,6 +275,35 @@ export const MSDF_FONT_SYMBOLS = {
   },
   // font_measure: text_ptr, text_len, families_ptr, families_len, font_size, weight, italic, out_w, out_h → i32
   vexart_font_measure: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.f32, FFIType.u16, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+  // font_layout_measure: text_ptr, text_len, families_ptr, families_len, font_size, line_height, max_width, weight, flags, metrics_out, lines_out_ptr, lines_out_cap → i32
+  vexart_font_layout_measure: {
+    args: [
+      FFIType.ptr,
+      FFIType.u32,
+      FFIType.ptr,
+      FFIType.u32,
+      FFIType.f32,
+      FFIType.f32,
+      FFIType.f32,
+      FFIType.u16,
+      FFIType.u32,
+      FFIType.ptr,
+      FFIType.ptr,
+      FFIType.u32,
+    ],
+    returns: FFIType.i32,
+  },
+} as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
+
+export const MSDF_LEGACY_FONT_SYMBOLS = {
+  vexart_font_init: { args: [], returns: FFIType.i32 },
+  vexart_font_query: { args: [FFIType.ptr, FFIType.u32, FFIType.u16, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_font_render_text: { args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  vexart_font_render_batch: {
+    args: [FFIType.u64, FFIType.u64, FFIType.ptr, FFIType.u32, FFIType.ptr],
+    returns: FFIType.i32,
+  },
+  vexart_font_measure: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.f32, FFIType.u16, FFIType.u32, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
 } as const satisfies Record<string, { args: FFIType[]; returns: FFIType }>
 
 let _msdfLib: ReturnType<typeof dlopen<typeof MSDF_FONT_SYMBOLS>> | null = null
@@ -296,7 +325,13 @@ export function openMsdfFontSymbols(): ReturnType<typeof dlopen<typeof MSDF_FONT
       _msdfLib = dlopen(path, MSDF_FONT_SYMBOLS)
       return _msdfLib.symbols
     } catch {
-      // This dylib doesn't have font symbols — try next or give up.
+      // If the full set fails (e.g. older dylib lacking layout_measure), try legacy set
+      try {
+        _msdfLib = dlopen(path, MSDF_LEGACY_FONT_SYMBOLS) as unknown as ReturnType<typeof dlopen<typeof MSDF_FONT_SYMBOLS>>
+        return _msdfLib.symbols
+      } catch {
+        // This dylib doesn't have font symbols — try next or give up.
+      }
     }
   }
   return null

@@ -11,7 +11,13 @@
  */
 
 import { createLRUCache } from "./lru-cache"
-import { msdfMeasureText, isMsdfFontAvailable } from "./msdf-font"
+import {
+  msdfMeasureText,
+  isMsdfFontAvailable,
+  isMsdfLayoutAvailable,
+  msdfLayoutMeasure,
+  msdfDecodeTextSlice,
+} from "./msdf-font"
 
 // ── Font registry ──
 // Maps fontId → font descriptor string (CSS font shorthand).
@@ -176,6 +182,35 @@ function layoutWithNativeMeasure(
   const spaceWidth = measureWord(" ")
 
   const source = normalizeTextForLayout(text, whiteSpace)
+
+  if (isMsdfLayoutAvailable()) {
+    const layout = msdfLayoutMeasure(
+      source,
+      families,
+      fontSize,
+      lineHeight,
+      maxWidth,
+      weight,
+      italic,
+      whiteSpace,
+      wordBreak,
+      true,
+    )
+    if (layout && layout.lines) {
+      const lines: LayoutLine[] = new Array(layout.lines.length)
+      for (let i = 0; i < layout.lines.length; i++) {
+        const l = layout.lines[i]
+        const lineText = msdfDecodeTextSlice(l.startByte, l.endByte, source)
+        lines[i] = { text: lineText, width: Math.ceil(l.width) }
+      }
+      return {
+        lines,
+        lineCount: layout.lineCount,
+        height: layout.totalHeight,
+      }
+    }
+  }
+
   const paragraphs = source.split("\n")
   const lines: LayoutLine[] = []
 
@@ -384,6 +419,34 @@ export function measureTextConstrained(
   const natural = measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
   const needsLineLayout = effectiveOptions.whiteSpace === "pre-wrap" || source.includes("\n")
   if (!needsLineLayout && natural.width <= maxWidth) return natural
+
+  if (isMsdfLayoutAvailable()) {
+    const desc = getFont(fontId)
+    const families = effectiveOptions.fontFamily ? [effectiveOptions.fontFamily] : (fontId === 0 ? ["sans-serif"] : [desc.family])
+    const weight = effectiveOptions.fontWeight ?? desc.weight ?? 400
+    const italic = effectiveOptions.fontStyle === "italic" ? true : (effectiveOptions.fontStyle !== undefined ? false : desc.style === "italic")
+    const whiteSpace = effectiveOptions.whiteSpace ?? "normal"
+    const wordBreak = effectiveOptions.wordBreak ?? "normal"
+
+    const layout = msdfLayoutMeasure(
+      source,
+      families,
+      fontSize,
+      lineHeight,
+      maxWidth,
+      weight,
+      italic,
+      whiteSpace,
+      wordBreak,
+      false,
+    )
+    if (layout) {
+      return {
+        width: Math.min(Math.ceil(layout.totalWidth), Math.ceil(maxWidth)),
+        height: layout.totalHeight,
+      }
+    }
+  }
 
   // Multi-line: compute wrapped layout (cached by layoutText LRU)
   const result = layoutText(source, fontId, maxWidth, lineHeight, fontSize, effectiveOptions)

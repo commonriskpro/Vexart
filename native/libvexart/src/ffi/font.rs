@@ -371,3 +371,138 @@ pub unsafe extern "C" fn vexart_font_measure(
     })
 }
 
+/// Unified font layout, measurement, and line-breaking C-ABI endpoint.
+///
+/// # Safety
+/// All pointer arguments must be valid for their respective lengths or null if optional.
+#[no_mangle]
+pub unsafe extern "C" fn vexart_font_layout_measure(
+    text_ptr: *const u8,
+    text_len: u32,
+    families_ptr: *const u8,
+    families_len: u32,
+    font_size: f32,
+    line_height: f32,
+    max_width: f32,
+    weight: u16,
+    flags: u32,
+    metrics_out: *mut font::layout::LayoutMetrics,
+    lines_out_ptr: *mut font::layout::LineRecord,
+    lines_out_cap: u32,
+) -> i32 {
+    ffi_guard!({
+        if metrics_out.is_null() {
+            return ERR_INVALID_ARG;
+        }
+
+        let italic = (flags & 1) != 0;
+        let white_space = match (flags >> 1) & 0x3 {
+            1 => font::layout::WhiteSpaceMode::PreWrap,
+            2 => font::layout::WhiteSpaceMode::NoWrap,
+            _ => font::layout::WhiteSpaceMode::Normal,
+        };
+        let word_break = match (flags >> 3) & 0x1 {
+            1 => font::layout::WordBreakMode::KeepAll,
+            _ => font::layout::WordBreakMode::Normal,
+        };
+
+        let eff_line_height = if line_height > 0.0 { line_height } else { font_size * 1.2 };
+
+        if text_ptr.is_null() || text_len == 0 {
+            *metrics_out = font::layout::LayoutMetrics {
+                total_width: 0.0,
+                total_height: eff_line_height,
+                max_content_width: 0.0,
+                min_content_width: 0.0,
+                line_count: 1,
+                glyph_count: 0,
+            };
+            if !lines_out_ptr.is_null() && lines_out_cap > 0 {
+                *lines_out_ptr = font::layout::LineRecord {
+                    start_byte: 0,
+                    end_byte: 0,
+                    width: 0.0,
+                    glyph_count: 0,
+                };
+            }
+            return OK;
+        }
+
+        let text_bytes = std::slice::from_raw_parts(text_ptr, text_len as usize);
+        let text = match std::str::from_utf8(text_bytes) {
+            Ok(s) => s,
+            Err(_) => return ERR_INVALID_ARG,
+        };
+
+        let families_owned: Vec<&str>;
+        let families: &[&str] = if !families_ptr.is_null() && families_len > 0 {
+            let str_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
+            if let Ok(s) = std::str::from_utf8(str_bytes) {
+                families_owned = s.split(' ').collect();
+                &families_owned
+            } else {
+                &["sans-serif"]
+            }
+        } else {
+            &["sans-serif"]
+        };
+
+        let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
+        let resolved = match system.query_face(families, weight, italic) {
+            Some(f) => f,
+            None => {
+                match system.query_face(&["sans-serif"], weight, italic) {
+                    Some(f) => f,
+                    None => {
+                        *metrics_out = font::layout::LayoutMetrics {
+                            total_width: text_len as f32 * font_size * 0.5,
+                            total_height: eff_line_height,
+                            max_content_width: text_len as f32 * font_size * 0.5,
+                            min_content_width: font_size * 0.5,
+                            line_count: 1,
+                            glyph_count: text.chars().count() as u32,
+                        };
+                        if !lines_out_ptr.is_null() && lines_out_cap > 0 {
+                            *lines_out_ptr = font::layout::LineRecord {
+                                start_byte: 0,
+                                end_byte: text_len,
+                                width: text_len as f32 * font_size * 0.5,
+                                glyph_count: text.chars().count() as u32,
+                            };
+                        }
+                        return OK;
+                    }
+                }
+            }
+        };
+
+        let face = match resolved.parse() {
+            Some(f) => f,
+            None => return ERR_INVALID_ARG,
+        };
+
+        drop(system);
+
+        let lines_slice = if !lines_out_ptr.is_null() && lines_out_cap > 0 {
+            Some(std::slice::from_raw_parts_mut(lines_out_ptr, lines_out_cap as usize))
+        } else {
+            None
+        };
+
+        let (metrics, _written) = font::layout::layout_measure(
+            text,
+            &face,
+            font_size,
+            eff_line_height,
+            max_width,
+            weight,
+            italic,
+            white_space,
+            word_break,
+            lines_slice,
+        );
+
+        *metrics_out = metrics;
+        OK
+    })
+}
