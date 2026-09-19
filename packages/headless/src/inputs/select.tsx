@@ -229,7 +229,18 @@ function SelectRoot(props: SelectProps) {
         }}>
           {props.renderTrigger(triggerCtx)}
         </box>
-        {content()}
+        {open() ? (
+          <>
+            <box
+              floating="root"
+              width="100%"
+              height="100%"
+              zIndex={9997}
+              onPress={() => setOpen(false)}
+            />
+            {content()}
+          </>
+        ) : null}
       </box>
     )
   }
@@ -252,6 +263,15 @@ function SelectRoot(props: SelectProps) {
   return (
     <SelectContext.Provider value={ctx}>
       <box direction="column">
+        {open() ? (
+          <box
+            floating="root"
+            width="100%"
+            height="100%"
+            zIndex={9997}
+            onPress={() => setOpen(false)}
+          />
+        ) : null}
         {props.children}
       </box>
     </SelectContext.Provider>

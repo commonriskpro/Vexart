@@ -28,61 +28,31 @@
  *   </VoidDropdownMenu>
  */
 
-import { createContext, onCleanup, useContext } from "solid-js"
+import { DropdownMenu } from "@vexart/headless"
 import type { JSX } from "solid-js"
-import { onInput, Show, type SizingUnit } from "@vexart/engine"
+import type { SizingUnit } from "@vexart/engine"
 import { radius, space, font, shadows } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
-
-// Floating attach points use the engine's stable 3x3 grid (left/top = 0,
-// left/bottom = 2). Keep the content's top-left attached to the trigger's
-// bottom-left so sideOffset is measured from the trigger edge.
-const ATTACH_POINT = {
-  LEFT_TOP: 0,
-  LEFT_BOTTOM: 2,
-} as const
-
-// ── Context ──
-
-type DropdownCtx = {
-  open: () => boolean
-  toggle: () => void
-  close: () => void
-}
-
-const DropdownContext = createContext<DropdownCtx>({
-  open: () => false,
-  toggle: () => {},
-  close: () => {},
-})
 
 // ── Root ──
 
 /** @public */
 export type VoidDropdownMenuProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open?: boolean
+  defaultOpen?: boolean
+  onOpenChange?: (open: boolean) => void
   children?: JSX.Element
 }
 
 function VoidDropdownMenuRoot(props: VoidDropdownMenuProps) {
-  const ctx: DropdownCtx = {
-    open: () => props.open,
-    toggle: () => props.onOpenChange(!props.open),
-    close: () => props.onOpenChange(false),
-  }
-
-  const unsubscribe = onInput((event) => {
-    if (ctx.open() && event.type === "key" && event.key === "escape") ctx.close()
-  })
-  onCleanup(unsubscribe)
-
   return (
-    <DropdownContext.Provider value={ctx}>
-      <box direction="column" width="fit" height="fit">
-        {props.children}
-      </box>
-    </DropdownContext.Provider>
+    <DropdownMenu
+      open={props.open}
+      defaultOpen={props.defaultOpen}
+      onOpenChange={props.onOpenChange}
+    >
+      {props.children}
+    </DropdownMenu>
   )
 }
 
@@ -95,8 +65,7 @@ export type VoidDropdownMenuTriggerProps = {
 
 /** @public */
 export function VoidDropdownMenuTrigger(props: VoidDropdownMenuTriggerProps) {
-  const ctx = useContext(DropdownContext)
-  return <box width="fit" height="fit" onPress={() => ctx.toggle()}>{props.children}</box>
+  return <DropdownMenu.Trigger>{props.children}</DropdownMenu.Trigger>
 }
 
 // ── Content ──
@@ -112,30 +81,21 @@ export type VoidDropdownMenuContentProps = {
 
 /** @public */
 export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
-  const ctx = useContext(DropdownContext)
-
   return (
-    <Show when={ctx.open()}>
-      <box
-        floating="parent"
-        zIndex={9999}
-        floatAttach={{ element: ATTACH_POINT.LEFT_TOP, parent: ATTACH_POINT.LEFT_BOTTOM }}
-        floatOffset={{ x: 0, y: props.sideOffset ?? 4 }}
-        direction="column"
-        width={props.width}
-        minWidth={props.minWidth ?? 128}
-        maxHeight={props.maxHeight ?? 320}
-        backgroundColor={themeColors.popover}
-        cornerRadius={radius.md}
-        borderColor={themeColors.border}
-        borderWidth={1}
-        padding={space[0.5]}
-        shadow={shadows.md}
-        scrollY={!!props.maxHeight}
-      >
-        {props.children}
-      </box>
-    </Show>
+    <DropdownMenu.Content
+      width={props.width}
+      minWidth={props.minWidth ?? 128}
+      maxHeight={props.maxHeight ?? 320}
+      sideOffset={props.sideOffset ?? 4}
+      backgroundColor={themeColors.popover}
+      cornerRadius={radius.md}
+      borderColor={themeColors.border}
+      borderWidth={1}
+      padding={space[0.5]}
+      shadow={shadows.md}
+    >
+      {props.children}
+    </DropdownMenu.Content>
   )
 }
 
@@ -152,8 +112,6 @@ export type VoidDropdownMenuItemProps = {
 
 /** @public */
 export function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
-  const ctx = useContext(DropdownContext)
-
   const fg = () => props.variant === "destructive"
     ? themeColors.destructive
     : themeColors.foreground
@@ -164,29 +122,23 @@ export function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
     : themeColors.accent
 
   return (
-    <box
-      focusable
-      direction="row"
-      alignY="center"
+    <DropdownMenu.Item
+      onSelect={props.onSelect}
+      disabled={props.disabled}
+      destructive={props.variant === "destructive"}
       gap={space[2]}
       paddingTop={space[1.5]}
       paddingBottom={space[1.5]}
       paddingLeft={props.inset ? space[8] : space[2]}
       paddingRight={space[2]}
       cornerRadius={radius.sm}
-      opacity={props.disabled ? 0.5 : 1}
       hoverStyle={{ backgroundColor: hoverBg() }}
       focusStyle={{ backgroundColor: hoverBg() }}
-      onPress={() => {
-        if (props.disabled) return
-        props.onSelect?.()
-        ctx.close()
-      }}
     >
       <text color={fg()} fontSize={font.sm}>
         {props.children}
       </text>
-    </box>
+    </DropdownMenu.Item>
   )
 }
 
@@ -195,9 +147,7 @@ export function VoidDropdownMenuItem(props: VoidDropdownMenuItemProps) {
 /** @public */
 export function VoidDropdownMenuSeparator() {
   return (
-    <box
-      width="grow"
-      height={1}
+    <DropdownMenu.Separator
       backgroundColor={themeColors.border}
       paddingTop={space[0.5]}
       paddingBottom={space[0.5]}
@@ -216,7 +166,7 @@ export type VoidDropdownMenuLabelProps = {
 /** @public */
 export function VoidDropdownMenuLabel(props: VoidDropdownMenuLabelProps) {
   return (
-    <box
+    <DropdownMenu.Label
       paddingTop={space[1.5]}
       paddingBottom={space[1.5]}
       paddingLeft={props.inset ? space[8] : space[2]}
@@ -225,7 +175,7 @@ export function VoidDropdownMenuLabel(props: VoidDropdownMenuLabelProps) {
       <text color={themeColors.mutedForeground} fontSize={font.xs} fontWeight={500}>
         {props.children}
       </text>
-    </box>
+    </DropdownMenu.Label>
   )
 }
 

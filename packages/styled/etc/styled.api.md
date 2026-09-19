@@ -627,8 +627,9 @@ export type VoidDropdownMenuLabelProps = {
 
 // @public (undocumented)
 export type VoidDropdownMenuProps = {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
     children?: JSX.Element;
 };
 

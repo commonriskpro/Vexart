@@ -47,5 +47,5 @@ export function Checkbox(props: CheckboxProps) {
   // Invoke the render prop once. Its JSX property expressions track the
   // context getters and update the existing visual tree in place; rebuilding
   // this subtree on toggle/focus changes tears down and remounts nodes.
-  return <box width="fit" height="fit">{props.renderCheckbox(context)}</box>
+  return props.renderCheckbox(context)
 }

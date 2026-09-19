@@ -45,8 +45,7 @@ suite("styled VoidButton", () => {
     const dispose = renderScene(root, () => <VoidButton className="custom-btn w-full">Button</VoidButton>)
 
     try {
-      const wrapper = first(root)
-      const visual = firstChild(wrapper)
+      const visual = first(root)
       expect(visual.props.className).toBe("custom-btn w-full")
     } finally {
       dispose()
@@ -58,8 +57,7 @@ suite("styled VoidButton", () => {
     const dispose = renderScene(root, () => <VoidButton>Click</VoidButton>)
 
     try {
-      const wrapper = first(root)
-      const initial = firstChild(wrapper)
+      const initial = first(root)
       const text = firstChild(initial)
       const onPress = initial.props.onPress as () => void
       const hoverStyle = initial.props.hoverStyle as { backgroundColor: unknown }
@@ -73,7 +71,7 @@ suite("styled VoidButton", () => {
       const initialBackground = initial.props.backgroundColor
       onPress()
 
-      const pressed = firstChild(wrapper)
+      const pressed = first(root)
       const pressedActiveStyle = pressed.props.activeStyle as { backgroundColor: unknown }
       expect(pressed).toBe(initial)
       expect(pressedActiveStyle.backgroundColor).toBe(activeStyle.backgroundColor)
@@ -95,34 +93,31 @@ suite("styled VoidButton", () => {
 
     try {
       const container = first(root)
-      const firstWrapper = container.children[0]
-      const secondWrapper = container.children[1]
-      if (!firstWrapper || !secondWrapper) throw new Error("expected two rendered buttons")
-
-      const firstVisual = firstChild(firstWrapper)
-      const secondVisual = firstChild(secondWrapper)
+      const firstVisual = container.children[0]
+      const secondVisual = container.children[1]
+      if (!firstVisual || !secondVisual) throw new Error("expected two rendered buttons")
 
       setFocus("button-a")
       expect(firstVisual.props.borderWidth).toBe(2)
 
       setFocus("button-b")
-      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(container.children[0]).toBe(firstVisual)
       expect(firstVisual.props.borderWidth).toBeUndefined()
       expect(secondVisual.props.borderWidth).toBe(2)
 
       setFocus("button-a")
-      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(container.children[0]).toBe(firstVisual)
       expect(firstVisual.props.borderWidth).toBe(2)
 
       const initialBackground = firstVisual.props.backgroundColor
       const onPress = firstVisual.props.onPress as () => void
       onPress()
       expect(presses).toBe(1)
-      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(container.children[0]).toBe(firstVisual)
       expect(firstVisual.props.backgroundColor).not.toBe(initialBackground)
 
       await new Promise((resolve) => setTimeout(resolve, 120))
-      expect(firstChild(firstWrapper)).toBe(firstVisual)
+      expect(container.children[0]).toBe(firstVisual)
       expect(firstVisual.props.backgroundColor).toBe(initialBackground)
     } finally {
       dispose()

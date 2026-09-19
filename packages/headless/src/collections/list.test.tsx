@@ -125,4 +125,45 @@ suite("List keyboard focus", () => {
       handle.destroy()
     }
   })
+
+  test("dynamic index and selection update when items list shifts", () => {
+    const [items, setItems] = createSignal(["item-b", "item-c"])
+    const [selected, setSelected] = createSignal(0)
+    const contexts: ListItemContext[] = []
+    let lastSelected = -1
+
+    const root = createElement("box")
+    const list = createComponent(ListNode, {
+      get items() { return items() },
+      get selectedIndex() { return selected() },
+      onSelectedChange(idx: number) { lastSelected = idx },
+      renderItem(_item: string, ctx: ListItemContext) {
+        contexts.push(ctx)
+        const node = createElement("box")
+        setProp(node, "onPress", ctx.itemProps.onPress)
+        return node
+      },
+    })
+    insertNode(root, list)
+    const handle = mount(() => root, createTestTerminal())
+
+    try {
+      // Initially: item-b is index 0, selected
+      expect(contexts[0].index).toBe(0)
+      expect(contexts[0].selected).toBe(true)
+
+      // Prepend "item-a" -> "item-b" shifts from index 0 to index 1
+      setItems(["item-a", "item-b", "item-c"])
+      // contexts[0] represents "item-b" which was preserved by <For>
+      expect(contexts[0].index).toBe(1)
+      // If selected is still 0 ("item-a"), "item-b" is no longer selected
+      expect(contexts[0].selected).toBe(false)
+
+      // Pressing on "item-b" should report index 1, not stale index 0
+      contexts[0].itemProps.onPress()
+      expect(lastSelected).toBe(1)
+    } finally {
+      handle.destroy()
+    }
+  })
 })

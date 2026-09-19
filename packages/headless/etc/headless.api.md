@@ -246,6 +246,107 @@ export type DiffTheme = {
     linePadding: number;
 };
 
+// Warning: (ae-forgotten-export) The symbol "DropdownMenuRoot" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const DropdownMenu: typeof DropdownMenuRoot & {
+    Trigger: typeof DropdownMenuTrigger;
+    Content: typeof DropdownMenuContent;
+    Item: typeof DropdownMenuItem;
+    Separator: typeof DropdownMenuSeparator;
+    Label: typeof DropdownMenuLabel;
+};
+
+// @public (undocumented)
+export function DropdownMenuContent(props: DropdownMenuContentProps): JSX.Element;
+
+// @public (undocumented)
+export type DropdownMenuContentProps = {
+    children?: JSX.Element;
+    width?: SizingUnit;
+    minWidth?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    sideOffset?: number;
+    zIndex?: number;
+    backgroundColor?: string | number;
+    borderColor?: string | number;
+    borderWidth?: number;
+    cornerRadius?: number;
+    padding?: number;
+    shadow?: TGEProps["shadow"];
+    scrollY?: boolean;
+};
+
+// @public (undocumented)
+export type DropdownMenuContextValue = {
+    open: () => boolean;
+    setOpen: (open: boolean) => void;
+    toggle: () => void;
+    close: () => void;
+};
+
+// @public (undocumented)
+export function DropdownMenuItem(props: DropdownMenuItemProps): JSX.Element;
+
+// @public (undocumented)
+export type DropdownMenuItemProps = {
+    onSelect?: () => void;
+    disabled?: boolean;
+    destructive?: boolean;
+    variant?: "default" | "destructive";
+    inset?: boolean;
+    children?: JSX.Element;
+    paddingLeft?: number;
+    paddingRight?: number;
+    paddingTop?: number;
+    paddingBottom?: number;
+    gap?: number;
+    cornerRadius?: number;
+    opacity?: number;
+    hoverStyle?: TGEProps["hoverStyle"];
+    focusStyle?: TGEProps["focusStyle"];
+};
+
+// @public (undocumented)
+export function DropdownMenuLabel(props: DropdownMenuLabelProps): JSX.Element;
+
+// @public (undocumented)
+export type DropdownMenuLabelProps = {
+    children?: JSX.Element;
+    paddingTop?: number;
+    paddingBottom?: number;
+    paddingLeft?: number;
+    paddingRight?: number;
+    inset?: boolean;
+};
+
+// @public (undocumented)
+export type DropdownMenuProps = {
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    children?: JSX.Element;
+};
+
+// @public (undocumented)
+export function DropdownMenuSeparator(props?: DropdownMenuSeparatorProps): JSX.Element;
+
+// @public (undocumented)
+export type DropdownMenuSeparatorProps = {
+    backgroundColor?: string | number;
+    paddingTop?: number;
+    paddingBottom?: number;
+};
+
+// @public (undocumented)
+export function DropdownMenuTrigger(props: DropdownMenuTriggerProps): JSX.Element;
+
+// @public (undocumented)
+export type DropdownMenuTriggerProps = {
+    children?: JSX.Element;
+};
+
 // @public (undocumented)
 export type Extmark = {
     id: number;
@@ -998,6 +1099,9 @@ export const useCodeTokens: typeof createCode;
 export const useDiff: typeof createDiff;
 
 // @public (undocumented)
+export function useDropdownMenuContext(): DropdownMenuContextValue;
+
+// @public (undocumented)
 export function useListNavigation(options: ListNavigationOptions): ListNavigationReturn;
 
 // @public (undocumented)
@@ -1035,6 +1139,7 @@ export type VisualCursor = {
 // Warnings were encountered during analysis:
 //
 // <repo>/.api-extractor-temp/packages/headless/src/display/code.d.ts:89:5 - (ae-forgotten-export) The symbol "SizingUnit" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/headless/src/overlays/dropdown-menu.d.ts:51:5 - (ae-forgotten-export) The symbol "TGEProps" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

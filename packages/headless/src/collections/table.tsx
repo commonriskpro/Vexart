@@ -107,16 +107,15 @@ export function Table(props: TableProps) {
       <>
         <For each={props.data}>
           {(row, index) => {
-            const i = index()
             const ctx: TableCellContext = {
-              get selected() { return props.selectedRow === i },
+              get selected() { return props.selectedRow === index() },
               get focused() { return focused() },
-              rowIndex: i,
+              get rowIndex() { return index() },
               rowProps: {
                 onPress: () => {
                   if (disabled()) return
-                  props.onSelectedRowChange?.(i)
-                  props.onRowSelect?.(i, row)
+                  props.onSelectedRowChange?.(index())
+                  props.onRowSelect?.(index(), row)
                 },
               },
             }
@@ -125,7 +124,7 @@ export function Table(props: TableProps) {
                 <For each={props.columns}>
                   {(col) => (
                     <box width={colWidth(col)}>
-                      {props.renderCell(row[col.key], col, i, ctx)}
+                      {props.renderCell(row[col.key], col, index(), ctx)}
                     </box>
                   )}
                 </For>
@@ -133,7 +132,7 @@ export function Table(props: TableProps) {
             )
 
             return props.renderRow
-              ? props.renderRow(cells, i, ctx)
+              ? props.renderRow(cells, index(), ctx)
               : <box direction="row">{cells}</box>
           }}
         </For>

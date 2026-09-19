@@ -47,5 +47,5 @@ export function Switch(props: SwitchProps) {
   // Invoke the render prop once. Its JSX property expressions track the
   // context getters and update the existing visual tree in place; rebuilding
   // this subtree on toggle/focus changes tears down and remounts nodes.
-  return <box width="fit" height="fit">{props.renderSwitch(context)}</box>
+  return props.renderSwitch(context)
 }

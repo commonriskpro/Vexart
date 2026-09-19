@@ -130,4 +130,47 @@ suite("Table keyboard focus", () => {
     }
   })
 
+  test("dynamic rowIndex and selection update when table data shifts", () => {
+    const terminal = createTestTerminal()
+    const itemB = { name: "item-b" }
+    const itemC = { name: "item-c" }
+    const itemA = { name: "item-a" }
+    const [data, setData] = createSignal([itemB, itemC])
+    const [selectedRow, setSelectedRow] = createSignal(0)
+    const cellContexts: any[] = []
+    let lastSelected = -1
+
+    const root = createElement("box")
+    const table = createComponent(TableNode, {
+      columns: [{ key: "name", header: "Name", width: 120 }],
+      get data() { return data() },
+      get selectedRow() { return selectedRow() },
+      onSelectedRowChange(idx: number) { lastSelected = idx },
+      renderCell(value: unknown, _col: unknown, _rowIdx: number, ctx: any) {
+        cellContexts.push(ctx)
+        const c = createElement("text")
+        insertNode(c, createTextNode(String(value)))
+        return c
+      },
+    })
+    insertNode(root, table)
+    const handle = mount(() => root, terminal)
+
+    try {
+      // Initially: item-b is row 0, selected
+      expect(cellContexts[0].rowIndex).toBe(0)
+      expect(cellContexts[0].selected).toBe(true)
+
+      // Prepend item-a -> item-b shifts to index 1
+      setData([itemA, itemB, itemC])
+      expect(cellContexts[0].rowIndex).toBe(1)
+      expect(cellContexts[0].selected).toBe(false)
+
+      // Pressing on item-b should report index 1, not stale index 0
+      cellContexts[0].rowProps.onPress()
+      expect(lastSelected).toBe(1)
+    } finally {
+      handle.destroy()
+    }
+  })
 })

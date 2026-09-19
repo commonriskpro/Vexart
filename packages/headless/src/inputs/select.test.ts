@@ -213,4 +213,101 @@ describe("Select", () => {
       dispose()
     }
   })
+
+  test("Clicking outside plane closes dropdown in render-prop mode", () => {
+    let capturedCtx!: SelectTriggerContext
+    let dispose!: () => void
+    let rawRoot!: unknown
+
+    createRoot((d) => {
+      dispose = d
+      rawRoot = createComponent(Select as any, {
+        options: dummyOptions,
+        focusId: "test-select-outside-click",
+        renderTrigger: (ctx: SelectTriggerContext) => {
+          capturedCtx = ctx
+          return createElement("text")
+        },
+      })
+    })
+
+    try {
+      const rootNode = resolveNode(rawRoot)
+      const triggerBox = rootNode.children[0]
+      // Open the dropdown
+      ;(triggerBox.props.onPress as () => void)()
+      expect(capturedCtx.open).toBe(true)
+
+      // Outside plane should be rendered when open
+      const outsidePlane = rootNode.children.find(
+        (c) => c && (c as TGENode).props?.floating === "root"
+      ) as TGENode | undefined
+      expect(outsidePlane).toBeDefined()
+      expect(outsidePlane!.props.zIndex).toBe(9997)
+      expect(typeof outsidePlane!.props.onPress).toBe("function")
+
+      // Click outside plane
+      ;(outsidePlane!.props.onPress as () => void)()
+
+      // Dropdown should be closed
+      expect(capturedCtx.open).toBe(false)
+    } finally {
+      dispose()
+    }
+  })
+
+  test("Clicking outside plane closes dropdown in compound mode", () => {
+    let dispose!: () => void
+    let triggerNode!: TGENode
+    let contentAccessor!: () => TGENode | null
+    let rawRoot!: unknown
+
+    createRoot((d) => {
+      dispose = d
+      rawRoot = createComponent(Select as any, {
+        focusId: "test-select-outside-compound",
+        get children() {
+          triggerNode = createComponent(Select.Trigger as any, {
+            get children() {
+              return createElement("text")
+            },
+          })
+          contentAccessor = (createComponent as any)(Select.Content as any, {
+            get children() {
+              return createComponent(Select.Item as any, {
+                value: "opt1",
+                get children() {
+                  return createElement("text")
+                },
+              })
+            },
+          }) as () => TGENode | null
+          return [triggerNode, contentAccessor]
+        },
+      })
+    })
+
+    try {
+      const rootNode = resolveNode(rawRoot)
+      // Open dropdown
+      ;(triggerNode.props.onPress as () => void)()
+      expect(contentAccessor()).not.toBeNull()
+
+      // Find outside plane
+      const outsidePlane = rootNode.children.find(
+        (c) => c && (c as TGENode).props?.floating === "root"
+      ) as TGENode | undefined
+      expect(outsidePlane).toBeDefined()
+      expect(outsidePlane!.props.zIndex).toBe(9997)
+      expect(typeof outsidePlane!.props.onPress).toBe("function")
+
+      // Click outside plane
+      ;(outsidePlane!.props.onPress as () => void)()
+
+      // Dropdown should be closed
+      expect(contentAccessor()).toBeNull()
+    } finally {
+      dispose()
+    }
+  })
 })

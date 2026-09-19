@@ -20,6 +20,12 @@ test("vexart public unified API surface", () => {
   expect(typeof vexart.Button).toBe("function")
   expect(typeof vexart.Input).toBe("function")
   expect(typeof vexart.ToggleSwitch).toBe("function")
+  expect(typeof vexart.DropdownMenu).toBe("function")
+  expect(typeof vexart.DropdownMenuTrigger).toBe("function")
+  expect(typeof vexart.DropdownMenuContent).toBe("function")
+  expect(typeof vexart.DropdownMenuItem).toBe("function")
+  expect(typeof vexart.DropdownMenuSeparator).toBe("function")
+  expect(typeof vexart.DropdownMenuLabel).toBe("function")
 
   // Engine hooks
   expect(typeof vexart.useFocus).toBe("function")

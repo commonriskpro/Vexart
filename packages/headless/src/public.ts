@@ -117,6 +117,25 @@ export type {
   DialogCloseProps,
 } from "./overlays/dialog"
 
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+  useDropdownMenuContext,
+} from "./overlays/dropdown-menu"
+export type {
+  DropdownMenuProps,
+  DropdownMenuContextValue,
+  DropdownMenuTriggerProps,
+  DropdownMenuContentProps,
+  DropdownMenuItemProps,
+  DropdownMenuSeparatorProps,
+  DropdownMenuLabelProps,
+} from "./overlays/dropdown-menu"
+
 export { createToaster } from "./overlays/toast"
 export type {
   ToastVariant,

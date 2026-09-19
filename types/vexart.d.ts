@@ -793,6 +793,110 @@ export declare type DragState = {
 declare type DrawCmd = LineCmd | BezierCmd | CircleCmd | RectCmd | PolygonCmd | TextCmd | GlowCmd | ImageCmd | RadialGradientCmd | LinearGradientCmd | NebulaCmd | StarfieldCmd;
 
 /** @public */
+export declare const DropdownMenu: typeof DropdownMenuRoot & {
+    Trigger: typeof DropdownMenuTrigger;
+    Content: typeof DropdownMenuContent;
+    Item: typeof DropdownMenuItem;
+    Separator: typeof DropdownMenuSeparator;
+    Label: typeof DropdownMenuLabel;
+};
+
+/** @public */
+export declare function DropdownMenuContent(props: DropdownMenuContentProps): JSX.Element;
+
+/** @public */
+export declare type DropdownMenuContentProps = {
+    children?: JSX.Element;
+    width?: SizingUnit;
+    minWidth?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    sideOffset?: number;
+    zIndex?: number;
+    backgroundColor?: string | number;
+    borderColor?: string | number;
+    borderWidth?: number;
+    cornerRadius?: number;
+    padding?: number;
+    shadow?: TGEProps["shadow"];
+    scrollY?: boolean;
+};
+
+/** @public */
+export declare type DropdownMenuContextValue = {
+    open: () => boolean;
+    setOpen: (open: boolean) => void;
+    toggle: () => void;
+    close: () => void;
+};
+
+/** @public */
+export declare function DropdownMenuItem(props: DropdownMenuItemProps): JSX.Element;
+
+/** @public */
+export declare type DropdownMenuItemProps = {
+    onSelect?: () => void;
+    disabled?: boolean;
+    destructive?: boolean;
+    variant?: "default" | "destructive";
+    inset?: boolean;
+    children?: JSX.Element;
+    paddingLeft?: number;
+    paddingRight?: number;
+    paddingTop?: number;
+    paddingBottom?: number;
+    gap?: number;
+    cornerRadius?: number;
+    opacity?: number;
+    hoverStyle?: TGEProps["hoverStyle"];
+    focusStyle?: TGEProps["focusStyle"];
+};
+
+/** @public */
+export declare function DropdownMenuLabel(props: DropdownMenuLabelProps): JSX.Element;
+
+/** @public */
+export declare type DropdownMenuLabelProps = {
+    children?: JSX.Element;
+    paddingTop?: number;
+    paddingBottom?: number;
+    paddingLeft?: number;
+    paddingRight?: number;
+    inset?: boolean;
+};
+
+/** @public */
+export declare type DropdownMenuProps = {
+    /** Controlled open state. */
+    open?: boolean;
+    /** Initial open state when uncontrolled. Default: false. */
+    defaultOpen?: boolean;
+    /** Called when open state changes. */
+    onOpenChange?: (open: boolean) => void;
+    children?: JSX.Element;
+};
+
+declare function DropdownMenuRoot(props: DropdownMenuProps): JSX.Element;
+
+/** @public */
+export declare function DropdownMenuSeparator(props?: DropdownMenuSeparatorProps): JSX.Element;
+
+/** @public */
+export declare type DropdownMenuSeparatorProps = {
+    backgroundColor?: string | number;
+    paddingTop?: number;
+    paddingBottom?: number;
+};
+
+/** @public */
+export declare function DropdownMenuTrigger(props: DropdownMenuTriggerProps): JSX.Element;
+
+/** @public */
+export declare type DropdownMenuTriggerProps = {
+    children?: JSX.Element;
+};
+
+/** @public */
 export declare const easing: {
     readonly linear: (t: number) => number;
     readonly easeIn: (t: number) => number;
@@ -3346,6 +3450,9 @@ export declare const useDiff: typeof createDiff;
 export declare function useDrag(opts: DragOptions): DragState;
 
 /** @public */
+export declare function useDropdownMenuContext(): DropdownMenuContextValue;
+
+/** @public */
 export declare function useFocus(opts?: {
     id?: string;
     onKeyDown?: (event: KeyEvent) => void;
@@ -3766,8 +3873,9 @@ export declare type VoidDropdownMenuLabelProps = {
 
 /** @public */
 export declare type VoidDropdownMenuProps = {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
+    open?: boolean;
+    defaultOpen?: boolean;
+    onOpenChange?: (open: boolean) => void;
     children?: JSX.Element;
 };
 

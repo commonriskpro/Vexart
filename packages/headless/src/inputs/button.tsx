@@ -87,5 +87,5 @@ export function Button(props: ButtonProps) {
   // context getters and update the existing visual tree in place; rebuilding
   // this subtree on focus/pressed changes can recursively remount focusable
   // children while focus dispatch is still in progress.
-  return <box width="fit" height="fit">{props.renderButton(context)}</box>
+  return props.renderButton(context)
 }
