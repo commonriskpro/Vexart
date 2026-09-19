@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { createEffect, createRoot } from "solid-js"
 import { getClassNameResolver } from "@vexart/engine/internal"
-import { darkTheme, lightTheme, setTheme } from "@vexart/styled"
+import { darkTheme, lightTheme, setTheme, voidThemeTokenResolver } from "@vexart/styled"
 import {
   CLASS_NAME_UNKNOWN_BEHAVIOR,
   clearClassNameCache,
@@ -11,15 +11,37 @@ import {
   mergeClassNameProps,
   resolveClassName,
 } from "./class-name"
+import { setThemeTokenResolver } from "./theme-resolver"
 
 beforeEach(() => {
+  setThemeTokenResolver(voidThemeTokenResolver)
   setTheme(darkTheme)
   clearClassNameCache()
 })
 
 afterEach(() => {
+  setThemeTokenResolver(voidThemeTokenResolver)
   setTheme(darkTheme)
   clearClassNameCache()
+})
+
+describe("universal fallbacks without resolver", () => {
+  test("resolves default typography, spacing, radii and universal colors when no resolver is registered", () => {
+    setThemeTokenResolver(null)
+    clearClassNameCache()
+
+    const result = resolveClassName("text-sm font-semibold rounded-lg p-4 text-white bg-black border-transparent")
+    expect(result.diagnostics).toEqual([])
+    expect(result.props).toMatchObject({
+      fontSize: 12,
+      fontWeight: 600,
+      cornerRadius: 10,
+      padding: 16,
+      color: "#ffffff",
+      backgroundColor: "#000000",
+      borderColor: "#00000000",
+    })
+  })
 })
 
 describe("resolveClassName", () => {

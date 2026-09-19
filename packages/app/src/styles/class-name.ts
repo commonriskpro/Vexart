@@ -1,6 +1,6 @@
 import { type InteractiveStyleProps } from "@vexart/engine"
-import { setClassNameResolver } from "@vexart/engine/internal"
-import { themeColors, font, radius, shadows, glows, space, weight, getThemeVersion } from "@vexart/styled"
+import { setClassNameResolver, getThemeEpoch } from "@vexart/engine/internal"
+import { getThemeTokenResolver, type ThemeTokenResolver } from "./theme-resolver"
 
 /** @public */
 export const CLASS_NAME_UNKNOWN_BEHAVIOR = {
@@ -41,6 +41,7 @@ export const MAX_CLASS_NAME_CACHE_SIZE = 2048
 
 const cache = new Map<string, ClassNameResolveResult>()
 let lastThemeVersion = -1
+let lastResolver: ThemeTokenResolver | null = null
 
 /**
  * Clear the className resolution cache.
@@ -109,63 +110,63 @@ type MutableStyleProps = VexartStyleProps & {
 
 type StyleTarget = "base" | "hover" | "active" | "focus"
 
-// COLOR_ALIASES reads themeColors lazily so theme switching is reactive.
-// Built as a function so SolidJS tracks the signal reads when resolveClassName
-// is called inside a reactive scope (JSX props).
+const DEFAULT_FONT_SIZES: Record<string, number> = {
+  xs: 10,
+  sm: 12,
+  base: 14,
+  lg: 16,
+  xl: 20,
+  "2xl": 24,
+  "3xl": 30,
+  "4xl": 36,
+}
+
+const DEFAULT_FONT_WEIGHTS: Record<string, number> = {
+  normal: 400,
+  medium: 500,
+  semibold: 600,
+  bold: 700,
+}
+
+const DEFAULT_RADII: Record<string, number> = {
+  none: 0,
+  sm: 6,
+  md: 8,
+  lg: 10,
+  xl: 14,
+  "2xl": 18,
+  full: 9999,
+}
+
+const DEFAULT_SPACE_PX = 1
+
 function getColorAlias(name: string): string | number | undefined {
+  const resolver = getThemeTokenResolver()
+  if (resolver?.getColor) {
+    const resolved = resolver.getColor(name)
+    if (resolved !== undefined) return resolved
+  }
   switch (name) {
-    case "background": return themeColors.background
-    case "foreground": return themeColors.foreground
-    case "card": return themeColors.card
-    case "card-foreground": return themeColors.cardForeground
-    case "popover": return themeColors.popover
-    case "popover-foreground": return themeColors.popoverForeground
-    case "primary": return themeColors.primary
-    case "primary-foreground": return themeColors.primaryForeground
-    case "secondary": return themeColors.secondary
-    case "secondary-foreground": return themeColors.secondaryForeground
-    case "muted": return themeColors.muted
-    case "muted-foreground": return themeColors.mutedForeground
-    case "accent": return themeColors.accent
-    case "accent-foreground": return themeColors.accentForeground
-    case "destructive": return themeColors.destructive
-    case "destructive-foreground": return themeColors.destructiveForeground
-    case "border": return themeColors.border
-    case "input": return themeColors.input
-    case "ring": return themeColors.ring
-    case "transparent": return themeColors.transparent
     case "black": return "#000000"
     case "white": return "#ffffff"
+    case "transparent": return "#00000000"
     default: return undefined
   }
 }
 
-const FONT_ALIASES: Record<string, number> = {
-  xs: font.xs,
-  sm: font.sm,
-  base: font.base,
-  lg: font.lg,
-  xl: font.xl,
-  "2xl": font["2xl"],
-  "3xl": font["3xl"],
-  "4xl": font["4xl"],
+function getFontSize(key: string): number | undefined {
+  const resolver = getThemeTokenResolver()
+  return resolver?.fontSizes?.[key] ?? DEFAULT_FONT_SIZES[key]
 }
 
-const RADIUS_ALIASES: Record<string, number> = {
-  none: 0,
-  sm: radius.sm,
-  md: radius.md,
-  lg: radius.lg,
-  xl: radius.xl,
-  "2xl": radius.xxl,
-  full: radius.full,
+function getFontWeight(key: string): number | undefined {
+  const resolver = getThemeTokenResolver()
+  return resolver?.fontWeights?.[key] ?? DEFAULT_FONT_WEIGHTS[key]
 }
 
-const WEIGHT_ALIASES: Record<string, number> = {
-  normal: weight.normal,
-  medium: weight.medium,
-  semibold: weight.semibold,
-  bold: weight.bold,
+function getRadius(key: string): number | undefined {
+  const resolver = getThemeTokenResolver()
+  return resolver?.radii?.[key] ?? DEFAULT_RADII[key]
 }
 
 const BACKDROP_BLUR_MAP: Record<string, number> = {
@@ -189,7 +190,10 @@ const BORDER_WIDTH_MAP: Record<string, number> = {
 
 function spacingValue(value: string) {
   if (value === "0") return 0
-  if (value === "px") return space.px
+  if (value === "px") {
+    const resolver = getThemeTokenResolver()
+    return resolver?.spacePx ?? DEFAULT_SPACE_PX
+  }
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return undefined
   return Math.round(parsed * 4)
@@ -254,7 +258,7 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
 
   if (token.startsWith("rounded")) {
     const value = token === "rounded" ? "md" : token.slice(8)
-    const resolved = RADIUS_ALIASES[value]
+    const resolved = getRadius(value)
     if (resolved !== undefined) { applyToTarget(props, target, { cornerRadius: resolved }); return null }
   }
   if (token.startsWith("bg-")) {
@@ -270,13 +274,13 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
   }
   if (token.startsWith("text-")) {
     const value = token.slice(5)
-    const size = FONT_ALIASES[value]
+    const size = getFontSize(value)
     const color = getColorAlias(value)
     if (size !== undefined) { props.fontSize = size; return null }
     if (color !== undefined) { props.color = color; return null }
   }
   if (token.startsWith("font-")) {
-    const value = WEIGHT_ALIASES[token.slice(5)]
+    const value = getFontWeight(token.slice(5))
     if (value !== undefined) { props.fontWeight = value; return null }
   }
   if (token.startsWith("opacity-")) {
@@ -286,15 +290,17 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
   if (token.startsWith("shadow")) {
     const value = token === "shadow" ? "md" : token.slice(7)
     if (value === "none") { props.shadow = undefined; return null }
-    const resolved = shadows[value as keyof typeof shadows]
-    if (resolved) { props.shadow = resolved; return null }
+    const resolver = getThemeTokenResolver()
+    const resolved = resolver?.shadows?.[value]
+    if (resolved) { props.shadow = resolved as VexartStyleProps["shadow"]; return null }
   }
 
   // ── Glow (Vexart-specific) ──
   if (token.startsWith("glow-")) {
     const value = token.slice(5)
     if (value === "none") { props.glow = undefined; return null }
-    const resolved = glows[value as keyof typeof glows]
+    const resolver = getThemeTokenResolver()
+    const resolved = resolver?.glows?.[value]
     if (resolved) { applyToTarget(props, target, { glow: resolved } as InteractiveStyleProps); return null }
   }
 
@@ -367,10 +373,12 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
 
 /** @public */
 export function resolveClassName(className: string | undefined | null, options: ClassNameResolveOptions = {}): ClassNameResolveResult {
-  const version = getThemeVersion()
-  if (version !== lastThemeVersion) {
+  const resolver = getThemeTokenResolver()
+  const version = resolver?.getThemeVersion?.() ?? getThemeEpoch()
+  if (version !== lastThemeVersion || resolver !== lastResolver) {
     cache.clear()
     lastThemeVersion = version
+    lastResolver = resolver
   }
 
   if (!className) return { props: {}, diagnostics: [] }

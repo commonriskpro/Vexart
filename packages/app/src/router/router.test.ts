@@ -104,4 +104,39 @@ describe("app router", () => {
 
     expect(restored).toEqual(["projects-list"])
   })
+
+  test("caches keepAlive routes and evicts oldest in LRU order when capacity exceeds 3", () => createRoot((dispose) => {
+    const router = createAppRouter([
+      { path: "/a", component: () => "page:a", keepAlive: true },
+      { path: "/b", component: () => "page:b", keepAlive: true },
+      { path: "/c", component: () => "page:c", keepAlive: true },
+      { path: "/d", component: () => "page:d", keepAlive: true },
+      { path: "/e", component: () => "page:e", keepAlive: true },
+    ], "/a")
+
+    const outlet = RouteOutlet({ router }) as unknown as () => unknown
+    expect(outlet()).toBe("page:a")
+
+    // Navigating to /b caches /a
+    router.push("/b")
+    expect(outlet()).toBe("page:b")
+
+    // Navigating to /c caches /b (cache has: /a, /b)
+    router.push("/c")
+    expect(outlet()).toBe("page:c")
+
+    // Navigating to /d caches /c (cache has: /a, /b, /c)
+    router.push("/d")
+    expect(outlet()).toBe("page:d")
+
+    // Navigating to /e caches /d (cache exceeds 3, oldest /a is evicted, cache has: /b, /c, /d)
+    router.push("/e")
+    expect(outlet()).toBe("page:e")
+
+    // Navigating back to /b restores /b from cache, deactivating /e into cache (cache has: /c, /d, /e)
+    router.push("/b")
+    expect(outlet()).toBe("page:b")
+
+    dispose()
+  }))
 })

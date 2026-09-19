@@ -372,34 +372,27 @@ export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
       element: JSX.Element
       setParams: (p: RouteParams) => void
       dispose: () => void
-      lastAccessed: number
     }
   >()
 
   let activeRoot: ActiveRootState | null = null
 
-  let lastTime = 0
-  function nextTimestamp() {
-    const now = Date.now()
-    lastTime = now > lastTime ? now : lastTime + 1
-    return lastTime
-  }
-
   function deactivateActiveRoot() {
     if (!activeRoot) return
     if (activeRoot.isKeepAlive) {
+      keepAliveCache.delete(activeRoot.key)
       keepAliveCache.set(activeRoot.key, {
         key: activeRoot.key,
         element: activeRoot.element,
         setParams: activeRoot.setParams,
         dispose: activeRoot.dispose,
-        lastAccessed: nextTimestamp(),
       })
       while (keepAliveCache.size > 3) {
-        const oldest = [...keepAliveCache.values()].sort((a, b) => a.lastAccessed - b.lastAccessed)[0]
-        if (oldest) {
-          oldest.dispose()
-          keepAliveCache.delete(oldest.key)
+        const oldestKey = keepAliveCache.keys().next().value
+        if (oldestKey !== undefined) {
+          const oldest = keepAliveCache.get(oldestKey)
+          oldest?.dispose()
+          keepAliveCache.delete(oldestKey)
         } else {
           break
         }
@@ -447,7 +440,6 @@ export function RouteOutlet(props: RouteOutletProps): () => JSX.Element {
     const cached = keepAliveCache.get(routeKey)
     if (cached && match.route.keepAlive) {
       deactivateActiveRoot()
-      cached.lastAccessed = nextTimestamp()
       cached.setParams(match.params)
       keepAliveCache.delete(routeKey)
       activeRoot = {

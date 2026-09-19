@@ -15,7 +15,9 @@
     "vexart": "./src/cli/index.ts"
   },
   "peerDependencies": {
-    "@vexart/engine": "workspace:*",
+    "@vexart/engine": "workspace:*"
+  },
+  "devDependencies": {
     "@vexart/styled": "workspace:*"
   }
 }

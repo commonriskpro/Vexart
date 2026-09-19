@@ -18,10 +18,10 @@
 | **1.2** | **Native / Rust** | `ResourceManager` y `ImageAssetRegistry` desarmados (Completado) | Eliminadas 692 LOC; 3 mutexes reducidos a 1 (`SHARED_PAINT`) | ✅ **Hecho** |
 | **1.3** | **Native / Rust** | 6 pipelines WGPU compilados en arranque que nunca se usan | 40–80 ms retraso en cold-start; ~1.200 LOC | **Media** |
 | **2.3** | **Engine / FFI** | Scratch buffers zero-alloc en `msdfMeasureText` y cache ampliado (2048) (Completado) | Eliminadas 6 alocaciones por llamada y ampliado cache LRU a 2048 | ✅ **Hecho** |
-| **3.2** | **App Framework** | Inversión de capas: Tier 1 `@vexart/app` importa Tier 2 `@vexart/styled` | Acoplamiento indebido de diseño | **Media** |
+| **3.2** | **App Framework** | Inversión de capas entre `@vexart/app` y `@vexart/styled` (`ThemeTokenResolver`) (Completado) | Desacoplamiento arquitectónico de diseño y framework | ✅ **Hecho** |
 | **4.2** | **Headless** | Posicionamiento del thumb vía `transform` y colores reactivos en `ScrollView` (Completado) | Eliminados recálculos de Flexily por frame de scroll y desacoplados colores de tema | ✅ **Hecho** |
 | **4.3** | **Engine Loop** | Delimitación de `layer.damageRect` regional en eventos de scroll (Completado) | Repintado regional habilitado y evitado `markAllDirty` indiscriminado en scroll | ✅ **Hecho** |
-| **3.3** | **App Framework** | `keepAliveCache` ordena arrays enteros al desalojar rutas | Alocaciones menores de GC | **Baja** |
+| **3.3** | **App Framework** | Optimización de `keepAliveCache` en router con Map LRU O(1) (Completado) | Eliminada alocación de arrays y sort() en desalojo de rutas | ✅ **Hecho** |
 | **5.1** | **Packaging** | Dependencia raíz redundante `marked` | Dependencia innecesaria en raíz | **Baja** |
 | **5.2** | **Tooling** | Paquetes fantasma (`pretext`, `opentype.js`) en externals de bundler | Deuda de configuración en `build-dist.ts` | **Baja** |
 
@@ -140,15 +140,38 @@
   4. Preservación del vaciado atómico en `clearClassNameCache()` y ante cambios reactivos de tema (`version !== lastThemeVersion`).
   5. Exportación de `@internal function getClassNameCacheSize(): number` y `MAX_CLASS_NAME_CACHE_SIZE` para testing, métricas y observabilidad.
 
-### Hallazgo 3.2: Inversión de Capas entre `@vexart/app` y `@vexart/styled`
-* **Prioridad:** **Media**
+### Hallazgo 3.2: Inversión de Capas entre `@vexart/app` y `@vexart/styled` (✅ Completado)
+* **Prioridad:** **Media** — *Implementado y Verificado*
 * **Archivos:**
-  * `packages/app/src/styles/class-name.ts:3`
-  * `packages/app/package.json:20`
+  * `packages/app/src/styles/theme-resolver.ts` (`ThemeTokenResolver`, `setThemeTokenResolver`, `getThemeTokenResolver`)
+  * `packages/app/src/styles/class-name.ts`
+  * `packages/app/src/styles/class-name.test.ts`
+  * `packages/app/src/public.ts`
+  * `packages/app/package.json`
+  * `packages/styled/src/theme/theme.ts` (`voidThemeTokenResolver`)
+  * `packages/styled/src/public.ts`
+  * `packages/vexart/src/index.ts`
 * **Problema:**
   `@vexart/app` (Tier 1) importa tokens directamente desde `@vexart/styled` (Tier 2). Esto rompe la regla de arquitectura de capas y acopla el framework a un sistema de diseño particular.
-* **Solución Arquitectónica:**
-  Introducir una interfaz `ThemeTokenResolver` en el framework y permitir que el paquete styled inyecte su resolución de tokens en el arranque.
+* **Solución Arquitectónica Implementada:**
+  1. Se creó la interfaz `ThemeTokenResolver` y las funciones `setThemeTokenResolver` / `getThemeTokenResolver` en `packages/app/src/styles/theme-resolver.ts`.
+  2. Se eliminó la importación directa de `@vexart/styled` en `packages/app/src/styles/class-name.ts` y se definieron fallbacks universales por defecto (Tailwind estándar: fuentes 10–36px, pesos 400–700, radios 0–9999, space 1, colores universales `black`, `white`, `transparent`).
+  3. Para la versión reactiva de tema se utiliza `resolver?.getThemeVersion?.() ?? getThemeEpoch()`, invalidando la caché LRU automáticamente cuando cambia el tema o el resolver.
+  4. En `@vexart/styled` se implementó y exportó `voidThemeTokenResolver` mapeando `themeColors`, `font`, `radius`, `shadows`, `glows`, `weight`, `space.px` y `getThemeVersion`.
+  5. En el barrel unificado `vexart` (`packages/vexart/src/index.ts`), se inyecta automáticamente `setThemeTokenResolver(voidThemeTokenResolver)` en el arranque y se re-exportan todos los tipos y funciones.
+  6. En `packages/app/package.json`, se removió `@vexart/styled` de `peerDependencies` y se movió a `devDependencies` para testing.
+
+### Hallazgo 3.3: `keepAliveCache` Ordena Arrays Enteros al Desalojar Rutas (✅ Completado)
+* **Prioridad:** **Baja** — *Implementado y Verificado*
+* **Archivos:**
+  * `packages/app/src/router/router.tsx`
+  * `packages/app/src/router/router.test.ts`
+* **Problema:**
+  En `RouteOutlet`, al desalojar rutas del `keepAliveCache` (capacidad > 3) se ejecutaba `[...keepAliveCache.values()].sort((a, b) => a.lastAccessed - b.lastAccessed)[0]`. Esto alocaba un nuevo array de objetos y realizaba una ordenación $O(N log N)$ en cada cambio de ruta fuera del límite de capacidad.
+* **Solución Arquitectónica Implementada:**
+  1. Se implementó el patrón Map LRU genuino: al insertar una entrada en `deactivateActiveRoot` se realiza `keepAliveCache.delete(key); keepAliveCache.set(key, entry)`, garantizando que el Map mantenga el orden de recencia de inserción/actualización.
+  2. Al exceder la capacidad (`while (keepAliveCache.size > 3)`), se obtiene la clave más antigua en $O(1)$ sin alocaciones mediante `const oldestKey = keepAliveCache.keys().next().value`, procediendo a `oldest?.dispose(); keepAliveCache.delete(oldestKey)`.
+  3. Se eliminaron el campo `lastAccessed` del tipo de entrada de caché y la función auxiliar `nextTimestamp()`.
 
 ---
 

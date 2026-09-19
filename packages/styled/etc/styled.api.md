@@ -309,7 +309,7 @@ export const theme: {
         readonly semibold: 600;
         readonly bold: 700;
     };
-    readonly shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]>;
+    readonly shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
     readonly glows: Record<"ring" | "destructive" | "success", Glow>;
 };
 
@@ -872,6 +872,40 @@ export type VoidTextareaProps = {
 
 // @public (undocumented)
 export type VoidTheme = typeof theme;
+
+// @public
+export const voidThemeTokenResolver: {
+    getColor(name: string): string | number | undefined;
+    fontSizes: {
+        xs: 10;
+        sm: 12;
+        base: 14;
+        lg: 16;
+        xl: 20;
+        "2xl": 24;
+        "3xl": 30;
+        "4xl": 36;
+    };
+    fontWeights: {
+        normal: 400;
+        medium: 500;
+        semibold: 600;
+        bold: 700;
+    };
+    radii: {
+        none: number;
+        sm: number;
+        md: number;
+        lg: 10;
+        xl: number;
+        "2xl": number;
+        full: 9999;
+    };
+    shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
+    glows: Record<"ring" | "destructive" | "success", Glow>;
+    spacePx: 1;
+    getThemeVersion: Accessor<number>;
+};
 
 // @public (undocumented)
 export type VoidToasterOptions = {

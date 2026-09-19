@@ -24,6 +24,13 @@ export type {
   ClassNameResolveResult,
   VexartStyleProps,
 } from "./styles/class-name"
+export {
+  setThemeTokenResolver,
+  getThemeTokenResolver,
+} from "./styles/theme-resolver"
+export type {
+  ThemeTokenResolver,
+} from "./styles/theme-resolver"
 
 // -- Router ------------------------------------------------------------------
 

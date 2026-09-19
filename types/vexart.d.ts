@@ -1217,6 +1217,12 @@ export { getSelection_2 as getSelection }
 export declare function getTheme(): Required<ThemeDefinition>;
 
 /**
+ * Retrieve the currently registered theme token resolver, or null if none.
+ * @public
+ */
+export declare function getThemeTokenResolver(): ThemeTokenResolver | null;
+
+/**
  * Reactive theme version signal. Increments whenever `setTheme()` is called.
  * @public
  */
@@ -2551,6 +2557,12 @@ export declare function setSelection(sel: TextSelection | null): void;
 /** @public */
 export declare function setTheme(theme: Required<ThemeDefinition>): void;
 
+/**
+ * Register the global theme token resolver for className resolution.
+ * @public
+ */
+export declare function setThemeTokenResolver(resolver: ThemeTokenResolver | null): void;
+
 /** @public */
 export declare type Shadow = {
     x: number;
@@ -3361,7 +3373,7 @@ export declare const theme: {
         readonly semibold: 600;
         readonly bold: 700;
     };
-    readonly shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]>;
+    readonly shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
     readonly glows: Record<"ring" | "destructive" | "success", Glow>;
 };
 
@@ -3372,6 +3384,25 @@ export declare const themeColors: ColorTokens;
 export declare type ThemeDefinition = {
     colors: Partial<ColorTokens>;
 };
+
+/**
+ * Theme token resolver interface and global registry for @vexart/app.
+ *
+ * Allows styled packages (such as @vexart/styled) to inject semantic tokens,
+ * typography scales, radii, shadows, and runtime theme versions into the
+ * className compiler without coupling the framework directly to a specific design system.
+ */
+/** @public */
+export declare interface ThemeTokenResolver {
+    getColor?: (name: string) => string | number | undefined;
+    fontSizes?: Record<string, number>;
+    fontWeights?: Record<string, number>;
+    radii?: Record<string, number>;
+    shadows?: Record<string, unknown>;
+    glows?: Record<string, unknown>;
+    spacePx?: number;
+    getThemeVersion?: () => number;
+}
 
 /** @public */
 declare const TOAST_VARIANT: {
@@ -4203,6 +4234,44 @@ export declare type VoidTextareaProps = {
 
 /** @public */
 export declare type VoidTheme = typeof theme;
+
+/**
+ * Void Design System token resolver implementation for @vexart/app.
+ * Maps themeColors, font, radius, shadows, glows, weight, space.px, and getThemeVersion.
+ * @public
+ */
+export declare const voidThemeTokenResolver: {
+    getColor(name: string): string | number | undefined;
+    fontSizes: {
+        xs: 10;
+        sm: 12;
+        base: 14;
+        lg: 16;
+        xl: 20;
+        "2xl": 24;
+        "3xl": 30;
+        "4xl": 36;
+    };
+    fontWeights: {
+        normal: 400;
+        medium: 500;
+        semibold: 600;
+        bold: 700;
+    };
+    radii: {
+        none: number;
+        sm: number;
+        md: number;
+        lg: 10;
+        xl: number;
+        "2xl": number;
+        full: 9999;
+    };
+    shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
+    glows: Record<"ring" | "destructive" | "success", Glow>;
+    spacePx: 1;
+    getThemeVersion: Accessor<number>;
+};
 
 /** @public */
 export declare type VoidToasterOptions = {

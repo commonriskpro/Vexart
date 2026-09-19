@@ -157,6 +157,9 @@ export type FileSystemRouteManifest = {
     files: FileSystemRouteFile[];
 };
 
+// @public
+export function getThemeTokenResolver(): ThemeTokenResolver | null;
+
 // @public (undocumented)
 export function matchRoute(routes: AppRouteDefinition[], path: string): AppRouteMatch | null;
 
@@ -253,6 +256,29 @@ export function RouterProvider(props: AppRouterProviderProps): JSX.Element;
 
 // @public (undocumented)
 export function runCli(argv?: string[]): Promise<CliResult>;
+
+// @public
+export function setThemeTokenResolver(resolver: ThemeTokenResolver | null): void;
+
+// @public (undocumented)
+export interface ThemeTokenResolver {
+    // (undocumented)
+    fontSizes?: Record<string, number>;
+    // (undocumented)
+    fontWeights?: Record<string, number>;
+    // (undocumented)
+    getColor?: (name: string) => string | number | undefined;
+    // (undocumented)
+    getThemeVersion?: () => number;
+    // (undocumented)
+    glows?: Record<string, unknown>;
+    // (undocumented)
+    radii?: Record<string, number>;
+    // (undocumented)
+    shadows?: Record<string, unknown>;
+    // (undocumented)
+    spacePx?: number;
+}
 
 // @public (undocumented)
 export function useAppTerminal(): Terminal;

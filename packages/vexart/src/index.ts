@@ -19,6 +19,12 @@
  *   - Switch (headless): renamed to ToggleSwitch to avoid SolidJS Switch
  */
 
+import { setThemeTokenResolver } from "@vexart/app"
+import { voidThemeTokenResolver } from "@vexart/styled"
+
+// Initialize default Void theme token resolver in @vexart/app
+setThemeTokenResolver(voidThemeTokenResolver)
+
 // ── App lifecycle & framework ────────────────────────────────────────────────
 
 export {
@@ -50,6 +56,8 @@ export {
   clearClassNameCache,
   createStyles,
   CLASS_NAME_UNKNOWN_BEHAVIOR,
+  setThemeTokenResolver,
+  getThemeTokenResolver,
 } from "@vexart/app"
 export type {
   ClassNameUnknownBehavior,
@@ -57,6 +65,7 @@ export type {
   ClassNameResolveOptions,
   ClassNameResolveResult,
   VexartStyleProps,
+  ThemeTokenResolver,
 } from "@vexart/app"
 
 // ── Primitives & Styling ───────────────────────────────────────────────────
@@ -147,6 +156,7 @@ export {
   setTheme,
   getTheme,
   getThemeVersion,
+  voidThemeTokenResolver,
   // Typography
   H1, H2, H3, H4, P, Lead, Large, Small, Muted,
   // Void design system components (styled)

@@ -27,6 +27,7 @@ export {
   setTheme,
   getTheme,
   getThemeVersion,
+  voidThemeTokenResolver,
 } from "./theme/theme"
 export type { ColorTokens, ThemeDefinition } from "./theme/theme"
 
