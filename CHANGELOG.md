@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.0-beta.10](https://github.com/commonriskpro/Vexart/compare/v1.0.0-beta.9...v1.0.0-beta.10) (2026-09-19)
+
+
+### Performance Improvements
+
+* **engine:** delegate image scaling to gpu samplers and remove cpu lru cache ([dbaa9ec](https://github.com/commonriskpro/Vexart/commit/dbaa9ec69bb34783e2f55d4dd0298128c4e3bd78))
+* **engine:** implement bounded flexily node pool with state sanitization on detach ([fee2212](https://github.com/commonriskpro/Vexart/commit/fee2212067a4e33a2ba42d991d159d6a96dfc037))
+* **engine:** optimize TGENode shape into slim core with lazy bags for transforms and heuristics ([571f5cc](https://github.com/commonriskpro/Vexart/commit/571f5ccb0f0ed6a7add4bbd4262d40c96725171c))
+* **engine:** unify image transform and corner-radius shader pass ([64be15b](https://github.com/commonriskpro/Vexart/commit/64be15b1f5c3b5672fa45f5a6cc11482141c76b5))
+* **native:** eliminate CPU loops with GPU unpremultiply compute pass for regional readback ([69ba6b1](https://github.com/commonriskpro/Vexart/commit/69ba6b1a7148342baa36041220811e691d1382ff))
+* **native:** implement async double-buffered readback to eliminate synchronous wait stalls ([03ee90c](https://github.com/commonriskpro/Vexart/commit/03ee90c31d3b474c95c554080ef0e3dbfbe94ba1))
+* **native:** implement recyclable texture pool for offscreen targets ([b9e7498](https://github.com/commonriskpro/Vexart/commit/b9e7498809cd25c2a43e91043e5f865b6de7c844))
+
 ## [1.0.0-beta.9](https://github.com/commonriskpro/Vexart/compare/v0.11.0-beta.9...v1.0.0-beta.9) (2026-09-18)
 
 
