@@ -1346,8 +1346,10 @@ export declare type TGEProps = {
     marginX?: number;
     marginY?: number;
     gap?: number;
-    alignX?: "left" | "right" | "center" | "space-between";
-    alignY?: "top" | "bottom" | "center" | "space-between";
+    rowGap?: number;
+    columnGap?: number;
+    alignX?: "left" | "right" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+    alignY?: "top" | "bottom" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
     /** @beta */
     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
     /** @beta */
@@ -1384,6 +1386,8 @@ export declare type TGEProps = {
     flexGrow?: number;
     /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
     flexShrink?: number;
+    /** Flex initial main-axis size before free space distribution. */
+    flexBasis?: number | string;
     backgroundColor?: string | number;
     cornerRadius?: number;
     /** CSS-friendly alias for cornerRadius (Decision 1) */
@@ -1393,6 +1397,8 @@ export declare type TGEProps = {
     borderWidth?: number;
     /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
     opacity?: number;
+    /** Declarative visual property transition duration in ms (`true` = 150ms, `false` or `0` disables). */
+    transition?: boolean | number;
     layer?: boolean;
     /** Declarative interaction state used by engine-level drag/compositor policies. */
     interactionMode?: InteractionMode;
@@ -1494,8 +1500,16 @@ export declare type TGEProps = {
     onMouseMove?: (event: NodeMouseEvent) => void;
     /** Fires when pointer enters this node's bounds. */
     onMouseOver?: (event: NodeMouseEvent) => void;
+    /** Web-standard alias for onMouseOver. */
+    onMouseEnter?: (event: NodeMouseEvent) => void;
+    /** Vexart hover alias for onMouseOver. */
+    onHoverEnter?: (event: NodeMouseEvent) => void;
     /** Fires when pointer leaves this node's bounds. */
     onMouseOut?: (event: NodeMouseEvent) => void;
+    /** Web-standard alias for onMouseOut. */
+    onMouseLeave?: (event: NodeMouseEvent) => void;
+    /** Vexart hover alias for onMouseOut. */
+    onHoverLeave?: (event: NodeMouseEvent) => void;
     /** Transform configuration: translate, rotate, scale, skew, perspective. */
     transform?: TransformConfig;
     /** Transform origin point. Default: "center". */
@@ -1507,6 +1521,10 @@ export declare type TGEProps = {
     className?: string;
     /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
     style?: Partial<TGEProps>;
+    /** Lowest-precedence default style layer (overridden by className, style, and direct props). */
+    defaultStyle?: Partial<TGEProps>;
+    /** When true, className overrides direct component props (used by styled components). */
+    classOverride?: boolean;
     /** Image source — file path or URL. Decoded async on first render. */
     src?: string;
     /** How the image fits within its layout box. Default: "contain". */

@@ -79,6 +79,18 @@ export type TextLayoutOptions = {
   fontFamily?: string
   fontWeight?: number
   fontStyle?: string
+  lineHeight?: number
+}
+
+/** Resolve CSS multiplier or pixel lineHeight to integer pixels. */
+export function resolveLineHeightPx(fontSize: number, rawLineHeight?: number): number {
+  if (rawLineHeight === undefined || !Number.isFinite(rawLineHeight) || rawLineHeight <= 0) {
+    return Math.ceil(fontSize * 1.2)
+  }
+  if (rawLineHeight <= 4) {
+    return Math.ceil(fontSize * rawLineHeight)
+  }
+  return Math.ceil(rawLineHeight)
 }
 
 const MAX_CACHE = 2048
@@ -342,16 +354,34 @@ const nativeMeasureCache = createLRUCache<string, { width: number; height: numbe
 let _nativeAvailable: boolean | null = null
 
 function nativeMeasure(text: string, fontSize: number, families: string[] = ["sans-serif"], weight = 400, italic = false): { width: number; height: number } {
+  return nativeMeasureWithLineHeight(text, fontSize, families, weight, italic)
+}
+
+function nativeMeasureWithLineHeight(
+  text: string,
+  fontSize: number,
+  families: string[] = ["sans-serif"],
+  weight = 400,
+  italic = false,
+  rawLineHeight?: number,
+): { width: number; height: number } {
   if (_nativeAvailable === null) _nativeAvailable = isMsdfFontAvailable()
   if (!_nativeAvailable) throw new Error("Vexart native font system unavailable — libvexart.dylib not loaded")
 
   const famKey = families.length === 1 ? families[0] : families.join(",")
   const key = `native\0${fontSize}\0${weight}\0${italic ? 1 : 0}\0${famKey}\0${text}`
-  return nativeMeasureCache.get(key, () => {
+  const measured = nativeMeasureCache.get(key, () => {
     const result = msdfMeasureText(text, families, fontSize, weight, italic)
     if (!result) throw new Error(`Vexart font measurement failed for families=[${families}] size=${fontSize}`)
     return { width: Math.ceil(result.width), height: Math.max(Math.ceil(result.height), Math.ceil(fontSize * 1.2)) }
   })
+  if (rawLineHeight === undefined) return measured
+  const lineHeightPx = resolveLineHeightPx(fontSize, rawLineHeight)
+  let lineCount = 1
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) lineCount++
+  }
+  return { width: measured.width, height: lineCount * lineHeightPx }
 }
 
 /**
@@ -371,6 +401,7 @@ export function measureForLayout(
   overrideFontFamily?: string,
   overrideFontWeight?: number,
   overrideFontStyle?: string,
+  overrideLineHeight?: number,
 ): { width: number; height: number } {
   const desc = getFont(fontId)
   // fontId 0 renders via MSDF as "sans-serif" — must measure with the same family.
@@ -381,7 +412,7 @@ export function measureForLayout(
   const italic = overrideFontStyle === "italic" ? true : (overrideFontStyle !== undefined ? false : desc.style === "italic")
   const effectiveSize = fontSize || desc.size
 
-  return nativeMeasure(text, effectiveSize, families, weight, italic)
+  return nativeMeasureWithLineHeight(text, effectiveSize, families, weight, italic, overrideLineHeight)
 }
 
 /**
@@ -411,12 +442,15 @@ export function measureTextConstrained(
     fontStyle: overrideFontStyle ?? options.fontStyle,
   }
   const source = normalizeTextForLayout(text, effectiveOptions.whiteSpace)
-  if (maxWidth <= 0) return measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
+  if (maxWidth <= 0) {
+    return measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle, effectiveOptions.lineHeight)
+  }
 
-  const lineHeight = Math.ceil(fontSize * 1.2)
+  const effectiveSize = fontSize || getFont(fontId).size
+  const lineHeight = resolveLineHeightPx(effectiveSize, effectiveOptions.lineHeight)
 
   // Fast path: if natural width fits, no wrapping needed
-  const natural = measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle)
+  const natural = measureForLayout(source, fontId, fontSize, overrideFontFamily, overrideFontWeight, overrideFontStyle, effectiveOptions.lineHeight)
   const needsLineLayout = effectiveOptions.whiteSpace === "pre-wrap" || source.includes("\n")
   if (!needsLineLayout && natural.width <= maxWidth) return natural
 

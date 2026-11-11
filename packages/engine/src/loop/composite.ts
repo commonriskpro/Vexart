@@ -264,10 +264,14 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
   let bgSlot: LayerSlot
   let contentSlots: LayerSlot[]
   let slotBoundaryByKey: Map<string, LayerBoundary>
+  let needsGraphRebuild = false
 
   if (!layoutDirty && s.lastLayerBuckets) {
+    needsGraphRebuild = syncVisualPropsToOps(s.lastLayerBuckets, s.nodeRefById, s.boxNodes, s.dirty)
+  }
+
+  if (!layoutDirty && s.lastLayerBuckets && !needsGraphRebuild) {
     layerBuckets = s.lastLayerBuckets
-    syncVisualPropsToOps(layerBuckets, s.nodeRefById)
     boundaries = s.lastBoundaries ?? []
     bgSlot = s.lastBgSlot!
     contentSlots = s.lastContentSlots ?? []
@@ -283,15 +287,20 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     }
   } else {
     resetWalkAccumulators(s)
-    s.layoutAdapter.beginLayout()
-    if (profile) profile.walkTreeMs = 0
-    const layoutComputeStart = profile ? performance.now() : 0
-    s.layoutAdapter.calculateRoots(s.root._flexNode)
-    if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
-    const layoutError = s.layoutAdapter.getLastLayoutError()
-    if (layoutError) {
-      if (profile) profile.layoutMs = performance.now() - layoutStart
-      return
+    if (layoutDirty) {
+      s.layoutAdapter.beginLayout()
+      if (profile) profile.walkTreeMs = 0
+      const layoutComputeStart = profile ? performance.now() : 0
+      s.layoutAdapter.calculateRoots(s.root._flexNode)
+      if (profile) profile.layoutComputeMs = performance.now() - layoutComputeStart
+      const layoutError = s.layoutAdapter.getLastLayoutError()
+      if (layoutError) {
+        if (profile) profile.layoutMs = performance.now() - layoutStart
+        return
+      }
+    } else if (profile) {
+      profile.walkTreeMs = 0
+      profile.layoutComputeMs = 0
     }
 
     // Single unified DFS traversal pass
@@ -326,13 +335,18 @@ export function compositeFrame(s: CompositeFrameState, profile?: FrameProfile) {
     if (profile) profile.layoutMs = performance.now() - layoutStart
 
     // Step 4: Clear layout dirty flags
-    clearLayoutDirty()
-    if (typeof (s.dirty as any).clearLayoutDirty === "function") {
-      (s.dirty as any).clearLayoutDirty()
+    if (layoutDirty) {
+      clearLayoutDirty()
+      if (typeof (s.dirty as any).clearLayoutDirty === "function") {
+        (s.dirty as any).clearLayoutDirty()
+      }
     }
 
     layerBuckets = traversalResult.layerBuckets
     s.lastLayerBuckets = layerBuckets
+    if (syncVisualPropsToOps(layerBuckets, s.nodeRefById, s.boxNodes, s.dirty)) {
+      s.dirty.markDirty()
+    }
 
     const totalOps = layerBuckets.reduce((sum, b) => sum + b.ops.length, 0)
     if (totalOps === 0) {

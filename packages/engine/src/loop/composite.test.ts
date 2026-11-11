@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { CMD, type ImageRenderOp } from "../ffi/render-graph"
+import {
+  CMD,
+  type BorderRenderOp,
+  type EffectRenderOp,
+  type ImageRenderOp,
+  type RectangleRenderOp,
+  type TextRenderOp,
+} from "../ffi/render-graph"
 import { registerAnimationDescriptor, markLayerBacked, deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createLayerStore, type Layer } from "../ffi/layers"
 import { createNode, insertChild, parseSizing, ensureImageExtra, type TGENode } from "../ffi/node"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
+import { DIRTY_KIND } from "../reconciler/dirty"
+import { registerNodeFocusable, resetFocus, setFocus } from "../reconciler/focus"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import {
   bindLayerDirtyStore,
@@ -14,6 +23,7 @@ import {
 } from "./composite"
 
 function cleanupCompositorState() {
+  resetFocus()
   resetFrameTracking()
   for (const descriptor of allDescriptors()) {
     deregisterAllDescriptors(descriptor.nodeId)
@@ -213,6 +223,20 @@ function createTestCompositeState(root: TGENode, layoutAdapter: ReturnType<typeo
 
   let dirtyCount = 1
   let dirtyVersion = 1
+  let layoutDirty = true
+  const dirty = {
+    markDirty() { dirtyCount++; dirtyVersion++ },
+    markAllDirty() {},
+    clearDirty(expectedVersion?: number) {
+      if (expectedVersion !== undefined && expectedVersion !== dirtyVersion) return
+      dirtyCount = 0
+    },
+    dirtyVersion: () => dirtyVersion,
+    dirtyCount: () => dirtyCount,
+    isLayoutDirty: () => layoutDirty,
+    markLayoutDirty() { layoutDirty = true },
+    clearLayoutDirty() { layoutDirty = false },
+  }
 
   return {
     root,
@@ -269,16 +293,7 @@ function createTestCompositeState(root: TGENode, layoutAdapter: ReturnType<typeo
       removeLayer() {},
       layerCount: () => layerCache.size,
     },
-    dirty: {
-      markDirty() { dirtyCount++; dirtyVersion++ },
-      markAllDirty() {},
-      clearDirty(expectedVersion?: number) {
-        if (expectedVersion !== undefined && expectedVersion !== dirtyVersion) return
-        dirtyCount = 0
-      },
-      dirtyVersion: () => dirtyVersion,
-      dirtyCount: () => dirtyCount,
-    },
+    dirty,
     backendOverride: {
       name: "test-backend",
       paint() {
@@ -552,5 +567,338 @@ describe("compositeFrame interaction sequencing (Decision 9 Option A)", () => {
     expect(layer?.dirty).toBe(true)
 
     unbindLayerDirtyStore(state.layerCache)
+  })
+})
+
+describe("compositeFrame layout-clean visual sync & declarative transitions", () => {
+  test("syncs EffectRenderOp fields and inherited TextRenderOp color in-place with layoutPasses === 0", () => {
+    const layout = createVexartLayoutCtx()
+    layout.setDimensions(200, 120)
+
+    const root = createNode("root")
+    root.props.width = 200
+    root.props.height = 120
+    root._widthSizing = parseSizing(200)
+    root._heightSizing = parseSizing(120)
+    syncAllLayoutProps(root)
+
+    const box = createNode("box")
+    box.props.width = 120
+    box.props.height = 40
+    box.props.backgroundColor = "#112233ff"
+    box.props.color = "#eeeeeeff"
+    box.props.cornerRadius = 6
+    box.props.opacity = 0.8
+    box.props.backdropBlur = 8
+    box.props.shadow = { x: 0, y: 2, blur: 4, color: "#00000080" }
+    box.props.glow = { radius: 4, color: "#ff0000ff", intensity: 50 }
+    box.props.gradient = { type: "linear", from: "#111111ff", to: "#333333ff", angle: 90 }
+    box._widthSizing = parseSizing(120)
+    box._heightSizing = parseSizing(40)
+    syncAllLayoutProps(box)
+    insertChild(root, box)
+
+    const label = createNode("text")
+    label.text = "Hello"
+    label._widthSizing = parseSizing(80)
+    label._heightSizing = parseSizing(20)
+    syncAllLayoutProps(label)
+    insertChild(box, label)
+
+    const state = createTestCompositeState(root, layout)
+    const layer = state.layerCache.get("bg")!
+    state.layerCache.set("root", layer)
+    bindLayerDirtyStore(state.layerCache)
+
+    try {
+      compositeFrame(state)
+
+      const rootBucket = state.lastLayerBuckets?.[0]
+      const effectOp = rootBucket?.ops.find((op) => op.kind === "effect" && op.nodeId === box.id) as EffectRenderOp
+      const textOp = rootBucket?.ops.find((op) => op.kind === "text" && op.nodeId === label.id) as TextRenderOp
+      expect(effectOp).toBeDefined()
+      expect(textOp).toBeDefined()
+      expect(textOp.color).toBe(0xeeeeeeff)
+
+      const initialEffectStateId = effectOp.effectStateId
+      let layoutPasses = 0
+      const originalBeginLayout = layout.beginLayout.bind(layout)
+      layout.beginLayout = () => {
+        layoutPasses++
+        return originalBeginLayout()
+      }
+
+      layer.dirty = false
+      layer.damageRect = null
+
+      box.props.backgroundColor = "#445566ff"
+      box.props.color = "#ffaa00ff"
+      box.props.cornerRadius = 12
+      box.props.opacity = 0.5
+      box.props.backdropBlur = 16
+      box.props.shadow = { x: 2, y: 4, blur: 8, color: "#110022aa" }
+      box.props.glow = { radius: 10, color: "#00ff00ff", intensity: 90 }
+      box.props.gradient = undefined
+      box._vpDirty = true
+      label._vpDirty = true
+      state.dirty.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId: box.id })
+
+      compositeFrame(state)
+
+      expect(layoutPasses).toBe(0)
+      expect(state.lastLayerBuckets?.[0]?.ops.find((op) => op.kind === "effect" && op.nodeId === box.id)).toBe(effectOp)
+      expect(effectOp.color).toBe(0x445566ff)
+      expect(effectOp.cornerRadius).toBe(12)
+      expect(effectOp.effect.gradient).toBeUndefined()
+      expect(effectOp.effect.shadow).toEqual({ x: 2, y: 4, blur: 8, color: 0x110022aa })
+      expect(effectOp.effect.glow).toEqual({ radius: 10, color: 0x00ff00ff, intensity: 90 })
+      expect(effectOp.effect.opacity).toBe(0.5)
+      expect(effectOp.effect.backdropBlur).toBe(16)
+      expect(effectOp.backdrop?.filterParams.blur).toBe(16)
+      expect(effectOp.effectStateId).not.toBe(initialEffectStateId)
+      expect(textOp.color).toBe(0xffaa00ff)
+      expect(layer.dirty).toBe(true)
+    } finally {
+      unbindLayerDirtyStore(state.layerCache)
+    }
+  })
+
+  test("rebuilds render graph without running layout when focusStyle adds/removes glow or borderColor is added", () => {
+    const layout = createVexartLayoutCtx()
+    layout.setDimensions(200, 120)
+
+    const root = createNode("root")
+    root.props.width = 200
+    root.props.height = 120
+    root._widthSizing = parseSizing(200)
+    root._heightSizing = parseSizing(120)
+    syncAllLayoutProps(root)
+
+    const focusBox = createNode("box")
+    focusBox.props.width = 100
+    focusBox.props.height = 40
+    focusBox.props.focusable = true
+    focusBox.props.focusId = "focus-card"
+    focusBox.props.backgroundColor = "#222222ff"
+    focusBox.props.focusStyle = { glow: { radius: 8, color: "#33aaffff" } }
+    focusBox._widthSizing = parseSizing(100)
+    focusBox._heightSizing = parseSizing(40)
+    syncAllLayoutProps(focusBox)
+    insertChild(root, focusBox)
+    const unregisterFocus = registerNodeFocusable(focusBox)
+    setFocus(null)
+
+    const borderBox = createNode("box")
+    borderBox.props.width = 80
+    borderBox.props.height = 30
+    borderBox.props.backgroundColor = "#333333ff"
+    borderBox._widthSizing = parseSizing(80)
+    borderBox._heightSizing = parseSizing(30)
+    syncAllLayoutProps(borderBox)
+    insertChild(root, borderBox)
+
+    const state = createTestCompositeState(root, layout)
+
+    try {
+      compositeFrame(state)
+
+      let ops = state.lastLayerBuckets?.[0]?.ops ?? []
+      expect(ops.find((op) => op.kind === "rectangle" && op.nodeId === focusBox.id)).toBeDefined()
+      expect(ops.find((op) => op.kind === "effect" && op.nodeId === focusBox.id)).toBeUndefined()
+      expect(ops.find((op) => op.kind === "border" && op.nodeId === borderBox.id)).toBeUndefined()
+
+      let layoutPasses = 0
+      const originalBeginLayout = layout.beginLayout.bind(layout)
+      layout.beginLayout = () => {
+        layoutPasses++
+        return originalBeginLayout()
+      }
+
+      // 1. Focus adds glow -> topology rebuilds rectangle -> effect with layoutPasses === 0
+      setFocus("focus-card")
+      state.dirty.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId: focusBox.id })
+      compositeFrame(state)
+
+      expect(layoutPasses).toBe(0)
+      ops = state.lastLayerBuckets?.[0]?.ops ?? []
+      const focusedEffect = ops.find((op) => op.kind === "effect" && op.nodeId === focusBox.id) as EffectRenderOp
+      expect(focusedEffect).toBeDefined()
+      expect(focusedEffect.effect.glow).toEqual({ radius: 8, color: 0x33aaffff, intensity: 80 })
+
+      // 2. Blur removes glow -> topology rebuilds effect -> rectangle with layoutPasses === 0
+      setFocus(null)
+      state.dirty.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId: focusBox.id })
+      compositeFrame(state)
+
+      expect(layoutPasses).toBe(0)
+      ops = state.lastLayerBuckets?.[0]?.ops ?? []
+      expect(ops.find((op) => op.kind === "effect" && op.nodeId === focusBox.id)).toBeUndefined()
+      expect(ops.find((op) => op.kind === "rectangle" && op.nodeId === focusBox.id)).toBeDefined()
+
+      // 3. Adding borderWidth + borderColor via NODE_VISUAL rebuilds graph to emit BorderRenderOp with layoutPasses === 0
+      borderBox.props.borderWidth = 2
+      borderBox.props.borderColor = "#ff0000ff"
+      borderBox._vpDirty = true
+      state.dirty.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId: borderBox.id })
+      compositeFrame(state)
+
+      expect(layoutPasses).toBe(0)
+      ops = state.lastLayerBuckets?.[0]?.ops ?? []
+      const borderOp = ops.find((op) => op.kind === "border" && op.nodeId === borderBox.id) as BorderRenderOp
+      expect(borderOp).toBeDefined()
+      expect(borderOp.borderWidth).toBe(2)
+      expect(borderOp.color).toBe(0xff0000ff)
+    } finally {
+      unregisterFocus()
+    }
+  })
+
+  test("declarative transition snaps at 0/undefined, preserves RGB across alpha, retargets mid-flight, and clears dirtyCount on completion", async () => {
+    const layout = createVexartLayoutCtx()
+    layout.setDimensions(200, 120)
+
+    const root = createNode("root")
+    root.props.width = 200
+    root.props.height = 120
+    root._widthSizing = parseSizing(200)
+    root._heightSizing = parseSizing(120)
+    syncAllLayoutProps(root)
+
+    const box = createNode("box")
+    box.props.width = 100
+    box.props.height = 40
+    box.props.backgroundColor = "#112233ff"
+    box._widthSizing = parseSizing(100)
+    box._heightSizing = parseSizing(40)
+    syncAllLayoutProps(box)
+    insertChild(root, box)
+
+    const state = createTestCompositeState(root, layout)
+    compositeFrame(state)
+
+    // 1. Immediate snap when transition is undefined or 0
+    box.props.backgroundColor = "#445566ff"
+    box._vpDirty = true
+    state.dirty.markDirty()
+    compositeFrame(state)
+    let rectOp = state.lastLayerBuckets?.[0]?.ops.find((op) => op.kind === "rectangle" && op.nodeId === box.id) as RectangleRenderOp
+    expect(rectOp.color).toBe(0x445566ff)
+    expect(state.dirty.dirtyCount()).toBe(0)
+
+    box.props.transition = 0
+    box.props.backgroundColor = "#00000000"
+    box._vpDirty = true
+    state.dirty.markDirty()
+    compositeFrame(state)
+    expect(rectOp.color).toBe(0)
+    expect(state.dirty.dirtyCount()).toBe(0)
+
+    // 2. Transparent -> opaque preserves target RGB (no dark fringe) & animates progressively
+    box.props.transition = 120
+    box.props.backgroundColor = "#00000000"
+    box._vpDirty = true
+    state.dirty.markDirty()
+    compositeFrame(state)
+
+    box.props.backgroundColor = "#ff0000ff"
+    box._vpDirty = true
+    state.dirty.markDirty()
+    compositeFrame(state)
+    expect(state.dirty.dirtyCount()).toBeGreaterThan(0)
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    compositeFrame(state)
+    rectOp = state.lastLayerBuckets?.[0]?.ops.find((op) => op.kind === "rectangle" && op.nodeId === box.id) as RectangleRenderOp
+    const midColor = rectOp.color >>> 0
+    const midR = (midColor >>> 24) & 0xff
+    const midG = (midColor >>> 16) & 0xff
+    const midB = (midColor >>> 8) & 0xff
+    const midA = midColor & 0xff
+    expect(midR).toBe(255)
+    expect(midG).toBe(0)
+    expect(midB).toBe(0)
+    expect(midA).toBeGreaterThan(0)
+    expect(midA).toBeLessThan(255)
+    expect(state.dirty.dirtyCount()).toBeGreaterThan(0)
+
+    // 3. Mid-flight retargeting interpolates from current mid-flight red -> green
+    box.props.backgroundColor = "#00ff00ff"
+    box._vpDirty = true
+    state.dirty.markDirty()
+    compositeFrame(state)
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    compositeFrame(state)
+    const retargetColor = rectOp.color >>> 0
+    expect((retargetColor >>> 24) & 0xff).toBeLessThan(255)
+    expect((retargetColor >>> 16) & 0xff).toBeGreaterThan(0)
+
+    // Wait for completion -> snaps to final green and clears dirtyCount to 0
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    compositeFrame(state)
+    expect(rectOp.color).toBe(0x00ff00ff)
+    expect(state.dirty.dirtyCount()).toBe(0)
+  })
+
+  test("opacity fade-out to undefined keeps EffectRenderOp during transition then downgrades to rectangle with layoutPasses === 0", async () => {
+    const layout = createVexartLayoutCtx()
+    layout.setDimensions(200, 120)
+
+    const root = createNode("root")
+    root.props.width = 200
+    root.props.height = 120
+    root._widthSizing = parseSizing(200)
+    root._heightSizing = parseSizing(120)
+    syncAllLayoutProps(root)
+
+    const box = createNode("box")
+    box.props.width = 100
+    box.props.height = 40
+    box.props.backgroundColor = "#224466ff"
+    box.props.opacity = 0.2
+    box.props.transition = 80
+    box._widthSizing = parseSizing(100)
+    box._heightSizing = parseSizing(40)
+    syncAllLayoutProps(box)
+    insertChild(root, box)
+
+    const state = createTestCompositeState(root, layout)
+    compositeFrame(state)
+
+    let ops = state.lastLayerBuckets?.[0]?.ops ?? []
+    const initialEffect = ops.find((op) => op.kind === "effect" && op.nodeId === box.id) as EffectRenderOp
+    expect(initialEffect).toBeDefined()
+    expect(initialEffect.effect.opacity).toBe(0.2)
+
+    let layoutPasses = 0
+    const originalBeginLayout = layout.beginLayout.bind(layout)
+    layout.beginLayout = () => {
+      layoutPasses++
+      return originalBeginLayout()
+    }
+
+    delete box.props.opacity
+    box._vpDirty = true
+    state.dirty.markDirty({ kind: DIRTY_KIND.NODE_VISUAL, nodeId: box.id })
+    compositeFrame(state)
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    compositeFrame(state)
+    ops = state.lastLayerBuckets?.[0]?.ops ?? []
+    const midEffect = ops.find((op) => op.kind === "effect" && op.nodeId === box.id) as EffectRenderOp
+    expect(midEffect).toBeDefined()
+    expect(midEffect.effect.opacity).toBeGreaterThan(0.2)
+    expect(midEffect.effect.opacity).toBeLessThan(1)
+    expect(layoutPasses).toBe(0)
+    expect(state.dirty.dirtyCount()).toBeGreaterThan(0)
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    compositeFrame(state)
+    ops = state.lastLayerBuckets?.[0]?.ops ?? []
+    expect(ops.find((op) => op.kind === "effect" && op.nodeId === box.id)).toBeUndefined()
+    const downgradedRect = ops.find((op) => op.kind === "rectangle" && op.nodeId === box.id) as RectangleRenderOp
+    expect(downgradedRect).toBeDefined()
+    expect(downgradedRect.color).toBe(0x224466ff)
+    expect(layoutPasses).toBe(0)
+    expect(state.dirty.dirtyCount()).toBe(0)
   })
 })

@@ -221,7 +221,7 @@ describe("WalkTreeState shape", () => {
   })
 })
 
-describe("raw text inside <box> warning (DEF-07)", () => {
+describe("raw text inside <box>", () => {
   test("<text> element inside <box> does NOT trigger a warning", () => {
     const layout = createVexartLayoutCtx()
     layout.init(300, 200)
@@ -263,7 +263,7 @@ describe("raw text inside <box> warning (DEF-07)", () => {
     }
   })
 
-  test("warns once when raw text is placed directly inside <box>", () => {
+  test("allows raw text directly inside <box> without warning", () => {
     const layout = createVexartLayoutCtx()
     layout.init(300, 200)
     layout.beginLayout()
@@ -294,13 +294,12 @@ describe("raw text inside <box> warning (DEF-07)", () => {
 
     try {
       walkTree(boxNode, state)
-      expect(warnings.length).toBe(1)
-      expect(warnings[0]).toContain('[Vexart] Warning: Raw text string "Raw unstyled text in a box"')
+      expect(warnings.length).toBe(0)
+      expect(state.textNodes).toContain(textNode)
 
-      // Second walk should NOT warn again for the same node id
       state.nodeCount.value = 0
       walkTree(boxNode, state)
-      expect(warnings.length).toBe(1)
+      expect(warnings.length).toBe(0)
     } finally {
       console.warn = originalWarn
       layout.destroy()

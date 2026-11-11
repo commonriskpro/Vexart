@@ -16,6 +16,7 @@ import {
   resolveProps,
   ensureImageExtra,
   ensureCanvasExtra,
+  syncResolvedLayout,
 } from "../ffi/node"
 import { createTextFlexNode } from "../ffi/flex-sync"
 import { CanvasContext, hashCanvasDisplayList, serializeCanvasDisplayList } from "../ffi/canvas"
@@ -78,8 +79,6 @@ export type WalkTreeState = {
 }
 
 const AUTO_LAYER_MIN_AREA = 64 * 64
-
-const warnedRawTextNodes = new Set<number>()
 
 let autoLayerCount = 0
 
@@ -160,6 +159,9 @@ export function walkTree(
   state.nodeRefById.set(node.id, node)
 
   // Resolve props once per node — used by all code paths below
+  if (node.props.className !== node._syncedClassName || node.props.defaultStyle !== node._syncedDefaultStyle) {
+    syncResolvedLayout(node)
+  }
   const props = resolveProps(node)
   const isolatesSubtree = node.kind !== "text" && node.children.length > 0 && (
     props.filter !== undefined
@@ -223,13 +225,6 @@ export function walkTree(
   if (node.kind === "text") {
     const content = node.text || collectText(node)
     if (!content) return
-
-    if (node.parent && node.parent.kind === "box" && node.text.length > 0 && process.env.NODE_ENV !== "production") {
-      if (!warnedRawTextNodes.has(node.id)) {
-        warnedRawTextNodes.add(node.id)
-        console.warn(`[Vexart] Warning: Raw text string "${content.slice(0, 30)}" placed directly inside <box>. Wrap text in <text>...</text> to ensure proper typography and layout.`)
-      }
-    }
 
     createTextFlexNode(node)
     layout.setCurrentFlexNode(node._flexNode)

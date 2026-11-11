@@ -32,10 +32,15 @@ type BoxIntrinsicProps = TGEProps & {
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
   // Mouse events (focusable, onPress, onKeyDown inherited from VexartProps)
+  onClick?: TGEProps["onClick"]
   onMouseDown?: (evt: NodeMouseEvent) => void
   onMouseUp?: (evt: NodeMouseEvent) => void
   onMouseOver?: (evt: NodeMouseEvent) => void
+  onMouseEnter?: (evt: NodeMouseEvent) => void
+  onHoverEnter?: (evt: NodeMouseEvent) => void
   onMouseOut?: (evt: NodeMouseEvent) => void
+  onMouseLeave?: (evt: NodeMouseEvent) => void
+  onHoverLeave?: (evt: NodeMouseEvent) => void
   onMouseMove?: (evt: NodeMouseEvent) => void
   focusStyle?: {
     backgroundColor?: ColorValue
@@ -50,6 +55,7 @@ type BoxIntrinsicProps = TGEProps & {
   }
   // Effects
   opacity?: number
+  transition?: boolean | number
   backdropBrightness?: number
   backdropContrast?: number
   backdropSaturate?: number
@@ -106,7 +112,21 @@ declare module "solid-js" {
   namespace JSX {
     interface IntrinsicElements {
       box: BoxIntrinsicProps
+      div: BoxIntrinsicProps
+      section: BoxIntrinsicProps
+      header: BoxIntrinsicProps
+      footer: BoxIntrinsicProps
+      main: BoxIntrinsicProps
+      nav: BoxIntrinsicProps
+      button: BoxIntrinsicProps
       text: TextIntrinsicProps
+      span: TextIntrinsicProps
+      p: TextIntrinsicProps
+      h1: TextIntrinsicProps
+      h2: TextIntrinsicProps
+      h3: TextIntrinsicProps
+      h4: TextIntrinsicProps
+      label: TextIntrinsicProps
       image: ImgIntrinsicProps
       img: ImgIntrinsicProps
       canvas: CanvasIntrinsicProps

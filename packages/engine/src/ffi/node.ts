@@ -13,8 +13,9 @@
  */
 
 import { releaseNodeImage } from "./native-image-assets"
-import { Node, FLEX_DIRECTION_ROW, FLEX_DIRECTION_COLUMN } from "flexily"
-import { createTextFlexNode, syncAllLayoutProps } from "./flex-sync"
+import { Node, FLEX_DIRECTION_ROW, FLEX_DIRECTION_COLUMN, GUTTER_COLUMN, GUTTER_ROW, EDGE_ALL } from "flexily"
+import { createTextFlexNode, isLayoutProp, isTextLayoutProp, syncAllLayoutProps } from "./flex-sync"
+import { syncDirection, syncPadding, syncMargin, syncGap, syncAlign } from "./flex-sync-style"
 import {
   acquireFlexNode,
   clearFlexNodePool,
@@ -28,8 +29,14 @@ import {
   INTERACTION_MODE,
   SIZING,
   TGE_NODE_KIND,
+  clearColorCache,
+  getClassNameResolver,
+  getColorCacheSize,
+  parseColor,
+  resolveProps,
 } from "./node-types"
 import type {
+  ClassNameResolver,
   CornerRadii,
   FilterConfig,
   GlowConfig,
@@ -62,6 +69,11 @@ export {
   INTERACTION_MODE,
   SIZING,
   TGE_NODE_KIND,
+  bumpThemeEpoch,
+  getClassNameResolver,
+  getThemeEpoch,
+  resolveProps,
+  setClassNameResolver,
 } from "./node-types"
 export {
   acquireFlexNode,
@@ -70,6 +82,7 @@ export {
   releaseFlexNode,
 } from "./flex-pool"
 export type {
+  ClassNameResolver,
   CornerRadii,
   FilterConfig,
   GlowConfig,
@@ -107,25 +120,6 @@ export function createPressEvent(): PressEvent {
 
 let nextNodeId = 1
 
-/** @public */
-export type ClassNameResolver = (className: string) => Partial<TGEProps>
-
-let globalClassNameResolver: ClassNameResolver | null = null
-export function setClassNameResolver(resolver: ClassNameResolver | null) {
-  globalClassNameResolver = resolver
-}
-export function getClassNameResolver(): ClassNameResolver | null {
-  return globalClassNameResolver
-}
-
-let currentThemeEpoch = 0
-export function bumpThemeEpoch() {
-  currentThemeEpoch++
-}
-export function getThemeEpoch(): number {
-  return currentThemeEpoch
-}
-
 /** Retained scene graph node implementation with prototype accessors for lazy extras. */
 export class TGENodeImpl implements TGENode {
   kind: TGENodeKind
@@ -157,6 +151,11 @@ export class TGENodeImpl implements TGENode {
   declare _imageExtra?: NodeImageExtra | null
   declare _canvasExtra?: NodeCanvasExtra | null
   declare _styleKeys?: Set<string>
+  declare _classLayoutKeys?: Set<string>
+  declare _defaultLayoutKeys?: Set<string>
+  declare _prevLayoutKeys?: Set<string>
+  declare _syncedClassName?: string
+  declare _syncedDefaultStyle?: Partial<TGEProps>
   declare _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
   declare _rawInteractionMode?: InteractionMode
 
@@ -279,70 +278,213 @@ export function ensureCanvasExtra(node: TGENode): NodeCanvasExtra {
   return node._canvasExtra
 }
 
-/**
- * Resolve effective props:
- *   1. Cache check: node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch
- *   2. Merge className via globalClassNameResolver
- *   3. Merge style prop (direct props override style)
- *   4. Deep-merge hoverStyle/activeStyle/focusStyle
- *   5. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow, onClick→onPress
- *   6. Merge interactive states when active
- */
-/** @public */
-export function resolveProps(node: TGENode): TGEProps {
-  if (node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch) return node._vp
-  const base = node.props
-  const out: TGEProps = {} as TGEProps
+function isMirrorableLayoutKey(key: string): boolean {
+  if (key === "hoverStyle" || key === "activeStyle" || key === "focusStyle") return false
+  return isLayoutProp(key) || isTextLayoutProp(key) || key === "rowGap" || key === "columnGap" || key === "focusable"
+}
 
-  // Layer 1: className + style + props (single object, 3 assigns max)
-  if (base.className && globalClassNameResolver) {
-    const classProps = globalClassNameResolver(base.className)
-    Object.assign(out, classProps)
-    if (base.style) Object.assign(out, base.style)
-    Object.assign(out, base)
-    // Merge interactive styles in place (1 alloc each instead of nested mergeInteractive)
-    if (classProps.hoverStyle || base.style?.hoverStyle || base.hoverStyle) {
-      out.hoverStyle = Object.assign({}, classProps.hoverStyle, base.style?.hoverStyle, base.hoverStyle)
+/** Sync Flexily properties handled outside the core flex-sync module (flexBasis, rowGap, columnGap). */
+export function syncExtendedFlexProps(node: TGENode): void {
+  const flex = node._flexNode
+  if (!flex || node.kind === "text") return
+  const props = resolveProps(node)
+
+  const basis = props.flexBasis
+  if (basis === undefined || basis === "auto") {
+    flex.setFlexBasisAuto()
+  } else if (typeof basis === "number") {
+    if (Number.isFinite(basis)) flex.setFlexBasis(basis)
+  } else if (typeof basis === "string") {
+    if (basis.endsWith("%")) {
+      const pct = parseFloat(basis)
+      if (Number.isFinite(pct)) flex.setFlexBasisPercent(pct)
+    } else if (basis.endsWith("px")) {
+      const px = parseFloat(basis)
+      if (Number.isFinite(px)) flex.setFlexBasis(px)
+    } else {
+      const parsed = Number(basis)
+      if (Number.isFinite(parsed)) flex.setFlexBasis(parsed)
     }
-    if (classProps.focusStyle || base.style?.focusStyle || base.focusStyle) {
-      out.focusStyle = Object.assign({}, classProps.focusStyle, base.style?.focusStyle, base.focusStyle)
-    }
-    if (classProps.activeStyle || base.style?.activeStyle || base.activeStyle) {
-      out.activeStyle = Object.assign({}, classProps.activeStyle, base.style?.activeStyle, base.activeStyle)
-    }
-  } else if (base.style) {
-    Object.assign(out, base.style, base)
-    if (base.style.hoverStyle || base.hoverStyle) {
-      out.hoverStyle = Object.assign({}, base.style.hoverStyle, base.hoverStyle)
-    }
-    if (base.style.focusStyle || base.focusStyle) {
-      out.focusStyle = Object.assign({}, base.style.focusStyle, base.focusStyle)
-    }
-    if (base.style.activeStyle || base.activeStyle) {
-      out.activeStyle = Object.assign({}, base.style.activeStyle, base.activeStyle)
-    }
-  } else {
-    Object.assign(out, base)
   }
 
-  // Resolve aliases in place (zero allocations)
-  if (out.borderRadius !== undefined && out.cornerRadius === undefined) out.cornerRadius = out.borderRadius
-  if (out.boxShadow !== undefined && out.shadow === undefined) out.shadow = out.boxShadow
-  if (out.onClick !== undefined && out.onPress === undefined) out.onPress = out.onClick
+  if (props.layout !== "grid") {
+    if (props.columnGap !== undefined || props.rowGap !== undefined) {
+      flex.setGap(GUTTER_COLUMN, props.columnGap ?? props.gap ?? 0)
+      flex.setGap(GUTTER_ROW, props.rowGap ?? props.gap ?? 0)
+    }
+  }
+}
 
-  // Merge active interactive states in place
-  if (node._hovered && out.hoverStyle) Object.assign(out, out.hoverStyle)
-  if (node._focused && out.focusStyle) Object.assign(out, out.focusStyle)
-  if (node._active && out.activeStyle) Object.assign(out, out.activeStyle)
+function resetFlexProperty(node: TGENode, flex: Node, key: string): void {
+  const base = node.props
+  switch (key) {
+    case "width":
+      if (base.width !== undefined) {
+        node._widthSizing = parseSizing(base.width)
+      } else {
+        node._widthSizing = null
+        flex.setWidthAuto()
+      }
+      break
+    case "height":
+      if (base.height !== undefined) {
+        node._heightSizing = parseSizing(base.height)
+      } else {
+        node._heightSizing = null
+        flex.setHeightAuto()
+      }
+      break
+    case "padding":
+    case "paddingLeft":
+    case "paddingRight":
+    case "paddingTop":
+    case "paddingBottom":
+    case "paddingX":
+    case "paddingY":
+      syncPadding(flex, base)
+      break
+    case "margin":
+    case "marginLeft":
+    case "marginRight":
+    case "marginTop":
+    case "marginBottom":
+    case "marginX":
+    case "marginY":
+      syncMargin(flex, base)
+      break
+    case "gap":
+      syncGap(flex, base.gap)
+      break
+    case "columnGap":
+    case "rowGap":
+      flex.setGap(GUTTER_COLUMN, base.columnGap ?? base.gap ?? 0)
+      flex.setGap(GUTTER_ROW, base.rowGap ?? base.gap ?? 0)
+      break
+    case "direction":
+    case "flexDirection":
+      syncDirection(flex, base)
+      break
+    case "alignX":
+    case "alignY":
+    case "justifyContent":
+    case "alignItems":
+      syncAlign(flex, base)
+      break
+    case "flexGrow":
+      flex.setFlexGrow(base.flexGrow ?? 0)
+      break
+    case "flexShrink":
+      flex.setFlexShrink(base.flexShrink ?? 0)
+      break
+    case "flexBasis":
+      if (base.flexBasis === undefined || base.flexBasis === "auto") {
+        flex.setFlexBasisAuto()
+      } else if (typeof base.flexBasis === "number") {
+        flex.setFlexBasis(base.flexBasis)
+      }
+      break
+  }
+}
 
-  // Re-resolve aliases if interactive styles introduced them
-  if (out.borderRadius !== undefined && out.cornerRadius === undefined) out.cornerRadius = out.borderRadius
-  if (out.boxShadow !== undefined && out.shadow === undefined) out.shadow = out.boxShadow
+/**
+ * Mirror resolved layout props from defaultStyle and className onto node.props
+ * (without overriding style or explicit direct props) and synchronize Flexily.
+ */
+export function syncResolvedLayout(node: TGENode): void {
+  const base = node.props as Record<string, unknown>
+  const prevDefaultSynced = node._syncedDefaultStyle as Record<string, unknown> | undefined
 
-  node._vp = out
-  node._vpDirty = false
-  node._vpEpoch = currentThemeEpoch
-  return out
+  if (node._defaultLayoutKeys) {
+    for (const key of node._defaultLayoutKeys) {
+      if (!node._styleKeys?.has(key) && base[key] === prevDefaultSynced?.[key]) {
+        delete base[key]
+      }
+    }
+  }
+  if (node._classLayoutKeys) {
+    for (const key of node._classLayoutKeys) {
+      if (!node._styleKeys?.has(key)) {
+        delete base[key]
+      }
+    }
+  }
+
+  node._vpDirty = true
+  const resolved = resolveProps(node) as Record<string, unknown>
+  const resolver = getClassNameResolver()
+  const classProps = base.className && resolver
+    ? (resolver(base.className as string) as Record<string, unknown>)
+    : undefined
+  const defaultProps = base.defaultStyle as Record<string, unknown> | undefined
+
+  const nextClassKeys = new Set<string>()
+  const nextDefaultKeys = new Set<string>()
+
+  for (const key of Object.keys(resolved)) {
+    if (!isMirrorableLayoutKey(key)) continue
+    if (base[key] !== undefined && !base.classOverride) continue
+    const val = resolved[key]
+    if (val === undefined) continue
+    if (resolved.layout === "grid" && (key === "direction" || key === "alignX" || key === "alignY") && classProps?.[key] === undefined) {
+      continue
+    }
+    if (!base.classOverride) {
+      base[key] = val
+    }
+    if (classProps && classProps[key] !== undefined) {
+      nextClassKeys.add(key)
+    } else if (defaultProps && defaultProps[key] !== undefined) {
+      nextDefaultKeys.add(key)
+    }
+  }
+
+  node._classLayoutKeys = nextClassKeys.size > 0 ? nextClassKeys : undefined
+  node._defaultLayoutKeys = nextDefaultKeys.size > 0 ? nextDefaultKeys : undefined
+  node._syncedClassName = base.className as string | undefined
+  node._syncedDefaultStyle = base.defaultStyle as Partial<TGEProps> | undefined
+
+  const flex = node._flexNode
+  const currentLayoutKeys = new Set<string>()
+  for (const key of Object.keys(resolved)) {
+    if (isLayoutProp(key) && resolved[key] !== undefined) {
+      currentLayoutKeys.add(key)
+    }
+  }
+
+  if (flex && node._prevLayoutKeys && node.kind !== "text") {
+    for (const prevKey of node._prevLayoutKeys) {
+      if (!currentLayoutKeys.has(prevKey)) {
+        resetFlexProperty(node, flex, prevKey)
+      }
+    }
+  }
+  node._prevLayoutKeys = currentLayoutKeys
+
+  node._widthSizing = parseSizing(resolved.width as number | string | undefined)
+  node._heightSizing = parseSizing(resolved.height as number | string | undefined)
+  node._vpDirty = true
+
+  syncAllLayoutProps(node)
+  syncExtendedFlexProps(node)
+
+  // Ensure interactive border widths introduced via className/defaultStyle reserve space in Flexily
+  if (flex && node.kind !== "text") {
+    const rProps = resolved as TGEProps
+    const maxInteractiveBw = Math.max(
+      rProps.focusStyle?.borderWidth ?? 0,
+      rProps.hoverStyle?.borderWidth ?? 0,
+      rProps.activeStyle?.borderWidth ?? 0,
+    )
+    if (maxInteractiveBw > (rProps.borderWidth ?? 0) && rProps.borderLeft === undefined && rProps.borderRight === undefined && rProps.borderTop === undefined && rProps.borderBottom === undefined) {
+      flex.setBorder(EDGE_ALL, maxInteractiveBw)
+    }
+  }
+
+  if (node.kind === "box") {
+    for (const child of node.children) {
+      if (child.kind === "text") child._flexNode?.markDirty()
+    }
+  }
 }
 
 export function createTextNode(text: string): TGENode {
@@ -403,6 +545,7 @@ function ensureFlexSubtree(node: TGENode): void {
   // Re-apply the complete snapshot after recreation.  This includes Grid
   // item placement, which depends on the current TGE parent profile.
   syncAllLayoutProps(node)
+  syncExtendedFlexProps(node)
   // flex-sync caches item snapshots by TGE node. A removed node gets a new
   // native Node, so restore the current item snapshot on that new instance
   // instead of allowing the cache to skip the first write.
@@ -473,6 +616,7 @@ function insertFlexChild(parent: TGENode, child: TGENode, index: number): void {
   if (nativeParent && nativeParent !== parentFlex) nativeParent.removeChild(childFlex)
   parentFlex.insertChild(childFlex, index)
   syncAllLayoutProps(child)
+  syncExtendedFlexProps(child)
 }
 
 /** @public */
@@ -529,6 +673,7 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
       adjustFocusableAncestors(parent, child._focusableCount)
       setSubtreeDestroyed(child, false)
       syncAllLayoutProps(parent)
+      syncExtendedFlexProps(parent)
       return
     }
   }
@@ -538,6 +683,7 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
   adjustFocusableAncestors(parent, child._focusableCount)
   setSubtreeDestroyed(child, false)
   syncAllLayoutProps(parent)
+  syncExtendedFlexProps(parent)
 }
 
 /** @public */
@@ -546,6 +692,7 @@ export function removeChild(parent: TGENode, child: TGENode) {
   freeFlexSubtree(child)
   setSubtreeDestroyed(child, true)
   syncAllLayoutProps(parent)
+  syncExtendedFlexProps(parent)
 }
 
 function freeFlexSubtree(node: TGENode) {
@@ -573,61 +720,7 @@ export function adjustFocusableAncestors(node: TGENode | null, delta: number) {
 
 // ── Color parsing ──
 
-const MAX_COLOR_CACHE_SIZE = 512
-const _colorCache = new Map<string, number>()
-
-export function getColorCacheSize(): number {
-  return _colorCache.size
-}
-
-export function clearColorCache(): void {
-  _colorCache.clear()
-}
-
-/** @public */
-export function parseColor(value: string | number | undefined): number {
-  if (value === undefined) return 0
-  if (typeof value === "number") return value >>> 0
-  const cached = _colorCache.get(value)
-  if (cached !== undefined) {
-    _colorCache.delete(value)
-    _colorCache.set(value, cached)
-    return cached
-  }
-  // "#rgb", "#rgba", "#rrggbb", or "#rrggbbaa" (with or without #)
-  const hex = value.startsWith("#") ? value.slice(1) : value
-  let result = 0
-  if (hex.length === 3) {
-    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
-      const r = parseInt(hex[0], 16) * 17
-      const g = parseInt(hex[1], 16) * 17
-      const b = parseInt(hex[2], 16) * 17
-      result = ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0
-    }
-  } else if (hex.length === 4) {
-    if (/^[0-9a-fA-F]{4}$/.test(hex)) {
-      const r = parseInt(hex[0], 16) * 17
-      const g = parseInt(hex[1], 16) * 17
-      const b = parseInt(hex[2], 16) * 17
-      const a = parseInt(hex[3], 16) * 17
-      result = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
-    }
-  } else if (hex.length === 6) {
-    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
-      result = ((parseInt(hex, 16) << 8) | 0xff) >>> 0
-    }
-  } else if (hex.length === 8) {
-    if (/^[0-9a-fA-F]{8}$/.test(hex)) {
-      result = (parseInt(hex, 16)) >>> 0
-    }
-  }
-  if (_colorCache.size >= MAX_COLOR_CACHE_SIZE) {
-    const oldest = _colorCache.keys().next().value
-    if (oldest !== undefined) _colorCache.delete(oldest)
-  }
-  _colorCache.set(value, result)
-  return result
-}
+export { clearColorCache, getColorCacheSize, parseColor }
 
 // ── Sizing parsing ──
 

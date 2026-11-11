@@ -318,7 +318,7 @@ pub unsafe extern "C" fn vexart_font_render_batch(
             );
 
             for (line_idx, line) in text_layout.lines.iter().enumerate() {
-                let baseline_y = y + line_idx as f32 * line_height + ascender * scale;
+                let baseline_y = (y + line_idx as f32 * line_height + ascender * scale).round();
                 let mut pen_x = x;
 
                 for ch in line.text.chars() {

@@ -10,7 +10,7 @@
  */
 
 import type { TGENode } from "../ffi/node"
-import { createPressEvent } from "../ffi/node"
+import { createPressEvent, resolveProps } from "../ffi/node"
 import { focusedId, setFocusedId, getNodeFocusId } from "../reconciler/focus"
 import { buildNodeMouseEvent, getEffectivePosition, isFullyOutsideScrollViewport, isPointInsideScrollViewports } from "../reconciler/hit-test"
 import { isInteractiveNode } from "./predicates"
@@ -160,15 +160,16 @@ function clearOffscreenInteractiveState(
     if (scrollParent.props.scrollX || scrollParent.props.scrollY) {
       if (fullyOutsideViewport) {
         let changed = false
+        const props = resolveProps(node)
         if (node._hovered) {
           node._hovered = false
           node._vpDirty = true
-          if (node.props.hoverStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
+          if (props.hoverStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
         }
         if (node._active) {
           node._active = false
           node._vpDirty = true
-          if (node.props.activeStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
+          if (props.activeStyle) { changed = true; bag.onNodeVisualChanged?.(node) }
         }
         return { skip: true, changed }
       }
@@ -209,12 +210,13 @@ function dispatchPress(clickTarget: TGENode) {
   const event = createPressEvent()
   let target: TGENode | null = clickTarget
   while (target && !event.propagationStopped) {
-    if (target.props.focusable) {
+    const props = resolveProps(target)
+    if (props.focusable) {
       const fid = getNodeFocusId(target)
       if (fid) setFocusedId(fid)
     }
-    if (target.props.onPress) target.props.onPress(event)
-    else if (target.props.onClick) target.props.onClick(event)
+    if (props.onPress) props.onPress(event)
+    else if (props.onClick) props.onClick(event)
     target = target.parent
   }
 }
@@ -229,13 +231,14 @@ function syncFocusStateAfterClick(
   if (newFocusId === previousFocusId) return false
   let changed = false
   for (const node of bag.rectNodes) {
-    if (!node.props.focusable) continue
+    const props = resolveProps(node)
+    if (!props.focusable) continue
     const nodeFocusId = getNodeFocusId(node)
     const isFocused = nodeFocusId !== undefined && nodeFocusId === newFocusId
     if (node._focused !== isFocused) {
       node._focused = isFocused
       node._vpDirty = true
-      if (node.props.focusStyle) {
+      if (props.focusStyle) {
         bag.onNodeVisualChanged?.(node)
         changed = true
       }
@@ -274,7 +277,8 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
   let hoveredPressTarget: TGENode | null = null
 
   for (const node of paintOrderedRectNodes) {
-    if (!isInteractiveNode(node.props)) continue
+    const props = resolveProps(node)
+    if (!isInteractiveNode(props)) continue
 
     // Skip off-screen nodes inside scroll containers
     const offscreen = clearOffscreenInteractiveState(node, bag)
@@ -284,44 +288,46 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
     const isCaptured = captureNode === node
     const isOver = hitTestNode(node, bag.pointerX, bag.pointerY, isCaptured, bag.scrollOffsets)
     const isDown = isOver && bag.pointerDown
-    if (isOver && (node.props.onPress || node.props.onClick || node.props.focusable)) hoveredPressTarget = node
+    if (isOver && (props.onPress || props.onClick || props.focusable)) hoveredPressTarget = node
 
     // Dispatch mouse enter/leave
     if (node._hovered !== isOver) {
-      if (isOver && node.props.onMouseOver) node.props.onMouseOver(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
-      if (!isOver && node.props.onMouseOut) node.props.onMouseOut(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
+      const onEnter = props.onMouseOver ?? props.onMouseEnter ?? props.onHoverEnter
+      const onLeave = props.onMouseOut ?? props.onMouseLeave ?? props.onHoverLeave
+      if (isOver && onEnter) onEnter(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
+      if (!isOver && onLeave) onLeave(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
       node._hovered = isOver
       node._vpDirty = true
-      if (node.props.hoverStyle) { bag.onNodeVisualChanged?.(node); changed = true }
+      if (props.hoverStyle) { bag.onNodeVisualChanged?.(node); changed = true }
     }
 
     // Dispatch mousedown/mouseup on edges
     if (isOver && justPressed) {
       pressedThisFrame = node
       bag.pressOriginSet = true
-      if (node.props.onMouseDown) node.props.onMouseDown(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
+      if (props.onMouseDown) props.onMouseDown(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
     }
-    if (isOver && justReleased && node.props.onMouseUp) node.props.onMouseUp(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
+    if (isOver && justReleased && props.onMouseUp) props.onMouseUp(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
 
     // Dispatch mousemove while hovered
-    if (isOver && bag.pointerDirty && node.props.onMouseMove) node.props.onMouseMove(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
+    if (isOver && bag.pointerDirty && props.onMouseMove) props.onMouseMove(buildNodeMouseEvent(node, bag.pointerX, bag.pointerY))
 
     // Update active state
     if (node._active !== isDown) {
       node._active = isDown
       node._vpDirty = true
-      if (node.props.activeStyle) { bag.onNodeVisualChanged?.(node); changed = true }
+      if (props.activeStyle) { bag.onNodeVisualChanged?.(node); changed = true }
     }
     if (isDown) newActiveNode = node
 
     // Bridge focus system
-    if (node.props.focusable) {
+    if (props.focusable) {
       const nodeFocusId = getNodeFocusId(node)
       const isFocused = nodeFocusId !== undefined && nodeFocusId === currentFocusId
       if (node._focused !== isFocused) {
         node._focused = isFocused
         node._vpDirty = true
-        if (node.props.focusStyle) { bag.onNodeVisualChanged?.(node); changed = true }
+        if (props.focusStyle) { bag.onNodeVisualChanged?.(node); changed = true }
       }
     }
   }

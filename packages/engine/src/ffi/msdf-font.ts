@@ -259,7 +259,7 @@ export function msdfLayoutMeasure(
     famBuf = _defaultFamBuf
     famLen = _defaultFamBuf.byteLength
   } else {
-    const famStr = families.length === 1 ? families[0] : families.join(" ")
+    const famStr = families.length === 1 ? families[0] : families.join("\0")
     const maxFamBytes = famStr.length * 3
     if (maxFamBytes > _famScratchBuf.byteLength) {
       let newCap = _famScratchBuf.byteLength * 2

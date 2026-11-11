@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { FLEX_DIRECTION_COLUMN } from "flexily"
 import {
   createNode,
   createTextNode,
@@ -17,6 +18,13 @@ import {
   bumpThemeEpoch,
   getThemeEpoch,
 } from "../ffi/node"
+import { createTextFlexNode, getGridSyncDiagnostics, syncAllLayoutProps } from "../ffi/flex-sync"
+import { createElement, insertNode, setProp } from "./reconciler"
+import { focusedId, getNodeFocusId, resetFocus } from "./focus"
+import { createVexartLayoutCtx } from "../loop/layout-adapter"
+import { updateInteractiveStates, type InteractiveStatesBag } from "../loop/layout"
+import { traverseFrame } from "../loop/pipeline-traverse"
+import { walkTree, type WalkTreeState } from "../loop/walk-tree"
 // Constants mirror layout adapter values for parser compatibility.
 const SIZING = { FIT: 0, GROW: 1, PERCENT: 2, FIXED: 3 } as const
 const DIRECTION = { LEFT_TO_RIGHT: 0, TOP_TO_BOTTOM: 1 } as const
@@ -414,11 +422,52 @@ describe("resolveProps aliases", () => {
     resolved.onPress!()
     expect(which).toBe("press")
   })
+
+  test("onMouseEnter/onHoverEnter resolve to onMouseOver and onMouseLeave/onHoverLeave to onMouseOut", () => {
+    const n1 = createNode("box")
+    let entered = 0
+    let left = 0
+    n1.props = {
+      onMouseEnter: () => { entered++ },
+      onMouseLeave: () => { left++ },
+    }
+    const r1 = resolveProps(n1)
+    expect(r1.onMouseOver).toBeDefined()
+    expect(r1.onMouseOut).toBeDefined()
+    r1.onMouseOver!({ x: 0, y: 0, nodeX: 0, nodeY: 0, width: 10, height: 10 })
+    r1.onMouseOut!({ x: 0, y: 0, nodeX: 0, nodeY: 0, width: 10, height: 10 })
+    expect(entered).toBe(1)
+    expect(left).toBe(1)
+
+    const n2 = createNode("box")
+    let hoverEntered = 0
+    let hoverLeft = 0
+    n2.props = {
+      onHoverEnter: () => { hoverEntered++ },
+      onHoverLeave: () => { hoverLeft++ },
+    }
+    const r2 = resolveProps(n2)
+    r2.onMouseOver!({ x: 0, y: 0, nodeX: 0, nodeY: 0, width: 10, height: 10 })
+    r2.onMouseOut!({ x: 0, y: 0, nodeX: 0, nodeY: 0, width: 10, height: 10 })
+    expect(hoverEntered).toBe(1)
+    expect(hoverLeft).toBe(1)
+
+    const n3 = createNode("box")
+    let winner = ""
+    n3.props = {
+      onMouseOver: () => { winner = "over" },
+      onMouseEnter: () => { winner = "enter" },
+      onHoverEnter: () => { winner = "hover" },
+    }
+    resolveProps(n3).onMouseOver!({ x: 0, y: 0, nodeX: 0, nodeY: 0, width: 10, height: 10 })
+    expect(winner).toBe("over")
+  })
 })
 
 describe("className resolution and theme epoch caching", () => {
   afterEach(() => {
     setClassNameResolver(null)
+    resetFocus()
   })
 
   test("resolves className via globalClassNameResolver", () => {
@@ -512,5 +561,244 @@ describe("className resolution and theme epoch caching", () => {
     expect(hovered.opacity).toBe(0.9)
     expect(hovered.cornerRadius).toBe(8)
     expect(hovered.backgroundColor).toBe(0x111111ff)
+  })
+
+  test("defaultStyle has lowest precedence (defaultStyle < className < style < directProps)", () => {
+    setClassNameResolver(() => ({
+      padding: 16,
+      backgroundColor: "#222222",
+      color: "#cccccc",
+    }))
+    const node = createNode("box")
+    node.props = {
+      defaultStyle: { padding: 8, backgroundColor: "#111111", cornerRadius: 4, color: "#999999" },
+      className: "card",
+      style: { color: "#eeeeee", opacity: 0.9 },
+      opacity: 0.75,
+    }
+    const resolved = resolveProps(node)
+    expect(resolved.cornerRadius).toBe(4)
+    expect(resolved.padding).toBe(16)
+    expect(resolved.backgroundColor).toBe("#222222")
+    expect(resolved.color).toBe("#eeeeee")
+    expect(resolved.opacity).toBe(0.75)
+  })
+})
+
+describe("web-native JSX elements, Flexily layout sync, bare text cascade, and pointer aliases", () => {
+  afterEach(() => {
+    setClassNameResolver(null)
+    resetFocus()
+  })
+
+  test("creates HTML container, button, text, and heading elements with defaults", () => {
+    for (const tag of ["div", "section", "header", "footer", "main", "nav"]) {
+      const el = createElement(tag)
+      expect(el.kind).toBe("box")
+      expect(el.props.direction).toBe("column")
+      expect(el._flexNode?.getFlexDirection()).toBe(FLEX_DIRECTION_COLUMN)
+    }
+
+    const btn = createElement("button")
+    expect(btn.kind).toBe("box")
+    expect(btn.props.focusable).toBe(true)
+    expect(btn.props.alignX).toBe("center")
+    expect(btn.props.alignY).toBe("center")
+    expect(btn._focusableCount).toBe(1)
+    expect(getNodeFocusId(btn)).toBeDefined()
+
+    for (const tag of ["span", "p", "label"]) {
+      expect(createElement(tag).kind).toBe("text")
+    }
+    expect(createElement("h1").props).toMatchObject({ fontSize: 28, fontWeight: 700 })
+    expect(createElement("h2").props).toMatchObject({ fontSize: 22, fontWeight: 700 })
+    expect(createElement("h3").props).toMatchObject({ fontSize: 18, fontWeight: 600 })
+    expect(createElement("h4").props).toMatchObject({ fontSize: 16, fontWeight: 600 })
+  })
+
+  test("preserves tag defaults when defaultStyle prop is applied and overrides via className/style/direct", () => {
+    setClassNameResolver((cls) => {
+      if (cls === "row-pad") return { direction: "row", padding: 12, width: 120, height: 60 }
+      if (cls === "grid-3") return { layout: "grid", gridTemplateColumns: [{ fr: 1 }, { fr: 1 }, { fr: 1 }] }
+      return {}
+    })
+
+    const div = createElement("div")
+    setProp(div, "defaultStyle", { padding: 4, gap: 6 })
+    expect(div.props.direction).toBe("column")
+    expect(div.props.padding).toBe(4)
+    expect(div.props.gap).toBe(6)
+
+    setProp(div, "className", "row-pad")
+    expect(resolveProps(div).direction).toBe("row")
+    expect(resolveProps(div).padding).toBe(12)
+
+    // Grid via className strips element-default direction so grid diagnostics stay clean
+    const gridDiv = createElement("div")
+    setProp(gridDiv, "className", "grid-3")
+    syncAllLayoutProps(gridDiv)
+    expect(gridDiv.props.layout).toBe("grid")
+    expect(gridDiv.props.direction).toBeUndefined()
+    expect(getGridSyncDiagnostics(gridDiv)).toEqual([])
+
+    // Button keeps focusable/alignment defaults when defaultStyle adds padding
+    const btn = createElement("button")
+    setProp(btn, "defaultStyle", { padding: 8 })
+    expect(btn.props.focusable).toBe(true)
+    expect(btn.props.alignX).toBe("center")
+    expect(btn.props.alignY).toBe("center")
+    expect(btn.props.padding).toBe(8)
+  })
+
+  test("syncs Flexily layout properties (flexBasis, rowGap, columnGap, className padding) without polluting visual props", () => {
+    setClassNameResolver((cls) => {
+      if (cls === "col-gap") return { padding: 10, columnGap: 12, rowGap: 6, flexBasis: 50 }
+      if (cls === "plain") return {}
+      return {}
+    })
+    const root = createNode("root")
+    root.props = { width: 300, height: 200 }
+    const parent = createElement("div")
+    setProp(parent, "className", "col-gap")
+    setProp(parent, "width", 200)
+    setProp(parent, "height", 100)
+    const a = createElement("div")
+    setProp(a, "width", 40)
+    setProp(a, "height", 20)
+    const b = createElement("div")
+    setProp(b, "width", 40)
+    setProp(b, "height", 20)
+    insertNode(root, parent)
+    insertNode(parent, a)
+    insertNode(parent, b)
+
+    const layout = createVexartLayoutCtx()
+    layout.init(300, 200)
+    layout.beginLayout()
+    const state: WalkTreeState = {
+      scrollSpeedCap: { value: 0 },
+      nodeCount: { value: 0 },
+      rectNodes: [],
+      textNodes: [],
+      boxNodes: [],
+      layerBoundaries: [],
+      scrollContainers: [],
+      nodeRefById: new Map(),
+      rectNodeById: new Map(),
+      layout,
+    }
+    walkTree(root, state)
+    root._flexNode?.calculateLayout(300, 200)
+
+    expect(a._flexNode?.getComputedLeft()).toBe(10)
+    expect(a._flexNode?.getComputedTop()).toBe(10)
+    expect(b._flexNode?.getComputedTop()).toBe(10 + 20 + 6)
+
+    // Removing rowGap/columnGap resets Flexily gutter
+    setProp(parent, "className", "plain")
+    expect(parent.props.rowGap).toBeUndefined()
+    expect(parent.props.padding).toBeUndefined()
+  })
+
+  test("bare text inside container inherits parent typography in flex-sync and pipeline-traverse without warning", () => {
+    setClassNameResolver((cls) => (cls === "heading-box" ? { fontSize: 24, color: "#38bdf8", fontStyle: "italic" } : {}))
+    const warnSpy = spyOn(console, "warn")
+    try {
+      const root = createNode("root")
+      const box = createElement("div")
+      setProp(box, "width", 300)
+      setProp(box, "height", 100)
+      setProp(box, "className", "heading-box")
+      const bare = createTextNode("Hello World")
+      insertNode(root, box)
+      insertNode(box, bare)
+
+      createTextFlexNode(bare)
+      const layout = createVexartLayoutCtx()
+      layout.init(300, 100)
+      layout.beginLayout()
+      const state: WalkTreeState = {
+        scrollSpeedCap: { value: 0 },
+        nodeCount: { value: 0 },
+        rectNodes: [],
+        textNodes: [],
+        boxNodes: [],
+        layerBoundaries: [],
+        scrollContainers: [],
+        nodeRefById: new Map(),
+        rectNodeById: new Map(),
+        layout,
+      }
+      walkTree(root, state)
+      root._flexNode?.calculateLayout(300, 100)
+      const frame = traverseFrame(root, state, 300, 100)
+
+      expect(warnSpy).not.toHaveBeenCalled()
+      expect(bare._flexNode?.getComputedHeight()).toBeGreaterThanOrEqual(24)
+      const textOp = frame.layerBuckets.flatMap((b) => b.ops).find((op) => op.kind === "text")
+      expect(textOp).toBeDefined()
+      if (textOp && textOp.kind === "text") {
+        expect(textOp.fontSize).toBe(24)
+        expect(textOp.fontStyle).toBe("italic")
+        expect(textOp.color).toBe(0x38bdf8ff)
+      }
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  test("dispatches onClick, onMouseEnter/onHoverEnter, and onMouseLeave/onHoverLeave in updateInteractiveStates", () => {
+    const root = createNode("root")
+    const btn = createElement("button")
+    setProp(btn, "width", 100)
+    setProp(btn, "height", 40)
+
+    let clicks = 0
+    let enters = 0
+    let leaves = 0
+    setProp(btn, "onClick", () => { clicks++ })
+    setProp(btn, "onMouseEnter", () => { enters++ })
+    setProp(btn, "onHoverLeave", () => { leaves++ })
+    insertNode(root, btn)
+
+    btn.layout = { x: 0, y: 0, width: 100, height: 40 }
+    const rectNodes = [btn]
+    const rectNodeById = new Map([[btn.id, btn]])
+    const bag: InteractiveStatesBag = {
+      rectNodes,
+      rectNodeById,
+      pointerX: 20,
+      pointerY: 20,
+      pointerDown: true,
+      pointerDirty: true,
+      pendingPress: true,
+      pendingRelease: false,
+      capturedNodeId: 0,
+      pressOriginSet: false,
+      prevActiveNode: null,
+      scrollOffsets: new Map(),
+      onChanged() {},
+    }
+
+    // Hover enter + press down
+    updateInteractiveStates(bag)
+    expect(enters).toBe(1)
+    expect(btn._hovered).toBe(true)
+
+    // Release over button -> triggers onClick + focuses button
+    bag.pointerDown = false
+    bag.pendingPress = false
+    bag.pendingRelease = true
+    updateInteractiveStates(bag)
+    expect(clicks).toBe(1)
+    expect(focusedId()).toBe(getNodeFocusId(btn) ?? null)
+
+    // Move outside -> triggers onHoverLeave
+    bag.pointerX = 200
+    bag.pointerY = 200
+    bag.pendingRelease = false
+    updateInteractiveStates(bag)
+    expect(leaves).toBe(1)
+    expect(btn._hovered).toBe(false)
   })
 })

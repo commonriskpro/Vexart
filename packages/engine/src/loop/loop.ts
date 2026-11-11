@@ -15,7 +15,7 @@ import { releaseSubtreeImages } from "../ffi/native-image-assets"
 // 60fps causes measurable I/O overhead.
 
 import type { Terminal } from "../terminal/index"
-import { type TGENode, createNode, parseSizing } from "../ffi/node"
+import { type TGENode, createNode, parseSizing, resolveProps } from "../ffi/node"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import {
@@ -67,8 +67,9 @@ export function setFrameProfileSink(sink: FrameProfileSink | null) {
 
 function hasPointerReactiveNodes(node: TGENode): boolean {
   if (node.kind === "text") return false
-  if (node.props.onMouseDown || node.props.onMouseUp || node.props.onMouseMove || node.props.onMouseOver || node.props.onMouseOut) return true
-  if (node.props.hoverStyle || node.props.activeStyle || node.props.onPress || node.props.onClick) return true
+  const props = resolveProps(node)
+  if (props.onMouseDown || props.onMouseUp || props.onMouseMove || props.onMouseOver || props.onMouseOut) return true
+  if (props.hoverStyle || props.activeStyle || props.onPress || props.onClick) return true
   return node.children.some((child) => hasPointerReactiveNodes(child))
 }
 

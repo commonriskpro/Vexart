@@ -170,7 +170,7 @@ pub unsafe extern "C" fn vexart_font_render_text(
 
         for (line_idx, line) in text_layout.lines.iter().enumerate() {
             // pen_y is the TOP of the line box. The baseline sits at ascender below.
-            let baseline_y = y + line_idx as f32 * line_height + ascender * scale;
+            let baseline_y = (y + line_idx as f32 * line_height + ascender * scale).round();
             let mut pen_x = x;
 
             for ch in line.text.chars() {
@@ -438,8 +438,12 @@ pub unsafe extern "C" fn vexart_font_layout_measure(
         let families: &[&str] = if !families_ptr.is_null() && families_len > 0 {
             let str_bytes = std::slice::from_raw_parts(families_ptr, families_len as usize);
             if let Ok(s) = std::str::from_utf8(str_bytes) {
-                families_owned = s.split(' ').collect();
-                &families_owned
+                families_owned = s.split('\0').filter(|f| !f.is_empty()).collect();
+                if families_owned.is_empty() {
+                    &["sans-serif"]
+                } else {
+                    &families_owned
+                }
             } else {
                 &["sans-serif"]
             }
@@ -505,4 +509,63 @@ pub unsafe extern "C" fn vexart_font_layout_measure(
         *metrics_out = metrics;
         OK
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_layout_measure_preserves_multiword_font_family() {
+        let mut system = lock_or_recover(&SHARED_FONT_SYSTEM);
+        let has_helvetica_neue = system.query_face(&["Helvetica Neue"], 400, false).is_some();
+        drop(system);
+
+        let text = "Hello typography";
+        let mut single_metrics = font::layout::LayoutMetrics::default();
+        let fam_multi = b"Helvetica Neue";
+        let rc = unsafe {
+            vexart_font_layout_measure(
+                text.as_ptr(),
+                text.len() as u32,
+                fam_multi.as_ptr(),
+                fam_multi.len() as u32,
+                16.0,
+                24.0,
+                0.0,
+                400,
+                0,
+                &mut single_metrics,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        assert_eq!(rc, OK);
+        assert!(single_metrics.total_width > 0.0);
+        assert!((single_metrics.total_height - 24.0).abs() < 0.01);
+
+        if has_helvetica_neue {
+            // Verify NUL-delimited fallback list matches primary multi-word family, not space-split "Helvetica"
+            let fam_list = b"Helvetica Neue\0sans-serif";
+            let mut list_metrics = font::layout::LayoutMetrics::default();
+            let rc2 = unsafe {
+                vexart_font_layout_measure(
+                    text.as_ptr(),
+                    text.len() as u32,
+                    fam_list.as_ptr(),
+                    fam_list.len() as u32,
+                    16.0,
+                    24.0,
+                    0.0,
+                    400,
+                    0,
+                    &mut list_metrics,
+                    std::ptr::null_mut(),
+                    0,
+                )
+            };
+            assert_eq!(rc2, OK);
+            assert!((list_metrics.total_width - single_metrics.total_width).abs() < 0.01);
+        }
+    }
 }

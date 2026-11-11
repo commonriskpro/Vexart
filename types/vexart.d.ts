@@ -132,6 +132,13 @@ declare type BezierCmd = {
 };
 
 /** @public */
+export declare const borders: {
+    readonly rimTop: "#ffffff2e";
+    readonly hairline: "#ffffff14";
+    readonly glassRim: "#ffffff29";
+};
+
+/** @public */
 export declare function Button(props: ButtonProps): JSX.Element;
 
 /** @public */
@@ -380,26 +387,27 @@ export declare type CodeTheme = {
 
 /** @public */
 export declare const colors: {
-    readonly background: "#0a0a0a";
+    readonly background: "#09090b";
     readonly foreground: "#fafafa";
-    readonly card: "#171717";
+    readonly card: "#121216";
     readonly cardForeground: "#fafafa";
-    readonly popover: "#171717";
+    readonly popover: "#16161cd9";
     readonly popoverForeground: "#fafafa";
-    readonly primary: "#e5e5e5";
-    readonly primaryForeground: "#171717";
-    readonly secondary: "#262626";
-    readonly secondaryForeground: "#fafafa";
-    readonly muted: "#262626";
-    readonly mutedForeground: "#a3a3a3";
-    readonly accent: "#262626";
+    readonly primary: "#f4f4f5";
+    readonly primaryHover: "#ffffff";
+    readonly primaryForeground: "#09090b";
+    readonly secondary: "#1f1f26";
+    readonly secondaryForeground: "#e4e4e7";
+    readonly muted: "#18181e";
+    readonly mutedForeground: "#a1a1aa";
+    readonly accent: "#272730";
     readonly accentForeground: "#fafafa";
-    readonly destructive: "#dc2626";
+    readonly destructive: "#ef4444";
     readonly destructiveForeground: "#fafafa";
-    readonly border: "#ffffff25";
-    readonly input: "#ffffff40";
-    readonly ring: "#737373";
-    readonly ringSubtle: "#73737380";
+    readonly border: "#ffffff1f";
+    readonly input: "#ffffff29";
+    readonly ring: "#a1a1aa";
+    readonly ringSubtle: "#a1a1aa66";
     readonly transparent: "#00000000";
 };
 
@@ -1254,7 +1262,15 @@ export declare type GlowConfig = {
 };
 
 /** @public */
-export declare const glows: Record<"ring" | "destructive" | "success", Glow>;
+export declare const glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow>;
+
+/** @public */
+export declare type Gradient = {
+    type: "linear";
+    angle: number;
+    from: string;
+    to: string;
+};
 
 /** @public Gradient configuration (pre-parse, accepts string | number colors). */
 declare type GradientConfig = {
@@ -1266,6 +1282,46 @@ declare type GradientConfig = {
     type: "radial";
     from: string | number;
     to: string | number;
+};
+
+/** @public */
+export declare const gradients: {
+    readonly card: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#18181f";
+        readonly to: "#101014";
+    };
+    readonly glass: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#202029e6";
+        readonly to: "#131318d9";
+    };
+    readonly primaryButton: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#ffffff";
+        readonly to: "#e4e4e7";
+    };
+    readonly secondaryButton: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#2a2a35";
+        readonly to: "#1c1c24";
+    };
+    readonly destructiveButton: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#f87171";
+        readonly to: "#dc2626";
+    };
+    readonly subtle: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#16161d";
+        readonly to: "#0e0e13";
+    };
 };
 
 /** @beta */
@@ -3123,8 +3179,10 @@ declare type TGEProps = {
     marginX?: number;
     marginY?: number;
     gap?: number;
-    alignX?: "left" | "right" | "center" | "space-between";
-    alignY?: "top" | "bottom" | "center" | "space-between";
+    rowGap?: number;
+    columnGap?: number;
+    alignX?: "left" | "right" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+    alignY?: "top" | "bottom" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
     /** @beta */
     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
     /** @beta */
@@ -3161,6 +3219,8 @@ declare type TGEProps = {
     flexGrow?: number;
     /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
     flexShrink?: number;
+    /** Flex initial main-axis size before free space distribution. */
+    flexBasis?: number | string;
     backgroundColor?: string | number;
     cornerRadius?: number;
     /** CSS-friendly alias for cornerRadius (Decision 1) */
@@ -3170,6 +3230,8 @@ declare type TGEProps = {
     borderWidth?: number;
     /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
     opacity?: number;
+    /** Declarative visual property transition duration in ms (`true` = 150ms, `false` or `0` disables). */
+    transition?: boolean | number;
     layer?: boolean;
     /** Declarative interaction state used by engine-level drag/compositor policies. */
     interactionMode?: InteractionMode;
@@ -3271,8 +3333,16 @@ declare type TGEProps = {
     onMouseMove?: (event: NodeMouseEvent) => void;
     /** Fires when pointer enters this node's bounds. */
     onMouseOver?: (event: NodeMouseEvent) => void;
+    /** Web-standard alias for onMouseOver. */
+    onMouseEnter?: (event: NodeMouseEvent) => void;
+    /** Vexart hover alias for onMouseOver. */
+    onHoverEnter?: (event: NodeMouseEvent) => void;
     /** Fires when pointer leaves this node's bounds. */
     onMouseOut?: (event: NodeMouseEvent) => void;
+    /** Web-standard alias for onMouseOut. */
+    onMouseLeave?: (event: NodeMouseEvent) => void;
+    /** Vexart hover alias for onMouseOut. */
+    onHoverLeave?: (event: NodeMouseEvent) => void;
     /** Transform configuration: translate, rotate, scale, skew, perspective. */
     transform?: TransformConfig;
     /** Transform origin point. Default: "center". */
@@ -3284,6 +3354,10 @@ declare type TGEProps = {
     className?: string;
     /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
     style?: Partial<TGEProps>;
+    /** Lowest-precedence default style layer (overridden by className, style, and direct props). */
+    defaultStyle?: Partial<TGEProps>;
+    /** When true, className overrides direct component props (used by styled components). */
+    classOverride?: boolean;
     /** Image source — file path or URL. Decoded async on first render. */
     src?: string;
     /** How the image fits within its layout box. Default: "contain". */
@@ -3310,26 +3384,27 @@ export { TGEProps }
 /** @public */
 export declare const theme: {
     readonly colors: {
-        readonly background: "#0a0a0a";
+        readonly background: "#09090b";
         readonly foreground: "#fafafa";
-        readonly card: "#171717";
+        readonly card: "#121216";
         readonly cardForeground: "#fafafa";
-        readonly popover: "#171717";
+        readonly popover: "#16161cd9";
         readonly popoverForeground: "#fafafa";
-        readonly primary: "#e5e5e5";
-        readonly primaryForeground: "#171717";
-        readonly secondary: "#262626";
-        readonly secondaryForeground: "#fafafa";
-        readonly muted: "#262626";
-        readonly mutedForeground: "#a3a3a3";
-        readonly accent: "#262626";
+        readonly primary: "#f4f4f5";
+        readonly primaryHover: "#ffffff";
+        readonly primaryForeground: "#09090b";
+        readonly secondary: "#1f1f26";
+        readonly secondaryForeground: "#e4e4e7";
+        readonly muted: "#18181e";
+        readonly mutedForeground: "#a1a1aa";
+        readonly accent: "#272730";
         readonly accentForeground: "#fafafa";
-        readonly destructive: "#dc2626";
+        readonly destructive: "#ef4444";
         readonly destructiveForeground: "#fafafa";
-        readonly border: "#ffffff25";
-        readonly input: "#ffffff40";
-        readonly ring: "#737373";
-        readonly ringSubtle: "#73737380";
+        readonly border: "#ffffff1f";
+        readonly input: "#ffffff29";
+        readonly ring: "#a1a1aa";
+        readonly ringSubtle: "#a1a1aa66";
         readonly transparent: "#00000000";
     };
     readonly radius: {
@@ -3374,7 +3449,50 @@ export declare const theme: {
         readonly bold: 700;
     };
     readonly shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
-    readonly glows: Record<"ring" | "destructive" | "success", Glow>;
+    readonly glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow>;
+    readonly gradients: {
+        readonly card: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#18181f";
+            readonly to: "#101014";
+        };
+        readonly glass: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#202029e6";
+            readonly to: "#131318d9";
+        };
+        readonly primaryButton: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#ffffff";
+            readonly to: "#e4e4e7";
+        };
+        readonly secondaryButton: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#2a2a35";
+            readonly to: "#1c1c24";
+        };
+        readonly destructiveButton: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#f87171";
+            readonly to: "#dc2626";
+        };
+        readonly subtle: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#16161d";
+            readonly to: "#0e0e13";
+        };
+    };
+    readonly borders: {
+        readonly rimTop: "#ffffff2e";
+        readonly hairline: "#ffffff14";
+        readonly glassRim: "#ffffff29";
+    };
 };
 
 /** @public */
@@ -3844,6 +3962,7 @@ export declare type VoidCheckboxProps = {
     label?: string;
     disabled?: boolean;
     focusId?: string;
+    className?: string;
 };
 
 /** @public */
@@ -3876,6 +3995,7 @@ export declare type VoidComboboxProps = {
     focusId?: string;
     width?: SizingUnit;
     filter?: (option: ComboboxOption, query: string) => boolean;
+    className?: string;
 };
 
 /** @public */
@@ -3910,6 +4030,7 @@ export declare type VoidDialogProps = {
     /** Max width constraint. Default: 480. */
     maxWidth?: number;
     children?: JSX.Element;
+    className?: string;
 };
 
 declare function VoidDialogRoot(props: VoidDialogProps): JSX.Element;
@@ -3955,6 +4076,7 @@ export declare type VoidDropdownMenuContentProps = {
     minWidth?: number;
     maxHeight?: number;
     sideOffset?: number;
+    className?: string;
 };
 
 /** @public */
@@ -3984,6 +4106,7 @@ export declare type VoidDropdownMenuProps = {
     defaultOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
     children?: JSX.Element;
+    className?: string;
 };
 
 declare function VoidDropdownMenuRoot(props: VoidDropdownMenuProps): JSX.Element;
@@ -4012,6 +4135,7 @@ export declare type VoidInputProps = {
     focusId?: string;
     width?: SizingUnit;
     theme?: Partial<InputTheme>;
+    className?: string;
 };
 
 /** @public */
@@ -4057,6 +4181,7 @@ export declare type VoidPopoverProps = {
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
     width?: SizingUnit;
+    className?: string;
 };
 
 /** @public */
@@ -4068,6 +4193,7 @@ export declare type VoidProgressProps = {
     max?: number;
     width?: SizingUnit;
     height?: number;
+    className?: string;
 };
 
 /** @public */
@@ -4120,6 +4246,7 @@ export declare type VoidSelectProps = {
     focusId?: string;
     width?: SizingUnit;
     children?: JSX.Element;
+    className?: string;
 };
 
 /** @public */
@@ -4162,6 +4289,7 @@ export declare type VoidSliderProps = {
     focusId?: string;
     width?: SizingUnit;
     showValue?: boolean;
+    className?: string;
 };
 
 /** @public */
@@ -4179,6 +4307,7 @@ export declare type VoidSwitchProps = {
     label?: string;
     disabled?: boolean;
     focusId?: string;
+    className?: string;
 };
 
 /** @public */
@@ -4195,6 +4324,7 @@ export declare type VoidTableProps = {
     striped?: boolean;
     disabled?: boolean;
     focusId?: string;
+    className?: string;
 };
 
 /** @public */
@@ -4207,6 +4337,7 @@ export declare type VoidTabsProps = {
     tabs: TabItem[];
     variant?: TabsVariant;
     focusId?: string;
+    className?: string;
 };
 
 /** @public */
@@ -4230,6 +4361,7 @@ export declare type VoidTextareaProps = {
     language?: string;
     theme?: Partial<TextareaTheme>;
     ref?: (handle: TextareaHandle) => void;
+    className?: string;
 };
 
 /** @public */
@@ -4268,7 +4400,7 @@ export declare const voidThemeTokenResolver: {
         full: 9999;
     };
     shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
-    glows: Record<"ring" | "destructive" | "success", Glow>;
+    glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow>;
     spacePx: 1;
     getThemeVersion: Accessor<number>;
 };
@@ -4292,6 +4424,7 @@ export declare type VoidTooltipProps = {
     disabled?: boolean;
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
+    className?: string;
 };
 
 /** @public */

@@ -188,8 +188,10 @@ export type TGEProps = {
   marginX?: number
   marginY?: number
   gap?: number
-  alignX?: "left" | "right" | "center" | "space-between"
-  alignY?: "top" | "bottom" | "center" | "space-between"
+  rowGap?: number
+  columnGap?: number
+  alignX?: "left" | "right" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch"
+  alignY?: "top" | "bottom" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch"
   /** Alias for alignX in Flex; Grid content distribution in the inline axis. @beta */
   justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch"
   /** Alias for alignY in Flex; Grid item alignment in the block axis. @beta */
@@ -228,6 +230,8 @@ export type TGEProps = {
   flexGrow?: number
   /** Accepted for CSS compatibility. Flexily handles shrinking automatically. */
   flexShrink?: number
+  /** Flex initial main-axis size before free space distribution. */
+  flexBasis?: number | string
 
   // Visual
   backgroundColor?: string | number  // "#ff0000" or 0xff0000ff
@@ -239,6 +243,8 @@ export type TGEProps = {
   borderWidth?: number
   /** Opacity: 0.0 = fully transparent, 1.0 = fully opaque. Multiplies alpha of entire element. */
   opacity?: number
+  /** Declarative visual property transition duration in ms (`true` = 150ms, `false` or `0` disables). */
+  transition?: boolean | number
 
   // Compositing
   layer?: boolean  // Opt-in: this node becomes its own compositing layer
@@ -355,8 +361,16 @@ export type TGEProps = {
   onMouseMove?: (event: NodeMouseEvent) => void
   /** Fires when pointer enters this node's bounds. */
   onMouseOver?: (event: NodeMouseEvent) => void
+  /** Web-standard alias for onMouseOver. */
+  onMouseEnter?: (event: NodeMouseEvent) => void
+  /** Vexart hover alias for onMouseOver. */
+  onHoverEnter?: (event: NodeMouseEvent) => void
   /** Fires when pointer leaves this node's bounds. */
   onMouseOut?: (event: NodeMouseEvent) => void
+  /** Web-standard alias for onMouseOut. */
+  onMouseLeave?: (event: NodeMouseEvent) => void
+  /** Vexart hover alias for onMouseOut. */
+  onHoverLeave?: (event: NodeMouseEvent) => void
 
   // Transforms — 2D affine + pseudo-perspective
   /** Transform configuration: translate, rotate, scale, skew, perspective. */
@@ -369,6 +383,10 @@ export type TGEProps = {
   className?: string
   /** CSS-style prop — merged with direct props (direct props win). Decision 3. */
   style?: Partial<TGEProps>
+  /** Lowest-precedence default style layer (overridden by className, style, and direct props). */
+  defaultStyle?: Partial<TGEProps>
+  /** When true, className overrides direct component props (used by styled components). */
+  classOverride?: boolean
 
   // Image (<img> intrinsic)
   /** Image source — file path or URL. Decoded async on first render. */
@@ -425,6 +443,16 @@ export type TGENode = {
   _heightSizing: SizingInfo | null
   /** Prop keys applied from the JSX style object during the previous style merge. */
   _styleKeys?: Set<string>
+  /** Layout prop keys mirrored from className onto node.props for Flexily sync. */
+  _classLayoutKeys?: Set<string>
+  /** Layout prop keys mirrored from defaultStyle onto node.props for Flexily sync. */
+  _defaultLayoutKeys?: Set<string>
+  /** Last className value synchronized to Flexily layout. */
+  _syncedClassName?: string
+  /** Last defaultStyle reference synchronized to Flexily layout. */
+  _syncedDefaultStyle?: Partial<TGEProps>
+  /** Layout prop keys present during the previous layout synchronization. */
+  _prevLayoutKeys?: Set<string>
   /** Lazy transform matrices (local & accumulated). */
   _transforms?: NodeTransformExtra | null
   /** Computed LOCAL transform matrix — backwards compatibility accessor */
@@ -488,4 +516,244 @@ export type LayoutRect = {
   y: number
   width: number
   height: number
+}
+
+/** @public */
+export type ClassNameResolver = (className: string) => Partial<TGEProps>
+
+let globalClassNameResolver: ClassNameResolver | null = null
+export function setClassNameResolver(resolver: ClassNameResolver | null) {
+  globalClassNameResolver = resolver
+}
+export function getClassNameResolver(): ClassNameResolver | null {
+  return globalClassNameResolver
+}
+
+let currentThemeEpoch = 0
+export function bumpThemeEpoch() {
+  currentThemeEpoch++
+}
+export function getThemeEpoch(): number {
+  return currentThemeEpoch
+}
+
+// ── Color parsing ──
+
+const MAX_COLOR_CACHE_SIZE = 512
+const _colorCache = new Map<string, number>()
+
+export function getColorCacheSize(): number {
+  return _colorCache.size
+}
+
+export function clearColorCache(): void {
+  _colorCache.clear()
+}
+
+/** @public */
+export function parseColor(value: string | number | undefined): number {
+  if (value === undefined) return 0
+  if (typeof value === "number") return value >>> 0
+  const cached = _colorCache.get(value)
+  if (cached !== undefined) {
+    _colorCache.delete(value)
+    _colorCache.set(value, cached)
+    return cached
+  }
+  // "#rgb", "#rgba", "#rrggbb", or "#rrggbbaa" (with or without #)
+  const hex = value.startsWith("#") ? value.slice(1) : value
+  let result = 0
+  if (hex.length === 3) {
+    if (/^[0-9a-fA-F]{3}$/.test(hex)) {
+      const r = parseInt(hex[0], 16) * 17
+      const g = parseInt(hex[1], 16) * 17
+      const b = parseInt(hex[2], 16) * 17
+      result = ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0
+    }
+  } else if (hex.length === 4) {
+    if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+      const r = parseInt(hex[0], 16) * 17
+      const g = parseInt(hex[1], 16) * 17
+      const b = parseInt(hex[2], 16) * 17
+      const a = parseInt(hex[3], 16) * 17
+      result = ((r << 24) | (g << 16) | (b << 8) | a) >>> 0
+    }
+  } else if (hex.length === 6) {
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      result = ((parseInt(hex, 16) << 8) | 0xff) >>> 0
+    }
+  } else if (hex.length === 8) {
+    if (/^[0-9a-fA-F]{8}$/.test(hex)) {
+      result = (parseInt(hex, 16)) >>> 0
+    }
+  }
+  if (_colorCache.size >= MAX_COLOR_CACHE_SIZE) {
+    const oldest = _colorCache.keys().next().value
+    if (oldest !== undefined) _colorCache.delete(oldest)
+  }
+  _colorCache.set(value, result)
+  return result
+}
+
+/**
+ * Resolve effective props:
+ *   1. Cache check: node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch
+ *   2. Merge defaultStyle (lowest precedence)
+ *   3. Merge className via globalClassNameResolver
+ *   4. Merge style prop (direct props override style)
+ *   5. Deep-merge hoverStyle/activeStyle/focusStyle
+ *   6. Resolve aliases: borderRadius→cornerRadius, boxShadow→shadow, onClick→onPress,
+ *      onMouseEnter/onHoverEnter→onMouseOver, onMouseLeave/onHoverLeave→onMouseOut
+ *   7. Merge interactive states when active
+ */
+/** @public */
+export function resolveProps(node: TGENode): TGEProps {
+  const base = node.props
+  const hasActiveInteractive =
+    (node._hovered && base.hoverStyle !== undefined)
+    || (node._focused && base.focusStyle !== undefined)
+    || (node._active && base.activeStyle !== undefined)
+  if (
+    !base.defaultStyle
+    && (!base.className || !globalClassNameResolver)
+    && !base.style
+    && !node._defaultLayoutKeys?.size
+    && !node._classLayoutKeys?.size
+    && !hasActiveInteractive
+    && base.borderRadius === undefined
+    && base.boxShadow === undefined
+    && base.onClick === undefined
+    && base.onMouseEnter === undefined
+    && base.onHoverEnter === undefined
+    && base.onMouseLeave === undefined
+    && base.onHoverLeave === undefined
+  ) {
+    return base
+  }
+  if (node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch) return node._vp
+  const out: TGEProps = {} as TGEProps
+  const classProps = base.className && globalClassNameResolver
+    ? globalClassNameResolver(base.className)
+    : undefined
+  const classRecord = classProps as Record<string, unknown> | undefined
+
+  const isClassOverride = !!base.classOverride && !!classProps
+
+  if (isClassOverride) {
+    // Layer 0: defaultStyle (lowest precedence)
+    if (base.defaultStyle) Object.assign(out, base.defaultStyle)
+
+    // Layer 1: direct component defaults (skipping defaultStyle, style, className, classOverride)
+    const baseRecord = base as Record<string, unknown>
+    const defaultRecord = base.defaultStyle as Record<string, unknown> | undefined
+    const outRecord = out as Record<string, unknown>
+    for (const key of Object.keys(base)) {
+      if (key === "defaultStyle" || key === "style" || key === "className" || key === "classOverride") continue
+      if (node._defaultLayoutKeys?.has(key) && baseRecord[key] === defaultRecord?.[key]) continue
+      outRecord[key] = baseRecord[key]
+    }
+
+    // Layer 2: className overrides direct component props
+    Object.assign(out, classProps)
+    if (classProps.backgroundColor !== undefined) {
+      out.gradient = undefined
+    }
+
+    // Layer 3: inline style overrides className
+    if (base.style) Object.assign(out, base.style)
+
+    // Merge interactive styles: defaultStyle < base < classProps < base.style
+    if (base.defaultStyle?.hoverStyle || base.hoverStyle || classProps?.hoverStyle || base.style?.hoverStyle) {
+      out.hoverStyle = Object.assign({}, base.defaultStyle?.hoverStyle, base.hoverStyle, classProps?.hoverStyle, base.style?.hoverStyle)
+    }
+    if (base.defaultStyle?.focusStyle || base.focusStyle || classProps?.focusStyle || base.style?.focusStyle) {
+      out.focusStyle = Object.assign({}, base.defaultStyle?.focusStyle, base.focusStyle, classProps?.focusStyle, base.style?.focusStyle)
+    }
+    if (base.defaultStyle?.activeStyle || base.activeStyle || classProps?.activeStyle || base.style?.activeStyle) {
+      out.activeStyle = Object.assign({}, base.defaultStyle?.activeStyle, base.activeStyle, classProps?.activeStyle, base.style?.activeStyle)
+    }
+  } else {
+  // Layer 0: defaultStyle (lowest precedence)
+  if (base.defaultStyle) Object.assign(out, base.defaultStyle)
+  // Layer 1: className
+  if (classProps) Object.assign(out, classProps)
+  // Layer 2: style
+  if (base.style) Object.assign(out, base.style)
+
+  // Layer 3: direct props (skip mirrored default/className layout keys unless mutated directly)
+  const baseRecord = base as Record<string, unknown>
+  const defaultRecord = base.defaultStyle as Record<string, unknown> | undefined
+  const outRecord = out as Record<string, unknown>
+  for (const key of Object.keys(base)) {
+    if (key === "defaultStyle" || key === "style" || key === "classOverride") continue
+    if (node._defaultLayoutKeys?.has(key) && baseRecord[key] === defaultRecord?.[key]) continue
+    if (node._classLayoutKeys?.has(key) && classRecord && baseRecord[key] === classRecord[key]) continue
+    outRecord[key] = baseRecord[key]
+  }
+  }
+
+  // Strip default-only flex/align keys when layout is grid so Grid diagnostics never treat element defaults as explicit flex props
+  if (out.layout === "grid") {
+    if (classRecord?.direction === undefined && (base.style as Record<string, unknown> | undefined)?.direction === undefined && (base.direction === undefined || node._defaultLayoutKeys?.has("direction"))) {
+      delete out.direction
+    }
+    if (classRecord?.alignX === undefined && (base.style as Record<string, unknown> | undefined)?.alignX === undefined && (base.alignX === undefined || node._defaultLayoutKeys?.has("alignX"))) {
+      delete out.alignX
+    }
+    if (classRecord?.alignY === undefined && (base.style as Record<string, unknown> | undefined)?.alignY === undefined && (base.alignY === undefined || node._defaultLayoutKeys?.has("alignY"))) {
+      delete out.alignY
+    }
+  }
+
+  // Merge interactive styles in place across layers (standard non-classOverride path)
+  if (!isClassOverride) {
+  if (base.defaultStyle?.hoverStyle || classProps?.hoverStyle || base.style?.hoverStyle || base.hoverStyle) {
+    out.hoverStyle = Object.assign({}, base.defaultStyle?.hoverStyle, classProps?.hoverStyle, base.style?.hoverStyle, base.hoverStyle)
+  }
+  if (base.defaultStyle?.focusStyle || classProps?.focusStyle || base.style?.focusStyle || base.focusStyle) {
+    out.focusStyle = Object.assign({}, base.defaultStyle?.focusStyle, classProps?.focusStyle, base.style?.focusStyle, base.focusStyle)
+  }
+  if (base.defaultStyle?.activeStyle || classProps?.activeStyle || base.style?.activeStyle || base.activeStyle) {
+    out.activeStyle = Object.assign({}, base.defaultStyle?.activeStyle, classProps?.activeStyle, base.style?.activeStyle, base.activeStyle)
+  }
+  }
+
+  // Resolve aliases in place (zero allocations)
+  if (out.borderRadius !== undefined) {
+    if (isClassOverride && classProps?.borderRadius !== undefined) {
+      out.cornerRadius = out.borderRadius
+    } else if (out.cornerRadius === undefined) {
+      out.cornerRadius = out.borderRadius
+    }
+  }
+  if (out.boxShadow !== undefined) {
+    if (isClassOverride && classProps?.boxShadow !== undefined) {
+      out.shadow = out.boxShadow
+    } else if (out.shadow === undefined) {
+      out.shadow = out.boxShadow
+    }
+  }
+  if (out.onClick !== undefined && out.onPress === undefined) out.onPress = out.onClick
+  if (out.onMouseOver === undefined) {
+    if (out.onMouseEnter !== undefined) out.onMouseOver = out.onMouseEnter
+    else if (out.onHoverEnter !== undefined) out.onMouseOver = out.onHoverEnter
+  }
+  if (out.onMouseOut === undefined) {
+    if (out.onMouseLeave !== undefined) out.onMouseOut = out.onMouseLeave
+    else if (out.onHoverLeave !== undefined) out.onMouseOut = out.onHoverLeave
+  }
+
+  // Merge active interactive states in place
+  if (node._hovered && out.hoverStyle) Object.assign(out, out.hoverStyle)
+  if (node._focused && out.focusStyle) Object.assign(out, out.focusStyle)
+  if (node._active && out.activeStyle) Object.assign(out, out.activeStyle)
+
+  // Re-resolve aliases if interactive styles introduced them
+  if (out.borderRadius !== undefined && out.cornerRadius === undefined) out.cornerRadius = out.borderRadius
+  if (out.boxShadow !== undefined && out.shadow === undefined) out.shadow = out.boxShadow
+
+  node._vp = out
+  node._vpDirty = false
+  node._vpEpoch = currentThemeEpoch
+  return out
 }

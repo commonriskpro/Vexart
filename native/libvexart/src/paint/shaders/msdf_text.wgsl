@@ -70,10 +70,18 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
   if (in.mode == 1u) {
     // MSDF mode: compute distance from RGB channels using median-of-three.
     let sd = median3(sampled.r, sampled.g, sampled.b);
-    // Screen-space derivative for resolution-independent anti-aliasing.
-    let screen_px_distance = fwidth(sd);
-    // Smoothstep around the 0.5 threshold (SDF convention: 0.5 = on edge).
-    alpha = smoothstep(0.5 - screen_px_distance, 0.5 + screen_px_distance, sd);
+    // Atlas is 1024x1024 with SDF_RANGE = 4.0 texels (see font/msdf_atlas.rs).
+    let unit_range = vec2<f32>(4.0 / 1024.0, 4.0 / 1024.0);
+    let screen_tex_size = vec2<f32>(1.0) / max(fwidth(in.uv), vec2<f32>(1e-6));
+    let screen_px_range = max(0.5 * dot(unit_range, screen_tex_size), 1.0);
+    let screen_px_dist = screen_px_range * (sd - 0.5);
+    // Tight ~0.9px AA transition so stems reach full 1.0 coverage at small sizes.
+    let coverage = smoothstep(-0.45, 0.45, screen_px_dist);
+    // Subtle perceptual gamma shaping for Rgba8Unorm alpha blending:
+    // preserves solid interior colors (0.0/1.0) while keeping light-on-dark stems crisp.
+    let luma = dot(in.color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let gamma = mix(1.08, 0.82, luma);
+    alpha = select(coverage, pow(max(coverage, 1e-5), gamma), coverage > 0.0 && coverage < 1.0);
   } else {
     // Bitmap mode: glyph coverage in alpha channel (supersampled, GPU-filtered).
     alpha = sampled.a;

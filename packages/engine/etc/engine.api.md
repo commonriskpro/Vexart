@@ -1052,8 +1052,10 @@ export type TGEProps = {
     marginX?: number;
     marginY?: number;
     gap?: number;
-    alignX?: "left" | "right" | "center" | "space-between";
-    alignY?: "top" | "bottom" | "center" | "space-between";
+    rowGap?: number;
+    columnGap?: number;
+    alignX?: "left" | "right" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
+    alignY?: "top" | "bottom" | "center" | "space-between" | "space-around" | "space-evenly" | "stretch";
     justifyContent?: "left" | "right" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "space-around" | "space-evenly" | "stretch";
     alignItems?: "top" | "bottom" | "center" | "space-between" | "flex-start" | "flex-end" | "start" | "end" | "stretch";
     gridTemplateColumns?: readonly GridTrack[];
@@ -1073,6 +1075,7 @@ export type TGEProps = {
     height?: SizingUnit;
     flexGrow?: number;
     flexShrink?: number;
+    flexBasis?: number | string;
     backgroundColor?: string | number;
     cornerRadius?: number;
     borderRadius?: number;
@@ -1080,6 +1083,7 @@ export type TGEProps = {
     borderColor?: string | number;
     borderWidth?: number;
     opacity?: number;
+    transition?: boolean | number;
     layer?: boolean;
     interactionMode?: InteractionMode;
     debugName?: string;
@@ -1145,7 +1149,11 @@ export type TGEProps = {
     onMouseUp?: (event: NodeMouseEvent) => void;
     onMouseMove?: (event: NodeMouseEvent) => void;
     onMouseOver?: (event: NodeMouseEvent) => void;
+    onMouseEnter?: (event: NodeMouseEvent) => void;
+    onHoverEnter?: (event: NodeMouseEvent) => void;
     onMouseOut?: (event: NodeMouseEvent) => void;
+    onMouseLeave?: (event: NodeMouseEvent) => void;
+    onHoverLeave?: (event: NodeMouseEvent) => void;
     transform?: TransformConfig;
     transformOrigin?: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | {
         x: number;
@@ -1153,6 +1161,8 @@ export type TGEProps = {
     };
     className?: string;
     style?: Partial<TGEProps>;
+    defaultStyle?: Partial<TGEProps>;
+    classOverride?: boolean;
     src?: string;
     objectFit?: "contain" | "cover" | "fill" | "none";
     onDraw?: (ctx: CanvasContext) => void;

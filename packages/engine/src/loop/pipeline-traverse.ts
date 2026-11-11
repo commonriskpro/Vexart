@@ -46,7 +46,7 @@ import {
   serializeCanvasDisplayList,
   hashCanvasDisplayList,
 } from "../ffi/canvas"
-import { normalizeTextForLayout } from "../ffi/text-layout"
+import { normalizeTextForLayout, resolveLineHeightPx } from "../ffi/text-layout"
 import { type WalkTreeState, collectText } from "./walk-tree"
 import {
   type PipelineContext,
@@ -101,7 +101,6 @@ export type TraversalResult = {
 // ── Module Constants & Singletons ──────────────────────────────────────────
 
 const AUTO_LAYER_MIN_AREA = 64 * 64
-const warnedRawTextNodes = new Set<number>()
 
 const effectPool: EffectConfig[] = []
 let effectPoolIdx = 0
@@ -536,18 +535,18 @@ export function visitNode(
       return
     }
 
-    if (node.parent && node.parent.kind === "box" && node.text.length > 0 && process.env.NODE_ENV !== "production") {
-      if (!warnedRawTextNodes.has(node.id)) {
-        warnedRawTextNodes.add(node.id)
-        console.warn('[Vexart] Warning: Raw text string "' + content.slice(0, 30) + '" placed directly inside <box>. Wrap text in <text>...</text> to ensure proper typography and layout.')
-      }
-    }
-
-    const renderContent = normalizeTextForLayout(content, props.whiteSpace)
-    const color = (props.color !== undefined ? parseColor(props.color) : 0xe0e0e0ff) >>> 0
-    const fontSize = props.fontSize ?? 14
-    const fontId = props.fontId ?? 0
-    const lineHeight = props.lineHeight ?? Math.ceil(fontSize * 1.2)
+    const parentProps = node.parent ? resolveProps(node.parent) : undefined
+    const whiteSpace = props.whiteSpace ?? parentProps?.whiteSpace
+    const wordBreak = props.wordBreak ?? parentProps?.wordBreak
+    const renderContent = normalizeTextForLayout(content, whiteSpace)
+    const rawColor = props.color ?? parentProps?.color
+    const color = (rawColor !== undefined ? parseColor(rawColor) : 0xe0e0e0ff) >>> 0
+    const fontSize = props.fontSize ?? parentProps?.fontSize ?? 14
+    const fontId = props.fontId ?? parentProps?.fontId ?? 0
+    const fontFamily = (props.fontFamily ?? parentProps?.fontFamily) as string | undefined
+    const fontWeight = (props.fontWeight ?? parentProps?.fontWeight) as number | undefined
+    const fontStyle = (props.fontStyle ?? parentProps?.fontStyle) as string | undefined
+    const lineHeight = resolveLineHeightPx(fontSize, props.lineHeight ?? parentProps?.lineHeight)
     const maxWidth = Math.max(Math.round(width), 1)
     const textHeight = Math.round(height) > 0 ? Math.round(height) : lineHeight
 
@@ -570,11 +569,11 @@ export function visitNode(
       maxWidth,
       textHeight,
       nodeId: node.id,
-      fontFamily: props.fontFamily as string | undefined,
-      fontWeight: props.fontWeight as number | undefined,
-      fontStyle: props.fontStyle as string | undefined,
-      whiteSpace: props.whiteSpace,
-      wordBreak: props.wordBreak,
+      fontFamily,
+      fontWeight,
+      fontStyle,
+      whiteSpace,
+      wordBreak,
       clipBounds: getCurrentClipBounds(ctx),
     }
     attachClipStackToOp(textOp, ctx)
@@ -946,7 +945,7 @@ export function visitNode(
   const bottom = props.borderBottom ?? paintBorderWidth
   const borderColor = props.borderColor !== undefined ? (parseColor(props.borderColor) >>> 0) : 0
   const hasVisualBorder = (borderColor & 0xff) > 0 && Math.max(left, right, top, bottom) > 0
-  const interactiveBorder = maxInteractiveBorder(node.props)
+  const interactiveBorder = maxInteractiveBorder(props)
   const hasBorder = hasVisualBorder || interactiveBorder > 0
 
   if (hasBorder) {

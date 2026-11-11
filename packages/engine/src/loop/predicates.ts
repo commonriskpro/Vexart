@@ -28,5 +28,6 @@ export function isInteractiveNode(props: TGEProps): boolean {
   return !!(props.focusable || props.hoverStyle || props.activeStyle ||
     props.focusStyle || props.onPress || props.onClick ||
     props.onMouseDown || props.onMouseUp || props.onMouseMove ||
-    props.onMouseOver || props.onMouseOut)
+    props.onMouseOver || props.onMouseEnter || props.onHoverEnter ||
+    props.onMouseOut || props.onMouseLeave || props.onHoverLeave)
 }

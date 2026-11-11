@@ -1,4 +1,5 @@
 import { releaseNodeImage } from "../ffi/native-image-assets"
+import { FLEX_DIRECTION_COLUMN } from "flexily"
 /**
  * SolidJS custom renderer for Vexart.
  *
@@ -16,8 +17,10 @@ import {
   parseColor,
   parseSizing,
   adjustFocusableAncestors,
+  syncExtendedFlexProps,
+  syncResolvedLayout,
 } from "../ffi/node"
-import { isLayoutProp, isTextLayoutProp, syncLayoutProp } from "../ffi/flex-sync"
+import { isLayoutProp, isTextLayoutProp, syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { BACKDROP_FIELDS } from "../ffi/render-graph"
 import { DIRTY_KIND, markDirty, markLayoutDirty } from "./dirty"
 import { createHandle, type NodeHandle } from "./handle"
@@ -71,6 +74,7 @@ const GRID_REPLACEMENT_PROPS = new Set([
 
 const VISUAL_DAMAGE_PROPS = new Set([
   "className",
+  "defaultStyle",
   "backgroundColor",
   "borderColor",
   "borderWidth",
@@ -274,7 +278,42 @@ function markNodeDirty(node: TGENode) {
 function syncChangedProp(node: TGENode, name: string) {
   if (name === "src" && node.kind === "img") releaseNodeImage(node)
   if (isLayoutProp(name)) syncLayoutProp(node, name, (node.props as Record<string, unknown>)[name])
+  if (name === "rowGap" || name === "columnGap") syncLayoutProp(node, "gap", node.props.gap)
+  if (name === "flexBasis" || name === "gap" || name === "rowGap" || name === "columnGap") syncExtendedFlexProps(node)
   if (node.kind === "text" && isTextLayoutProp(name)) node._flexNode?.markDirty()
+  if (node.kind === "box" && isTextLayoutProp(name)) {
+    for (const child of node.children) {
+      if (child.kind === "text") child._flexNode?.markDirty()
+    }
+  }
+}
+
+const BLOCK_HTML_TAGS = new Set(["div", "section", "header", "footer", "main", "nav"])
+const TEXT_HTML_TAGS = new Set(["text", "span", "p", "h1", "h2", "h3", "h4", "label"])
+const HEADING_DEFAULTS: Record<string, { fontSize: number; fontWeight: number }> = {
+  h1: { fontSize: 28, fontWeight: 700 },
+  h2: { fontSize: 22, fontWeight: 700 },
+  h3: { fontSize: 18, fontWeight: 600 },
+  h4: { fontSize: 16, fontWeight: 600 },
+}
+const tagDefaultsMap = new WeakMap<TGENode, Partial<TGEProps>>()
+const mouseAliasStates = new WeakMap<TGENode, { over?: boolean; out?: boolean }>()
+
+function resolveStyleDefaultsColors(style: unknown): Partial<TGEProps> | undefined {
+  if (!style || typeof style !== "object") return undefined
+  const resolved: Record<string, unknown> = { ...(style as Record<string, unknown>) }
+  for (const key of Object.keys(resolved)) {
+    if (((PROP_FLAGS[key] ?? 0) & FLAG_COLOR) !== 0) {
+      resolved[key] = resolveColor(resolved[key])
+    }
+  }
+  if (resolved.glow) resolved.glow = resolveGlow(resolved.glow)
+  if (resolved.shadow || resolved.boxShadow) resolved.shadow = resolveShadow(resolved.shadow ?? resolved.boxShadow)
+  if (resolved.gradient) resolved.gradient = resolveGradient(resolved.gradient)
+  if (resolved.hoverStyle) resolved.hoverStyle = resolveInteractiveStyle(resolved.hoverStyle)
+  if (resolved.activeStyle) resolved.activeStyle = resolveInteractiveStyle(resolved.activeStyle)
+  if (resolved.focusStyle) resolved.focusStyle = resolveInteractiveStyle(resolved.focusStyle)
+  return resolved as Partial<TGEProps>
 }
 
 function hasCompositorLayerBacking(node: TGENode) {
@@ -306,8 +345,45 @@ function unmarkSubtreeLayerBacking(node: TGENode) {
 
 const renderer = createRenderer<TGENode>({
   createElement(type: string): TGENode {
-    const kind = type === "text" ? "text" : type === "img" || type === "image" ? "img" : type === "canvas" || type === "surface" ? "canvas" : "box"
-    return createNode(kind)
+    if (TEXT_HTML_TAGS.has(type)) {
+      const node = createNode("text")
+      const heading = HEADING_DEFAULTS[type]
+      if (heading) {
+        const defaultStyle: Partial<TGEProps> = { fontSize: heading.fontSize, fontWeight: heading.fontWeight }
+        tagDefaultsMap.set(node, defaultStyle)
+        node.props.defaultStyle = defaultStyle
+        node.props.fontSize = heading.fontSize
+        node.props.fontWeight = heading.fontWeight
+        node._defaultLayoutKeys = new Set(["fontSize", "fontWeight"])
+        node._syncedDefaultStyle = defaultStyle
+      }
+      return node
+    }
+    if (type === "img" || type === "image") return createNode("img")
+    if (type === "canvas" || type === "surface") return createNode("canvas")
+    const node = createNode("box")
+    if (BLOCK_HTML_TAGS.has(type)) {
+      const defaultStyle: Partial<TGEProps> = { direction: "column" }
+      tagDefaultsMap.set(node, defaultStyle)
+      node.props.defaultStyle = defaultStyle
+      node.props.direction = "column"
+      node._defaultLayoutKeys = new Set(["direction"])
+      node._syncedDefaultStyle = defaultStyle
+      node._flexNode?.setFlexDirection(FLEX_DIRECTION_COLUMN)
+    } else if (type === "button") {
+      const defaultStyle: Partial<TGEProps> = { focusable: true, alignX: "center", alignY: "center" }
+      tagDefaultsMap.set(node, defaultStyle)
+      node.props.defaultStyle = defaultStyle
+      node.props.focusable = true
+      node.props.alignX = "center"
+      node.props.alignY = "center"
+      node._defaultLayoutKeys = new Set(["focusable", "alignX", "alignY"])
+      node._syncedDefaultStyle = defaultStyle
+      node._focusableCount = 1
+      registerNodeFocusable(node)
+      syncAllLayoutProps(node)
+    }
+    return node
   },
 
   createTextNode(value: string): TGENode {
@@ -329,7 +405,12 @@ const renderer = createRenderer<TGENode>({
 
   setProperty(node: TGENode, name: string, value: unknown) {
     const currentProps = node.props as Record<string, unknown>
-    if (currentProps[name] === value) return
+    if (
+      currentProps[name] === value
+      && !node._defaultLayoutKeys?.has(name)
+      && !node._classLayoutKeys?.has(name)
+      && !node._styleKeys?.has(name)
+    ) return
     if (!GRID_REPLACEMENT_PROPS.has(name) && OBJECT_PROPS.has(name) && shallowEqual(currentProps[name], value)) return
 
     // ref callback — pass a NodeHandle to the user
@@ -338,10 +419,61 @@ const renderer = createRenderer<TGENode>({
       return
     }
 
+    // defaultStyle prop — lowest precedence layer, synced to Flexily
+    if (name === "defaultStyle") {
+      markPropsDirty(node)
+      const wasFocusable = !!node.props.focusable
+      const tagDefaults = tagDefaultsMap.get(node)
+      const resolvedDefaults = resolveStyleDefaultsColors(value)
+      node.props.defaultStyle = tagDefaults
+        ? (resolvedDefaults ? { ...tagDefaults, ...resolvedDefaults } : tagDefaults)
+        : resolvedDefaults
+      syncResolvedLayout(node)
+      const isFocusable = !!node.props.focusable
+      if (wasFocusable !== isFocusable) {
+        const delta = isFocusable ? 1 : -1
+        node._focusableCount = Math.max(0, node._focusableCount + delta)
+        adjustFocusableAncestors(node.parent, delta)
+        if (isFocusable) registerNodeFocusable(node)
+        else unregisterNodeFocusable(node)
+      }
+      markLayoutDirty()
+      markNodeVisualDamage(node)
+      markNodeDirty(node)
+      return
+    }
+
+    // className prop — sync layout props to Flexily without polluting visual node.props
+    if (name === "className") {
+      markPropsDirty(node)
+      node.props.className = value as string | undefined
+      syncResolvedLayout(node)
+      markLayoutDirty()
+      markNodeVisualDamage(node)
+      markNodeDirty(node)
+      return
+    }
+
+    // classOverride prop — allows className to override direct component props
+    if (name === "classOverride") {
+      markPropsDirty(node)
+      node.props.classOverride = !!value
+      syncResolvedLayout(node)
+      markLayoutDirty()
+      markNodeVisualDamage(node)
+      markNodeDirty(node)
+      return
+    }
+
     // Padding shorthand: [Y, X] or [T, R, B, L] → expand to per-side props
     if (name === "padding" && Array.isArray(value)) {
       markPropsDirty(node)
       const p = value as number[]
+      for (const side of ["paddingTop", "paddingBottom", "paddingLeft", "paddingRight"]) {
+        node._defaultLayoutKeys?.delete(side)
+        node._classLayoutKeys?.delete(side)
+        node._styleKeys?.delete(side)
+      }
       if (p.length === 2) {
         // [Y, X]
         node.props.paddingTop = p[0]; node.props.paddingBottom = p[0]
@@ -361,6 +493,11 @@ const renderer = createRenderer<TGENode>({
     if (name === "margin" && Array.isArray(value)) {
       markPropsDirty(node)
       const p = value as number[]
+      for (const side of ["marginTop", "marginBottom", "marginLeft", "marginRight"]) {
+        node._defaultLayoutKeys?.delete(side)
+        node._classLayoutKeys?.delete(side)
+        node._styleKeys?.delete(side)
+      }
       if (p.length === 2) {
         node.props.marginTop = p[0]; node.props.marginBottom = p[0]
         node.props.marginLeft = p[1]; node.props.marginRight = p[1]
@@ -375,17 +512,43 @@ const renderer = createRenderer<TGENode>({
     }
 
     // style prop — merge: direct props override style
-    if (name === "style" && typeof value === "object" && value !== null) {
+    if (name === "style" && (value === undefined || value === null)) {
       markPropsDirty(node)
-      const style = value as Record<string, unknown>
-      const newKeys = new Set(Object.keys(style))
+      delete currentProps.style
       const prevStyleKeys = node._styleKeys
       let styleHasLayout = false
       if (prevStyleKeys) {
         for (const key of prevStyleKeys) {
+          if (isLayoutProperty(key)) styleHasLayout = true
+          delete currentProps[key]
+          if (key === "width") node._widthSizing = null
+          else if (key === "height") node._heightSizing = null
+          syncChangedProp(node, key)
+        }
+      }
+      node._styleKeys = undefined
+      if (node.props.className || node.props.defaultStyle) syncResolvedLayout(node)
+      if (styleHasLayout) markLayoutDirty()
+      markNodeVisualDamage(node)
+      markNodeDirty(node)
+      return
+    }
+    if (name === "style" && typeof value === "object" && value !== null) {
+      markPropsDirty(node)
+      currentProps.style = value
+      const style = value as Record<string, unknown>
+      const newKeys = new Set(Object.keys(style))
+      const prevStyleKeys = node._styleKeys
+      let styleHasLayout = false
+      let removedKey = false
+      if (prevStyleKeys) {
+        for (const key of prevStyleKeys) {
           if (!newKeys.has(key)) {
+            removedKey = true
             if (isLayoutProperty(key)) styleHasLayout = true
             delete (node.props as Record<string, unknown>)[key]
+            if (key === "width") node._widthSizing = null
+            else if (key === "height") node._heightSizing = null
             syncChangedProp(node, key)
           }
         }
@@ -394,10 +557,25 @@ const renderer = createRenderer<TGENode>({
       for (const key of newKeys) {
         if (isLayoutProperty(key)) styleHasLayout = true
         // Only set if NOT already set as a direct prop
-        if ((node.props as Record<string, unknown>)[key] === undefined || prevStyleKeys?.has(key)) {
+        if (
+          (node.props as Record<string, unknown>)[key] === undefined
+          || prevStyleKeys?.has(key)
+          || node._defaultLayoutKeys?.has(key)
+          || node._classLayoutKeys?.has(key)
+        ) {
+          node._defaultLayoutKeys?.delete(key)
+          node._classLayoutKeys?.delete(key)
           let val = style[key]
           const flags = PROP_FLAGS[key] ?? 0
           if ((flags & FLAG_COLOR) !== 0) val = resolveColor(val)
+          if (key === "layout" && val === "grid") {
+            for (const defKey of ["direction", "alignX", "alignY"]) {
+              if (node._defaultLayoutKeys?.has(defKey)) {
+                delete currentProps[defKey]
+                node._defaultLayoutKeys.delete(defKey)
+              }
+            }
+          }
           if (key === "width" || key === "height") {
             ;(node.props as Record<string, unknown>)[key] = val
             if (key === "width") node._widthSizing = parseSizing(val as number | string | undefined)
@@ -409,9 +587,25 @@ const renderer = createRenderer<TGENode>({
           syncChangedProp(node, key)
         }
       }
+      if (removedKey && (node.props.className || node.props.defaultStyle)) {
+        syncResolvedLayout(node)
+      }
       if (styleHasLayout) markLayoutDirty()
       markNodeDirty(node)
       return
+    }
+
+    // Direct prop overrides defaultStyle / className / style ownership
+    node._defaultLayoutKeys?.delete(name)
+    node._classLayoutKeys?.delete(name)
+    node._styleKeys?.delete(name)
+    if (name === "layout" && value === "grid") {
+      for (const defKey of ["direction", "alignX", "alignY"]) {
+        if (node._defaultLayoutKeys?.has(defKey)) {
+          delete currentProps[defKey]
+          node._defaultLayoutKeys.delete(defKey)
+        }
+      }
     }
 
     // ── Pre-parse colors: string → u32 once, not every frame ──
@@ -526,7 +720,8 @@ const renderer = createRenderer<TGENode>({
     // onKeyDown / onPress / onClick on a focusable node — update the focus entry
     if (name === "onKeyDown" || name === "onPress" || name === "onClick") {
       markPropsDirty(node)
-      ;(node.props as Record<string, unknown>)[name] = value
+      if (value === undefined) delete currentProps[name]
+      else currentProps[name] = value
       syncChangedProp(node, name)
       updateNodeFocusEntry(node)
       maybeNotifyCompositor(node, name)
@@ -534,9 +729,74 @@ const renderer = createRenderer<TGENode>({
       return
     }
 
+    // Mouse enter/leave aliases — keep onMouseOver/onMouseOut synced for loop wakeups
+    if (name === "onMouseOver" || name === "onMouseEnter" || name === "onHoverEnter") {
+      markPropsDirty(node)
+      if (value === undefined) delete currentProps[name]
+      else currentProps[name] = value
+      const aliasState = mouseAliasStates.get(node) ?? {}
+      if (name === "onMouseOver") {
+        aliasState.over = false
+        if (value === undefined) {
+          const fallback = node.props.onMouseEnter ?? node.props.onHoverEnter
+          if (fallback) {
+            node.props.onMouseOver = fallback
+            aliasState.over = true
+          }
+        }
+      } else if (currentProps.onMouseOver === undefined || aliasState.over) {
+        const fallback = node.props.onMouseEnter ?? node.props.onHoverEnter
+        if (fallback) {
+          node.props.onMouseOver = fallback
+          aliasState.over = true
+        } else {
+          delete currentProps.onMouseOver
+          aliasState.over = false
+        }
+      }
+      mouseAliasStates.set(node, aliasState)
+      maybeNotifyCompositor(node, name)
+      markNodeDirty(node)
+      return
+    }
+    if (name === "onMouseOut" || name === "onMouseLeave" || name === "onHoverLeave") {
+      markPropsDirty(node)
+      if (value === undefined) delete currentProps[name]
+      else currentProps[name] = value
+      const aliasState = mouseAliasStates.get(node) ?? {}
+      if (name === "onMouseOut") {
+        aliasState.out = false
+        if (value === undefined) {
+          const fallback = node.props.onMouseLeave ?? node.props.onHoverLeave
+          if (fallback) {
+            node.props.onMouseOut = fallback
+            aliasState.out = true
+          }
+        }
+      } else if (currentProps.onMouseOut === undefined || aliasState.out) {
+        const fallback = node.props.onMouseLeave ?? node.props.onHoverLeave
+        if (fallback) {
+          node.props.onMouseOut = fallback
+          aliasState.out = true
+        } else {
+          delete currentProps.onMouseOut
+          aliasState.out = false
+        }
+      }
+      mouseAliasStates.set(node, aliasState)
+      maybeNotifyCompositor(node, name)
+      markNodeDirty(node)
+      return
+    }
+
     markPropsDirty(node)
-    ;(node.props as Record<string, unknown>)[name] = value
-    syncChangedProp(node, name)
+    if (value === undefined) delete currentProps[name]
+    else currentProps[name] = value
+    if (value === undefined && (node.props.className || node.props.defaultStyle) && (isLayoutProp(name) || isTextLayoutProp(name) || name === "rowGap" || name === "columnGap")) {
+      syncResolvedLayout(node)
+    } else {
+      syncChangedProp(node, name)
+    }
     if (name === "layer" || name === "willChange") syncCompositorLayerBacking(node)
     maybeNotifyCompositor(node, name)
     if (isLayoutProperty(name)) markLayoutDirty()

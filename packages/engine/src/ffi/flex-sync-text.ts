@@ -1,7 +1,7 @@
 import { MEASURE_MODE_UNDEFINED } from "flexily"
 import { acquireFlexNode } from "./flex-pool"
-import { SIZING, type TGENode } from "./node-types"
-import { measureForLayout, measureTextConstrained, type TextLayoutOptions } from "./text-layout"
+import { SIZING, resolveProps, type TGENode } from "./node-types"
+import { measureForLayout, measureTextConstrained, resolveLineHeightPx, type TextLayoutOptions } from "./text-layout"
 import { createGridTextIntrinsicAdapter } from "./grid-text-intrinsics"
 import type { GridIntrinsicMeasureFunc } from "./grid-types"
 import {
@@ -35,18 +35,34 @@ export function collectText(node: TGENode): string {
 const gridTextIntrinsicStates = new WeakMap<TGENode, GridIntrinsicMeasureFunc>()
 const gridTextSizingStates = new WeakMap<TGENode, string>()
 
+function resolveEffectiveTextStyle(node: TGENode) {
+  const props = resolveProps(node)
+  const parentProps = node.parent ? resolveProps(node.parent) : undefined
+  return {
+    fontId: props.fontId ?? parentProps?.fontId,
+    fontSize: props.fontSize ?? parentProps?.fontSize,
+    lineHeight: props.lineHeight ?? parentProps?.lineHeight,
+    fontFamily: props.fontFamily ?? parentProps?.fontFamily,
+    fontWeight: props.fontWeight ?? parentProps?.fontWeight,
+    fontStyle: props.fontStyle ?? parentProps?.fontStyle,
+    whiteSpace: props.whiteSpace ?? parentProps?.whiteSpace,
+    wordBreak: props.wordBreak ?? parentProps?.wordBreak,
+  }
+}
+
 function gridTextIntrinsicOptions(node: TGENode) {
-  const props = node.props
+  const style = resolveEffectiveTextStyle(node)
+  const fontSize = style.fontSize ?? 14
   return {
     text: collectText(node),
-    fontId: props.fontId,
-    fontSize: props.fontSize,
-    lineHeight: props.lineHeight,
-    fontFamily: props.fontFamily,
-    fontWeight: props.fontWeight,
-    fontStyle: props.fontStyle,
-    whiteSpace: props.whiteSpace,
-    wordBreak: props.wordBreak,
+    fontId: style.fontId,
+    fontSize: style.fontSize,
+    lineHeight: style.lineHeight !== undefined ? resolveLineHeightPx(fontSize, style.lineHeight) : undefined,
+    fontFamily: style.fontFamily,
+    fontWeight: style.fontWeight,
+    fontStyle: style.fontStyle,
+    whiteSpace: style.whiteSpace,
+    wordBreak: style.wordBreak,
   }
 }
 
@@ -112,22 +128,24 @@ export function createTextFlexNode(node: TGENode): void {
   flex.setMeasureFunc((width, widthMode, _height, _heightMode) => {
     const content = collectText(node)
     if (!content) return { width: 0, height: 0 }
-    const props = node.props
-    const fontSize = props.fontSize ?? 14
-    const fontId = props.fontId ?? 0
-    const fontFamily = props.fontFamily
-    const fontWeight = props.fontWeight
-    const fontStyle = props.fontStyle
+    const style = resolveEffectiveTextStyle(node)
+    const fontSize = style.fontSize ?? 14
+    const fontId = style.fontId ?? 0
+    const fontFamily = style.fontFamily
+    const fontWeight = style.fontWeight
+    const fontStyle = style.fontStyle
+    const lineHeight = resolveLineHeightPx(fontSize, style.lineHeight)
     const options: TextLayoutOptions = {
-      whiteSpace: props.whiteSpace,
-      wordBreak: props.wordBreak,
+      whiteSpace: style.whiteSpace,
+      wordBreak: style.wordBreak,
       fontFamily,
       fontWeight,
       fontStyle,
+      lineHeight,
     }
     const maxW = widthMode === MEASURE_MODE_UNDEFINED ? Infinity : width
     if (maxW === Infinity || maxW <= 0) {
-      return measureForLayout(content, fontId, fontSize, fontFamily, fontWeight, fontStyle)
+      return measureForLayout(content, fontId, fontSize, fontFamily, fontWeight, fontStyle, lineHeight)
     }
     return measureTextConstrained(content, fontId, fontSize, maxW, fontFamily, fontWeight, fontStyle, options)
   })

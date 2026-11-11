@@ -24,10 +24,15 @@ interface BoxProps extends TGEProps {
   scrollId?: string
   shadow?: ShadowDef | ShadowDef[]
   glow?: { radius: number; color: ColorValue; intensity?: number }
+  onClick?: TGEProps["onClick"]
   onMouseDown?: (evt: NodeMouseEvent) => void
   onMouseUp?: (evt: NodeMouseEvent) => void
   onMouseOver?: (evt: NodeMouseEvent) => void
+  onMouseEnter?: (evt: NodeMouseEvent) => void
+  onHoverEnter?: (evt: NodeMouseEvent) => void
   onMouseOut?: (evt: NodeMouseEvent) => void
+  onMouseLeave?: (evt: NodeMouseEvent) => void
+  onHoverLeave?: (evt: NodeMouseEvent) => void
   onMouseMove?: (evt: NodeMouseEvent) => void
   focusStyle?: {
     backgroundColor?: ColorValue
@@ -60,7 +65,7 @@ type TextIntrinsicProps = TGEProps & {
   fontId?: number
   lineHeight?: number
   wordBreak?: "normal" | "keep-all"
-  whiteSpace?: "normal" | "pre-wrap"
+  whiteSpace?: "normal" | "pre-wrap" | "nowrap"
   fontFamily?: string
   fontWeight?: number
   fontStyle?: "normal" | "italic"
@@ -100,7 +105,21 @@ export namespace JSX {
   interface ElementChildrenAttribute { children: {} }
   interface IntrinsicElements {
     box: BoxIntrinsicProps
+    div: BoxIntrinsicProps
+    section: BoxIntrinsicProps
+    header: BoxIntrinsicProps
+    footer: BoxIntrinsicProps
+    main: BoxIntrinsicProps
+    nav: BoxIntrinsicProps
+    button: BoxIntrinsicProps
     text: TextIntrinsicProps
+    span: TextIntrinsicProps
+    p: TextIntrinsicProps
+    h1: TextIntrinsicProps
+    h2: TextIntrinsicProps
+    h3: TextIntrinsicProps
+    h4: TextIntrinsicProps
+    label: TextIntrinsicProps
     image: ImgIntrinsicProps
     img: ImgIntrinsicProps
     canvas: CanvasIntrinsicProps
@@ -115,7 +134,21 @@ declare module "solid-js" {
   namespace JSX {
     interface IntrinsicElements {
       box: BoxIntrinsicProps
+      div: BoxIntrinsicProps
+      section: BoxIntrinsicProps
+      header: BoxIntrinsicProps
+      footer: BoxIntrinsicProps
+      main: BoxIntrinsicProps
+      nav: BoxIntrinsicProps
+      button: BoxIntrinsicProps
       text: TextIntrinsicProps
+      span: TextIntrinsicProps
+      p: TextIntrinsicProps
+      h1: TextIntrinsicProps
+      h2: TextIntrinsicProps
+      h3: TextIntrinsicProps
+      h4: TextIntrinsicProps
+      label: TextIntrinsicProps
       image: ImgIntrinsicProps
       img: ImgIntrinsicProps
       canvas: CanvasIntrinsicProps

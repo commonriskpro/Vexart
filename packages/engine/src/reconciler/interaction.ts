@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import type { InteractionMode, TGENode } from "../ffi/node"
+import { resolveProps, type InteractionMode, type TGENode } from "../ffi/node"
 import { getHandleNode, type NodeHandle } from "./handle"
 
 function getNodeInteractionMode(node: TGENode): InteractionMode {
@@ -40,7 +40,7 @@ export function shouldPromoteInteractionLayer(node: TGENode | null | undefined):
   if (!node) return false
   const mode = getNodeInteractionMode(node)
   if (mode === "drag" || (mode as string) === "hover" || (mode as string) === "active") return true
-  const props = node.props
+  const props = resolveProps(node)
   if (!props) return false
   if (props.hoverStyle || props.activeStyle) return true
   return !!(
@@ -49,6 +49,10 @@ export function shouldPromoteInteractionLayer(node: TGENode | null | undefined):
     props.onMouseDown ||
     props.onMouseUp ||
     props.onMouseOver ||
+    props.onMouseEnter ||
+    props.onHoverEnter ||
+    props.onMouseLeave ||
+    props.onHoverLeave ||
     props.onMouseOut
   )
 }

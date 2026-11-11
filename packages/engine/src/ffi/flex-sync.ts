@@ -1,4 +1,4 @@
-import type { TGENode } from "./node-types"
+import { resolveProps, type TGENode, type TGEProps } from "./node-types"
 import {
   LAYOUT_PROPS,
   isLayoutProp,
@@ -52,18 +52,17 @@ export function syncAllLayoutProps(node: TGENode): void {
     syncGridTextIntrinsic(node)
     return
   }
-  const props = node.props
+  const props = resolveProps(node)
   if (props.layout === "grid") {
     syncGridLayout(node)
     return
   }
-  syncFlexLayout(node)
+  syncFlexLayout(node, props)
 }
 
-function syncFlexLayout(node: TGENode): void {
+function syncFlexLayout(node: TGENode, props: TGEProps = resolveProps(node)): void {
   const flex = node._flexNode
   if (!flex) return
-  const props = node.props
   const grid = flex as GridNode
   const wasGrid = typeof grid.setLayoutMode === "function" && grid.getLayoutMode() !== "flex"
   if (wasGrid) {

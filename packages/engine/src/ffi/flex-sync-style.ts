@@ -15,13 +15,17 @@ import {
   ALIGN_CENTER,
   ALIGN_AUTO,
   ALIGN_SPACE_BETWEEN,
+  ALIGN_SPACE_AROUND,
+  ALIGN_SPACE_EVENLY,
   ALIGN_STRETCH,
   JUSTIFY_FLEX_START,
   JUSTIFY_FLEX_END,
   JUSTIFY_CENTER,
   JUSTIFY_SPACE_BETWEEN,
+  JUSTIFY_SPACE_AROUND,
+  JUSTIFY_SPACE_EVENLY,
 } from "flexily"
-import { SIZING, type TGENode, type SizingInfo, type TGEProps } from "./node-types"
+import { SIZING, resolveProps, type TGENode, type SizingInfo, type TGEProps } from "./node-types"
 
 export const LAYOUT_PROPS = new Set([
   "layout",
@@ -48,6 +52,8 @@ export function mapJustify(value: number): number {
   if (value === 1) return JUSTIFY_FLEX_END
   if (value === 2) return JUSTIFY_CENTER
   if (value === 3) return JUSTIFY_SPACE_BETWEEN
+  if (value === 4) return JUSTIFY_SPACE_AROUND
+  if (value === 5) return JUSTIFY_SPACE_EVENLY
   return JUSTIFY_FLEX_START
 }
 
@@ -56,6 +62,8 @@ export function mapAlign(value: number): number {
   if (value === 1) return ALIGN_FLEX_END
   if (value === 2) return ALIGN_CENTER
   if (value === 3) return ALIGN_SPACE_BETWEEN
+  if (value === 4) return ALIGN_SPACE_AROUND
+  if (value === 5) return ALIGN_SPACE_EVENLY
   return ALIGN_FLEX_START
 }
 
@@ -64,16 +72,22 @@ export function parseDir(value: unknown): number {
 }
 
 export function parseAlignX(value: unknown): number {
+  if (value === "stretch") return 255
   if (value === "right" || value === "flex-end") return 1
   if (value === "center") return 2
   if (value === "space-between") return 3
+  if (value === "space-around") return 4
+  if (value === "space-evenly") return 5
   return 0
 }
 
 export function parseAlignY(value: unknown): number {
+  if (value === "stretch") return 255
   if (value === "bottom" || value === "flex-end") return 1
   if (value === "center") return 2
   if (value === "space-between") return 3
+  if (value === "space-around") return 4
+  if (value === "space-evenly") return 5
   return 0
 }
 
@@ -102,7 +116,7 @@ export function syncChildSizing(node: TGENode): void {
   for (const child of node.children) {
     const flex = child._flexNode
     if (!flex || child.kind === "text") continue
-    const props = child.props
+    const props = resolveProps(child)
     syncSizing(
       flex,
       child._widthSizing,
@@ -181,6 +195,8 @@ export function syncSizing(
     if (gridItem && hs.type === SIZING.FIT) setHeightFitContent(flex)
     else syncHeightSizing(flex, hs)
   } else if (gridItem) {
+    flex.setHeightAuto()
+  } else {
     flex.setHeightAuto()
   }
 
