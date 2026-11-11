@@ -1,6 +1,6 @@
 import { type InteractiveStyleProps } from "@vexart/engine"
 import { setClassNameResolver, getThemeEpoch } from "@vexart/engine/internal"
-import { getThemeTokenResolver, type ThemeTokenResolver } from "./theme-resolver"
+import { getThemeTokenResolver, resolvePaletteColor, type ThemeTokenResolver } from "./theme-resolver"
 
 /** @public */
 export const CLASS_NAME_UNKNOWN_BEHAVIOR = {
@@ -128,6 +128,15 @@ const DEFAULT_FONT_WEIGHTS: Record<string, number> = {
   bold: 700,
 }
 
+const DEFAULT_LINE_HEIGHTS: Record<string, number> = {
+  none: 1,
+  tight: 1.25,
+  snug: 1.375,
+  normal: 1.5,
+  relaxed: 1.625,
+  loose: 2,
+}
+
 const DEFAULT_RADII: Record<string, number> = {
   none: 0,
   sm: 6,
@@ -138,9 +147,83 @@ const DEFAULT_RADII: Record<string, number> = {
   full: 9999,
 }
 
+const TRANSITION_DURATIONS = new Set([75, 100, 150, 200, 300, 500, 700, 1000])
+const DEFAULT_TRANSITION_MS = 150
+
 const DEFAULT_SPACE_PX = 1
 
-function getColorAlias(name: string): string | number | undefined {
+function parseHexOrNumberColor(color: string | number): [number, number, number, number] | undefined {
+  if (typeof color === "number") {
+    const u = color >>> 0
+    return [(u >>> 24) & 0xff, (u >>> 16) & 0xff, (u >>> 8) & 0xff, u & 0xff]
+  }
+  const hex = color.startsWith("#") ? color.slice(1) : color
+  if (hex.length === 3 && /^[0-9a-fA-F]{3}$/.test(hex)) {
+    return [parseInt(hex[0], 16) * 17, parseInt(hex[1], 16) * 17, parseInt(hex[2], 16) * 17, 255]
+  }
+  if (hex.length === 4 && /^[0-9a-fA-F]{4}$/.test(hex)) {
+    return [parseInt(hex[0], 16) * 17, parseInt(hex[1], 16) * 17, parseInt(hex[2], 16) * 17, parseInt(hex[3], 16) * 17]
+  }
+  if (hex.length === 6 && /^[0-9a-fA-F]{6}$/.test(hex)) {
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), 255]
+  }
+  if (hex.length === 8 && /^[0-9a-fA-F]{8}$/.test(hex)) {
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), parseInt(hex.slice(6, 8), 16)]
+  }
+  return undefined
+}
+
+function hexByte(n: number): string {
+  return Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0")
+}
+
+function applyColorOpacity(color: string | number, opacityPct: number): string | undefined {
+  const rgba = parseHexOrNumberColor(color)
+  if (!rgba) return undefined
+  const clamped = Math.max(0, Math.min(100, opacityPct))
+  const alpha = Math.round(rgba[3] * (clamped / 100))
+  return `#${hexByte(rgba[0])}${hexByte(rgba[1])}${hexByte(rgba[2])}${hexByte(alpha)}`
+}
+
+function parseBracket(raw: string): string | undefined {
+  if (raw.startsWith("[") && raw.endsWith("]") && raw.length > 2) return raw.slice(1, -1)
+  return undefined
+}
+
+function parseBracketNumber(raw: string): number | undefined {
+  const inner = parseBracket(raw)
+  if (inner === undefined) return undefined
+  const trimmed = inner.endsWith("px") ? inner.slice(0, -2) : inner
+  if (!/^-?\d+(?:\.\d+)?$/.test(trimmed)) return undefined
+  return Number(trimmed)
+}
+
+function parseBracketSizing(raw: string): VexartStyleProps["width"] {
+  const inner = parseBracket(raw)
+  if (inner === undefined) return undefined
+  if (/^\d+(?:\.\d+)?%$/.test(inner)) return inner as `${number}%`
+  return parseBracketNumber(raw)
+}
+
+function parseBracketColor(raw: string): string | undefined {
+  const inner = parseBracket(raw)
+  if (inner === undefined) return undefined
+  if (/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(inner)) return inner
+  return undefined
+}
+
+function parseBracketLineHeight(raw: string): number | undefined {
+  const inner = parseBracket(raw)
+  if (inner === undefined) return undefined
+  const rawNum = inner.endsWith("px") ? inner.slice(0, -2) : inner
+  if (!/^\d+(?:\.\d+)?$/.test(rawNum)) return undefined
+  const value = Number(rawNum)
+  return value > 0 ? value : undefined
+}
+
+function resolveBaseColor(name: string): string | number | undefined {
+  const bracket = parseBracketColor(name)
+  if (bracket !== undefined) return bracket
   const resolver = getThemeTokenResolver()
   if (resolver?.getColor) {
     const resolved = resolver.getColor(name)
@@ -150,8 +233,49 @@ function getColorAlias(name: string): string | number | undefined {
     case "black": return "#000000"
     case "white": return "#ffffff"
     case "transparent": return "#00000000"
-    default: return undefined
+    default: return resolvePaletteColor(name)
   }
+}
+
+function getColorAlias(name: string): string | number | undefined {
+  const slash = name.indexOf("/")
+  if (slash === -1) return resolveBaseColor(name)
+  const baseName = name.slice(0, slash)
+  const opacityRaw = name.slice(slash + 1)
+  if (opacityRaw.length === 0) return undefined
+  const opacity = Number(opacityRaw)
+  if (!Number.isFinite(opacity) || opacity < 0 || opacity > 100) return undefined
+  const base = resolveBaseColor(baseName)
+  if (base === undefined) return undefined
+  return applyColorOpacity(base, opacity)
+}
+
+function resolveSpacingOrBracket(value: string): number | undefined {
+  return spacingValue(value) ?? parseBracketNumber(value)
+}
+
+function resolveSizeOrBracket(value: string): VexartStyleProps["width"] {
+  return percentValue(value) ?? parseBracketSizing(value)
+}
+
+const ROUNDED_DIR_RE = /^rounded-(tl|tr|bl|br|t|b|l|r)(?:-(.+))?$/
+
+function applyCornerRadiusSide(props: MutableStyleProps, dir: string, radius: number): void {
+  const fallback = props.cornerRadius ?? 0
+  const radii = props.cornerRadii
+    ? { ...props.cornerRadii }
+    : { tl: fallback, tr: fallback, br: fallback, bl: fallback }
+  switch (dir) {
+    case "t": radii.tl = radius; radii.tr = radius; break
+    case "b": radii.bl = radius; radii.br = radius; break
+    case "l": radii.tl = radius; radii.bl = radius; break
+    case "r": radii.tr = radius; radii.br = radius; break
+    case "tl": radii.tl = radius; break
+    case "tr": radii.tr = radius; break
+    case "bl": radii.bl = radius; break
+    case "br": radii.br = radius; break
+  }
+  props.cornerRadii = radii
 }
 
 function getFontSize(key: string): number | undefined {
@@ -222,44 +346,108 @@ function parseToken(raw: string): { target: StyleTarget; token: string } {
   return { target: "base", token: raw }
 }
 
-function resolveToken(props: MutableStyleProps, target: StyleTarget, token: string): ClassNameDiagnostic | null {
+function resolveToken(
+  props: MutableStyleProps,
+  target: StyleTarget,
+  token: string,
+  transitionState: { hasDuration: boolean },
+): ClassNameDiagnostic | null {
   if (token === "flex" || token === "flex-col") { props.direction = "column"; return null }
   if (token === "flex-row") { props.direction = "row"; return null }
+  if (token === "flex-1") { props.flexGrow = 1; props.flexShrink = 1; props.flexBasis = 0; return null }
+  if (token === "flex-auto") { props.flexGrow = 1; props.flexShrink = 1; return null }
+  if (token === "flex-initial") { props.flexGrow = 0; props.flexShrink = 1; return null }
+  if (token === "flex-none") { props.flexGrow = 0; props.flexShrink = 0; return null }
+  if (token === "grid") { props.layout = "grid"; return null }
+  if (token.startsWith("grid-cols-")) {
+    const count = Number(token.slice(10))
+    if (Number.isInteger(count) && count >= 1 && count <= 12) {
+      props.gridTemplateColumns = Array.from({ length: count }, () => ({ fr: 1 }))
+      return null
+    }
+  }
+  if (token.startsWith("col-span-")) {
+    const span = Number(token.slice(9))
+    if (Number.isInteger(span) && span >= 1 && span <= 12) {
+      props.gridColumn = { end: { span } }
+      return null
+    }
+  }
   if (token === "items-start") { props.alignY = "top"; return null }
   if (token === "items-center") { props.alignY = "center"; return null }
   if (token === "items-end") { props.alignY = "bottom"; return null }
+  if (token === "items-stretch") { props.alignY = "stretch"; return null }
   if (token === "justify-start") { props.alignX = "left"; return null }
   if (token === "justify-center") { props.alignX = "center"; return null }
   if (token === "justify-end") { props.alignX = "right"; return null }
   if (token === "justify-between") { props.alignX = "space-between"; return null }
+  if (token === "justify-around") { props.alignX = "space-around"; return null }
+  if (token === "justify-evenly") { props.alignX = "space-evenly"; return null }
   if (token === "border") { applyToTarget(props, target, { borderWidth: 1 }); return null }
+  if (token === "border-t") { props.borderTop = 1; return null }
+  if (token === "border-b") { props.borderBottom = 1; return null }
+  if (token === "border-l") { props.borderLeft = 1; return null }
+  if (token === "border-r") { props.borderRight = 1; return null }
+  if (token.startsWith("border-t-")) {
+    const raw = token.slice(9)
+    const w = BORDER_WIDTH_MAP[raw] ?? parseBracketNumber(raw)
+    if (w !== undefined) { props.borderTop = w; return null }
+  }
+  if (token.startsWith("border-b-")) {
+    const raw = token.slice(9)
+    const w = BORDER_WIDTH_MAP[raw] ?? parseBracketNumber(raw)
+    if (w !== undefined) { props.borderBottom = w; return null }
+  }
+  if (token.startsWith("border-l-")) {
+    const raw = token.slice(9)
+    const w = BORDER_WIDTH_MAP[raw] ?? parseBracketNumber(raw)
+    if (w !== undefined) { props.borderLeft = w; return null }
+  }
+  if (token.startsWith("border-r-")) {
+    const raw = token.slice(9)
+    const w = BORDER_WIDTH_MAP[raw] ?? parseBracketNumber(raw)
+    if (w !== undefined) { props.borderRight = w; return null }
+  }
 
-  if (token.startsWith("p-")) { props.padding = spacingValue(token.slice(2)); return null }
-  if (token.startsWith("px-")) { props.paddingX = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("py-")) { props.paddingY = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("pt-")) { props.paddingTop = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("pr-")) { props.paddingRight = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("pb-")) { props.paddingBottom = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("pl-")) { props.paddingLeft = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("m-")) { props.margin = spacingValue(token.slice(2)); return null }
-  if (token.startsWith("mx-")) { props.marginX = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("my-")) { props.marginY = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("mt-")) { props.marginTop = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("mr-")) { props.marginRight = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("mb-")) { props.marginBottom = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("ml-")) { props.marginLeft = spacingValue(token.slice(3)); return null }
-  if (token.startsWith("gap-")) { props.gap = spacingValue(token.slice(4)); return null }
-  if (token.startsWith("w-")) { props.width = percentValue(token.slice(2)); return null }
-  if (token.startsWith("h-")) { props.height = percentValue(token.slice(2)); return null }
-  if (token.startsWith("min-w-")) { props.minWidth = spacingValue(token.slice(6)); return null }
-  if (token.startsWith("max-w-")) { props.maxWidth = spacingValue(token.slice(6)); return null }
-  if (token.startsWith("min-h-")) { props.minHeight = spacingValue(token.slice(6)); return null }
-  if (token.startsWith("max-h-")) { props.maxHeight = spacingValue(token.slice(6)); return null }
+  if (token.startsWith("p-")) { const v = resolveSpacingOrBracket(token.slice(2)); if (v !== undefined) { props.padding = v; return null } }
+  if (token.startsWith("px-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.paddingX = v; return null } }
+  if (token.startsWith("py-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.paddingY = v; return null } }
+  if (token.startsWith("pt-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.paddingTop = v; return null } }
+  if (token.startsWith("pr-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.paddingRight = v; return null } }
+  if (token.startsWith("pb-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.paddingBottom = v; return null } }
+  if (token.startsWith("pl-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.paddingLeft = v; return null } }
+  if (token.startsWith("m-")) { const v = resolveSpacingOrBracket(token.slice(2)); if (v !== undefined) { props.margin = v; return null } }
+  if (token.startsWith("mx-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.marginX = v; return null } }
+  if (token.startsWith("my-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.marginY = v; return null } }
+  if (token.startsWith("mt-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.marginTop = v; return null } }
+  if (token.startsWith("mr-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.marginRight = v; return null } }
+  if (token.startsWith("mb-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.marginBottom = v; return null } }
+  if (token.startsWith("ml-")) { const v = resolveSpacingOrBracket(token.slice(3)); if (v !== undefined) { props.marginLeft = v; return null } }
+  if (token.startsWith("gap-x-")) { const v = resolveSpacingOrBracket(token.slice(6)); if (v !== undefined) { props.columnGap = v; return null } }
+  if (token.startsWith("gap-y-")) { const v = resolveSpacingOrBracket(token.slice(6)); if (v !== undefined) { props.rowGap = v; return null } }
+  if (token.startsWith("gap-")) { const v = resolveSpacingOrBracket(token.slice(4)); if (v !== undefined) { props.gap = v; return null } }
+  if (token.startsWith("w-")) { const v = resolveSizeOrBracket(token.slice(2)); if (v !== undefined) { props.width = v; return null } }
+  if (token.startsWith("h-")) { const v = resolveSizeOrBracket(token.slice(2)); if (v !== undefined) { props.height = v; return null } }
+  if (token.startsWith("min-w-")) { const v = resolveSpacingOrBracket(token.slice(6)); if (v !== undefined) { props.minWidth = v; return null } }
+  if (token.startsWith("max-w-")) { const v = resolveSpacingOrBracket(token.slice(6)); if (v !== undefined) { props.maxWidth = v; return null } }
+  if (token.startsWith("min-h-")) { const v = resolveSpacingOrBracket(token.slice(6)); if (v !== undefined) { props.minHeight = v; return null } }
+  if (token.startsWith("max-h-")) { const v = resolveSpacingOrBracket(token.slice(6)); if (v !== undefined) { props.maxHeight = v; return null } }
 
+  const roundedDir = ROUNDED_DIR_RE.exec(token)
+  if (roundedDir) {
+    const dir = roundedDir[1]
+    const suffix = roundedDir[2] ?? "md"
+    const resolved = getRadius(suffix) ?? parseBracketNumber(suffix)
+    if (resolved !== undefined) { applyCornerRadiusSide(props, dir, resolved); return null }
+  }
   if (token.startsWith("rounded")) {
     const value = token === "rounded" ? "md" : token.slice(8)
-    const resolved = getRadius(value)
-    if (resolved !== undefined) { applyToTarget(props, target, { cornerRadius: resolved }); return null }
+    const resolved = getRadius(value) ?? parseBracketNumber(value)
+    if (resolved !== undefined) {
+      if (target === "base") delete props.cornerRadii
+      applyToTarget(props, target, { cornerRadius: resolved })
+      return null
+    }
   }
   if (token.startsWith("bg-")) {
     const color = getColorAlias(token.slice(3))
@@ -268,13 +456,16 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
   if (token.startsWith("border-")) {
     const value = token.slice(7)
     const color = getColorAlias(value)
-    const width = BORDER_WIDTH_MAP[value]
+    const width = BORDER_WIDTH_MAP[value] ?? parseBracketNumber(value)
     if (color !== undefined) { applyToTarget(props, target, { borderColor: color }); return null }
     if (width !== undefined) { applyToTarget(props, target, { borderWidth: width }); return null }
   }
+  if (token === "text-left") { props.alignX = "left"; return null }
+  if (token === "text-center") { props.alignX = "center"; return null }
+  if (token === "text-right") { props.alignX = "right"; return null }
   if (token.startsWith("text-")) {
     const value = token.slice(5)
-    const size = getFontSize(value)
+    const size = getFontSize(value) ?? parseBracketNumber(value)
     const color = getColorAlias(value)
     if (size !== undefined) { props.fontSize = size; return null }
     if (color !== undefined) { props.color = color; return null }
@@ -283,6 +474,20 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
     const value = getFontWeight(token.slice(5))
     if (value !== undefined) { props.fontWeight = value; return null }
   }
+  if (token.startsWith("leading-")) {
+    const value = token.slice(8)
+    const named = DEFAULT_LINE_HEIGHTS[value]
+    if (named !== undefined) { props.lineHeight = named; return null }
+    if (/^\d+$/.test(value)) {
+      const n = Number(value)
+      if (n >= 3 && n <= 10) { props.lineHeight = n * 4; return null }
+    }
+    const bracket = parseBracketLineHeight(value)
+    if (bracket !== undefined) { props.lineHeight = bracket; return null }
+  }
+  if (token === "truncate") { props.whiteSpace = "nowrap"; props.wordBreak = "keep-all"; return null }
+  if (token === "italic") { props.fontStyle = "italic"; return null }
+  if (token === "not-italic") { props.fontStyle = "normal"; return null }
   if (token.startsWith("opacity-")) {
     const value = Number(token.slice(8))
     if (Number.isFinite(value)) { applyToTarget(props, target, { opacity: Math.max(0, Math.min(1, value / 100)) }); return null }
@@ -360,6 +565,33 @@ function resolveToken(props: MutableStyleProps, target: StyleTarget, token: stri
   // ── Layer ──
   if (token === "layer") { props.layer = true; return null }
 
+  // ── Transitions ──
+  if (target === "base") {
+    if (token === "transition-none") {
+      props.transition = 0
+      transitionState.hasDuration = false
+      return null
+    }
+    if (
+      token === "transition"
+      || token === "transition-all"
+      || token === "transition-colors"
+      || token === "transition-opacity"
+      || token === "transition-transform"
+    ) {
+      if (!transitionState.hasDuration) props.transition = DEFAULT_TRANSITION_MS
+      return null
+    }
+    if (token.startsWith("duration-")) {
+      const ms = Number(token.slice(9))
+      if (TRANSITION_DURATIONS.has(ms)) {
+        props.transition = ms
+        transitionState.hasDuration = true
+        return null
+      }
+    }
+  }
+
   // ── Style registry (createStyles) ──
   const registered = styleRegistry.get(token)
   if (registered) { Object.assign(props, registered); return null }
@@ -396,10 +628,11 @@ export function resolveClassName(className: string | undefined | null, options: 
 
   const props: MutableStyleProps = {}
   const diagnostics: ClassNameDiagnostic[] = []
+  const transitionState = { hasDuration: false }
 
   for (const raw of className.split(/\s+/).filter(Boolean)) {
     const parsed = parseToken(raw)
-    const diagnostic = resolveToken(props, parsed.target, parsed.token)
+    const diagnostic = resolveToken(props, parsed.target, parsed.token, transitionState)
     if (!diagnostic) continue
     diagnostics.push({ ...diagnostic, className: raw })
     options.onDiagnostic?.({ ...diagnostic, className: raw })

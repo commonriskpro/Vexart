@@ -59,9 +59,9 @@ describe("resolveClassName", () => {
       height: "grow",
       cornerRadius: 14,
       borderWidth: 1,
-      borderColor: "#ffffff25",
-      backgroundColor: "#171717",
-      color: "#a3a3a3",
+      borderColor: "#ffffff1f",
+      backgroundColor: "#121216",
+      color: "#a1a1aa",
       fontSize: 12,
       fontWeight: 600,
     })
@@ -71,16 +71,16 @@ describe("resolveClassName", () => {
   test("maps hover active and focus variants to interactive styles", () => {
     const result = resolveClassName("hover:bg-accent active:opacity-80 focus:border-ring")
 
-    expect(result.props.hoverStyle).toEqual({ backgroundColor: "#262626" })
+    expect(result.props.hoverStyle).toEqual({ backgroundColor: "#272730" })
     expect(result.props.activeStyle).toEqual({ opacity: 0.8 })
-    expect(result.props.focusStyle).toEqual({ borderColor: "#737373" })
+    expect(result.props.focusStyle).toEqual({ borderColor: "#a1a1aa" })
   })
 
   test("reports unsupported classes and can throw", () => {
-    const result = resolveClassName("grid grid-cols-3")
+    const result = resolveClassName("unknown-foo unknown-bar")
 
-    expect(result.diagnostics.map((diagnostic) => diagnostic.className)).toEqual(["grid", "grid-cols-3"])
-    expect(() => resolveClassName("grid", { unknownClass: CLASS_NAME_UNKNOWN_BEHAVIOR.ERROR })).toThrow("Unsupported Vexart class: grid")
+    expect(result.diagnostics.map((diagnostic) => diagnostic.className)).toEqual(["unknown-foo", "unknown-bar"])
+    expect(() => resolveClassName("unknown-foo", { unknownClass: CLASS_NAME_UNKNOWN_BEHAVIOR.ERROR })).toThrow("Unsupported Vexart class: unknown-foo")
   })
 
   test("explicit props override className props", () => {
@@ -88,6 +88,127 @@ describe("resolveClassName", () => {
 
     expect(props.padding).toBe(2)
     expect(props.backgroundColor).toBe("#ffffff")
+  })
+
+  test("resolves flex presets (flex-1, flex-auto, flex-initial, flex-none)", () => {
+    expect(resolveClassName("flex-1").props).toMatchObject({ flexGrow: 1, flexShrink: 1, flexBasis: 0 })
+    expect(resolveClassName("flex-auto").props).toMatchObject({ flexGrow: 1, flexShrink: 1 })
+    expect(resolveClassName("flex-initial").props).toMatchObject({ flexGrow: 0, flexShrink: 1 })
+    expect(resolveClassName("flex-none").props).toMatchObject({ flexGrow: 0, flexShrink: 0 })
+    expect(resolveClassName("items-stretch").props).toMatchObject({ alignY: "stretch" })
+    expect(resolveClassName("justify-around").props).toMatchObject({ alignX: "space-around" })
+    expect(resolveClassName("justify-evenly").props).toMatchObject({ alignX: "space-evenly" })
+  })
+
+  test("resolves grid, grid-cols-1..12, and col-span-1..12", () => {
+    const container = resolveClassName("grid grid-cols-3 gap-x-4 gap-y-2")
+    expect(container.diagnostics).toEqual([])
+    expect(container.props).toMatchObject({
+      layout: "grid",
+      gridTemplateColumns: [{ fr: 1 }, { fr: 1 }, { fr: 1 }],
+      columnGap: 16,
+      rowGap: 8,
+    })
+
+    const span = resolveClassName("col-span-2")
+    expect(span.diagnostics).toEqual([])
+    expect(span.props.gridColumn).toEqual({ end: { span: 2 } })
+
+    const twelve = resolveClassName("grid-cols-12 col-span-12")
+    expect(twelve.diagnostics).toEqual([])
+    expect(twelve.props.gridTemplateColumns).toHaveLength(12)
+    expect(twelve.props.gridColumn).toEqual({ end: { span: 12 } })
+
+    const invalid = resolveClassName("grid-cols-13 col-span-0")
+    expect(invalid.diagnostics.map((d) => d.className)).toEqual(["grid-cols-13", "col-span-0"])
+  })
+
+  test("resolves directional borders and directional corner radii", () => {
+    const borders = resolveClassName("border-t border-b-2 border-l-4 border-r-[3px]")
+    expect(borders.diagnostics).toEqual([])
+    expect(borders.props).toMatchObject({
+      borderTop: 1,
+      borderBottom: 2,
+      borderLeft: 4,
+      borderRight: 3,
+    })
+
+    const sideRadii = resolveClassName("rounded-lg rounded-t-none")
+    expect(sideRadii.diagnostics).toEqual([])
+    expect(sideRadii.props.cornerRadii).toEqual({ tl: 0, tr: 0, br: 10, bl: 10 })
+
+    const cornerRadii = resolveClassName("rounded-tl-xl rounded-br-[12px]")
+    expect(cornerRadii.diagnostics).toEqual([])
+    expect(cornerRadii.props.cornerRadii).toEqual({ tl: 14, tr: 0, br: 12, bl: 0 })
+
+    const resetRadii = resolveClassName("rounded-t-lg rounded-md")
+    expect(resetRadii.props.cornerRadii).toBeUndefined()
+    expect(resetRadii.props.cornerRadius).toBe(8)
+  })
+
+  test("resolves arbitrary bracket values for spacing, sizing, fontSize, border, and colors", () => {
+    const result = resolveClassName("p-[12px] w-[240px] h-[50%] min-w-[100] text-[15px] bg-[#123456] text-[#abcdef] border-[#ff00aa] border-[3px]")
+    expect(result.diagnostics).toEqual([])
+    expect(result.props).toMatchObject({
+      padding: 12,
+      width: 240,
+      height: "50%",
+      minWidth: 100,
+      fontSize: 15,
+      backgroundColor: "#123456",
+      color: "#abcdef",
+      borderColor: "#ff00aa",
+      borderWidth: 3,
+    })
+  })
+
+  test("resolves Tailwind palette colors and /opacity modifiers", () => {
+    const result = resolveClassName("bg-zinc-900 text-emerald-500 border-red-500/50 hover:bg-blue-500/20")
+    expect(result.diagnostics).toEqual([])
+    expect(result.props).toMatchObject({
+      backgroundColor: "#18181b",
+      color: "#10b981",
+      borderColor: "#ef444480",
+      hoverStyle: { backgroundColor: "#3b82f633" },
+    })
+
+    const bracketAlpha = resolveClassName("bg-[#112233]/50")
+    expect(bracketAlpha.diagnostics).toEqual([])
+    expect(bracketAlpha.props.backgroundColor).toBe("#11223380")
+
+    const invalidOpacity = resolveClassName("bg-zinc-900/150 bg-zinc-900/")
+    expect(invalidOpacity.diagnostics.map((d) => d.className)).toEqual(["bg-zinc-900/150", "bg-zinc-900/"])
+  })
+
+  test("resolves text alignment, truncate, italic, and not-italic", () => {
+    expect(resolveClassName("text-left").props.alignX).toBe("left")
+    expect(resolveClassName("text-center").props.alignX).toBe("center")
+    expect(resolveClassName("text-right").props.alignX).toBe("right")
+    expect(resolveClassName("truncate").props).toMatchObject({ whiteSpace: "nowrap", wordBreak: "keep-all" })
+    expect(resolveClassName("italic").props.fontStyle).toBe("italic")
+    expect(resolveClassName("not-italic").props.fontStyle).toBe("normal")
+  })
+
+  test("resolves leading-* lineHeight utilities (named multipliers, numeric scale, and brackets)", () => {
+    expect(resolveClassName("leading-none").props.lineHeight).toBe(1)
+    expect(resolveClassName("leading-tight").props.lineHeight).toBe(1.25)
+    expect(resolveClassName("leading-snug").props.lineHeight).toBe(1.375)
+    expect(resolveClassName("leading-normal").props.lineHeight).toBe(1.5)
+    expect(resolveClassName("leading-relaxed").props.lineHeight).toBe(1.625)
+    expect(resolveClassName("leading-loose").props.lineHeight).toBe(2)
+
+    for (let n = 3; n <= 10; n++) {
+      const res = resolveClassName(`leading-${n}`)
+      expect(res.diagnostics).toEqual([])
+      expect(res.props.lineHeight).toBe(n * 4)
+    }
+
+    expect(resolveClassName("leading-[22px]").props.lineHeight).toBe(22)
+    expect(resolveClassName("leading-[1.75]").props.lineHeight).toBe(1.75)
+    expect(resolveClassName("leading-[2]").props.lineHeight).toBe(2)
+
+    const invalid = resolveClassName("leading-2 leading-11 leading-[0] leading-[abc]")
+    expect(invalid.diagnostics.map((d) => d.className)).toEqual(["leading-2", "leading-11", "leading-[0]", "leading-[abc]"])
   })
 })
 
@@ -365,5 +486,61 @@ describe("theme reactivity", () => {
     const resolved = resolver!("p-4 bg-card")
     expect(resolved.padding).toBe(16)
     expect(resolved.backgroundColor).toBe(darkTheme.colors.card)
+  })
+})
+
+describe("transitions", () => {
+  test("maps transition property classes to default 150ms duration", () => {
+    for (const cls of ["transition", "transition-all", "transition-colors", "transition-opacity", "transition-transform"]) {
+      const result = resolveClassName(cls)
+      expect(result.diagnostics).toEqual([])
+      expect(result.props.transition).toBe(150)
+    }
+  })
+
+  test("maps supported duration-* utilities to exact millisecond values", () => {
+    for (const ms of [75, 100, 150, 200, 300, 500, 700, 1000]) {
+      const result = resolveClassName(`duration-${ms}`)
+      expect(result.diagnostics).toEqual([])
+      expect(result.props.transition).toBe(ms)
+    }
+  })
+
+  test("preserves duration regardless of token order with transition classes", () => {
+    const durationFirst = resolveClassName("duration-300 transition-colors")
+    const transitionFirst = resolveClassName("transition-colors duration-300")
+    const trailingTransition = resolveClassName("transition-colors duration-500 transition-all")
+
+    expect(durationFirst.diagnostics).toEqual([])
+    expect(transitionFirst.diagnostics).toEqual([])
+    expect(trailingTransition.diagnostics).toEqual([])
+    expect(durationFirst.props.transition).toBe(300)
+    expect(transitionFirst.props.transition).toBe(300)
+    expect(trailingTransition.props.transition).toBe(500)
+  })
+
+  test("transition-none disables transitions and interacts cleanly with duration-*", () => {
+    const onlyNone = resolveClassName("transition-none")
+    expect(onlyNone.diagnostics).toEqual([])
+    expect(onlyNone.props.transition).toBe(0)
+
+    const overriddenByNone = resolveClassName("transition duration-300 transition-none")
+    expect(overriddenByNone.diagnostics).toEqual([])
+    expect(overriddenByNone.props.transition).toBe(0)
+
+    const restoredAfterNone = resolveClassName("transition-none duration-200")
+    expect(restoredAfterNone.diagnostics).toEqual([])
+    expect(restoredAfterNone.props.transition).toBe(200)
+  })
+
+  test("reports diagnostics for unsupported durations and interactive transition variants", () => {
+    const result = resolveClassName("duration-999 duration-0 hover:transition hover:duration-300")
+    expect(result.diagnostics.map((d) => d.className)).toEqual([
+      "duration-999",
+      "duration-0",
+      "hover:transition",
+      "hover:duration-300",
+    ])
+    expect(result.props.transition).toBeUndefined()
   })
 })
