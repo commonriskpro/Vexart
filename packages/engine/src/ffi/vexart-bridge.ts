@@ -156,8 +156,8 @@ export function candidateLibPaths(): string[] {
   const vendorPath = join(import.meta.dir, "../../../vendor/vexart", vendorPlatform, libName)
   const cwdVendorPath = join(cwd, "vendor/vexart", vendorPlatform, libName)
 
-  const workspacePaths = [wsReleasePath, cwdReleasePath, devPath, cwdDevPath]
-  const fallbackPaths = [crateReleasePath, vendorPath, cwdVendorPath]
+  const workspacePaths = [wsReleasePath, cwdReleasePath, crateReleasePath, devPath, cwdDevPath]
+  const fallbackPaths = [vendorPath, cwdVendorPath]
   // A local build is the source of truth while developing the workspace. In
   // particular, do not let a stale platform package in node_modules hide a
   // freshly built target/release (or target/debug) dylib. Consumers installed
