@@ -147,6 +147,8 @@ export {
   weight,
   shadows,
   glows,
+  gradients,
+  borders,
   theme,
   // Theme runtime
   createTheme,
@@ -195,6 +197,7 @@ export type {
   VoidTheme,
   Shadow,
   Glow,
+  Gradient,
   ColorTokens,
   ThemeDefinition,
   TypographyProps,

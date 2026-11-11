@@ -21,6 +21,7 @@ export type VoidTableProps = {
   striped?: boolean
   disabled?: boolean
   focusId?: string
+  className?: string
 }
 
 /** @public */
@@ -74,6 +75,8 @@ export function VoidTable(props: VoidTableProps) {
       }}
       renderTable={(children: JSX.Element) => (
         <box
+          classOverride
+          className={props.className}
           direction="column"
           cornerRadius={radius.md}
           borderColor={themeColors.border}

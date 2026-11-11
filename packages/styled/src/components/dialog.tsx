@@ -8,7 +8,7 @@
 
 import { Dialog } from "@vexart/headless"
 import type { JSX } from "solid-js"
-import { radius, space, font, weight } from "../tokens/tokens"
+import { radius, space, font, weight, shadows, glows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 // ── Types ──
@@ -22,6 +22,7 @@ export type VoidDialogProps = {
   /** Max width constraint. Default: 480. */
   maxWidth?: number
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
@@ -45,18 +46,30 @@ function VoidDialogRoot(props: VoidDialogProps) {
   return (
     <Dialog onClose={props.onClose}>
       <Dialog.Overlay
-        backgroundColor="#000000aa"
-        backdropBlur={8}
+        backgroundColor="#000000b8"
+        backdropBlur={12}
         onClick={props.onClose}
       />
       <Dialog.Content
         width={props.width ?? 320}
         maxWidth={props.maxWidth ?? 480}
-        padding={space[6]}
-        cornerRadius={radius.lg}
-        backgroundColor={themeColors.card}
       >
-        <box direction="column" gap={space[4]}>
+        <box
+          classOverride
+          className={props.className}
+          width="100%"
+          direction="column"
+          gap={space[4]}
+          backdropBlur={20}
+          gradient={gradients.glass}
+          backgroundColor={themeColors.popover}
+          borderColor={borders.glassRim}
+          borderWidth={1}
+          cornerRadius={radius.xl}
+          shadow={shadows.xl}
+          glow={glows.ambient}
+          padding={space[6]}
+        >
           {props.children}
         </box>
       </Dialog.Content>

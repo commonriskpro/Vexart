@@ -5,7 +5,7 @@
  */
 
 import { Tooltip } from "@vexart/headless"
-import { radius, space, font, shadows } from "../tokens/tokens"
+import { radius, space, font, shadows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
 
@@ -18,6 +18,7 @@ export type VoidTooltipProps = {
   disabled?: boolean
   placement?: "top" | "bottom" | "left" | "right"
   offset?: number
+  className?: string
 }
 
 /** @public */
@@ -32,13 +33,17 @@ export function VoidTooltip(props: VoidTooltipProps) {
       offset={props.offset}
       renderTooltip={(content) => (
         <box
+          classOverride
+          className={props.className}
+          backdropBlur={12}
+          gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.md}
           padding={space[1.5]}
           paddingX={space[2]}
-          borderColor={themeColors.border}
+          borderColor={borders.glassRim}
           borderWidth={1}
-          shadow={shadows.sm}
+          shadow={shadows.md}
         >
           <text
             color={themeColors.popoverForeground}

@@ -16,6 +16,7 @@ export type VoidProgressProps = {
   max?: number
   width?: SizingUnit
   height?: number
+  className?: string
 }
 
 /** @public */
@@ -26,6 +27,8 @@ export function VoidProgress(props: VoidProgressProps) {
       max={props.max}
       renderBar={(ctx: ProgressBarRenderContext) => (
         <box
+          classOverride
+          className={props.className}
           width={props.width ?? 220}
           height={props.height ?? 6}
           backgroundColor={themeColors.card}

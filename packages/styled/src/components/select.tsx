@@ -8,7 +8,7 @@ import { Select } from "@vexart/headless"
 import type { JSX } from "solid-js"
 import type { SelectOption, SelectTriggerContext, SelectOptionContext } from "@vexart/headless"
 import type { SizingUnit } from "@vexart/engine"
-import { radius, space, font, shadows, glows } from "../tokens/tokens"
+import { radius, space, font, shadows, glows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
@@ -21,6 +21,7 @@ export type VoidSelectProps = {
   focusId?: string
   width?: SizingUnit
   children?: JSX.Element
+  className?: string
 }
 
 /** @public */
@@ -36,6 +37,8 @@ export function VoidSelect(props: VoidSelectProps) {
         focusId={props.focusId}
         renderTrigger={(ctx: SelectTriggerContext) => (
             <box
+              classOverride
+              className={props.className}
               direction="row"
               alignY="center"
               height={36}
@@ -107,12 +110,14 @@ export function VoidSelect(props: VoidSelectProps) {
           <box
             direction="column"
             width={props.width ?? "grow"}
+            backdropBlur={16}
+            gradient={gradients.glass}
             backgroundColor={themeColors.popover}
             cornerRadius={radius.md}
-            borderColor={themeColors.border}
+            borderColor={borders.glassRim}
             borderWidth={1}
             padding={space[0.5]}
-            shadow={shadows.md}
+            shadow={shadows.lg}
           >
             {children}
           </box>

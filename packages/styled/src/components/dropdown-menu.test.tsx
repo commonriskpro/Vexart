@@ -61,7 +61,7 @@ suite("styled VoidDropdownMenu", () => {
 
       const content = menuRoot.children[2]
       expect(content.props.backgroundColor).toBeDefined()
-      expect(content.props.cornerRadius).toBe(radius.md)
+      expect(content.props.cornerRadius).toBe(radius.lg)
       expect(content.props.borderColor).toBeDefined()
       expect(content.props.borderWidth).toBe(1)
       expect(content.props.padding).toBe(space[0.5])

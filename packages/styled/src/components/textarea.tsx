@@ -11,6 +11,7 @@ import { Textarea } from "@vexart/headless"
 import type { TextareaHandle, KeyBinding, Highlighter, KeyEvent, TextareaTheme } from "@vexart/headless"
 import { radius, space } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
+import { resolveClassOverrides } from "../utils/class-overrides"
 
 /** @public */
 export type VoidTextareaProps = {
@@ -30,21 +31,26 @@ export type VoidTextareaProps = {
   language?: string
   theme?: Partial<TextareaTheme>
   ref?: (handle: TextareaHandle) => void
+  className?: string
 }
 
 /** @public */
 export function VoidTextarea(props: VoidTextareaProps) {
-  const voidTheme = () => ({
-    accent: themeColors.ring,
-    fg: themeColors.foreground,
-    muted: themeColors.mutedForeground,
-    bg: themeColors.card,
-    disabledBg: themeColors.muted,
-    border: themeColors.input,
-    radius: radius.md,
-    padding: space[3],
-    ...props.theme,
-  })
+  const ovr = () => resolveClassOverrides(props.className)
+  const voidTheme = () => {
+    const o = ovr()
+    return {
+      accent: themeColors.ring,
+      fg: (o.color as string | number | undefined) ?? themeColors.foreground,
+      muted: themeColors.mutedForeground,
+      bg: (o.backgroundColor as string | number | undefined) ?? themeColors.card,
+      disabledBg: themeColors.muted,
+      border: (o.borderColor as string | number | undefined) ?? themeColors.input,
+      radius: (o.cornerRadius as number | undefined) ?? radius.md,
+      padding: (o.padding as number | undefined) ?? (o.paddingX as number | undefined) ?? (o.paddingY as number | undefined) ?? (o.paddingLeft as number | undefined) ?? (o.paddingTop as number | undefined) ?? space[3],
+      ...props.theme,
+    }
+  }
 
   return (
     <Textarea
@@ -56,8 +62,8 @@ export function VoidTextarea(props: VoidTextareaProps) {
       onKeyDown={props.onKeyDown}
       onPaste={props.onPaste}
       placeholder={props.placeholder}
-      width={props.width}
-      height={props.height}
+      width={(ovr().width as number | undefined) ?? props.width}
+      height={(ovr().height as number | undefined) ?? props.height}
       disabled={props.disabled}
       focusId={props.focusId}
       keyBindings={props.keyBindings}

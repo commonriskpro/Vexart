@@ -18,6 +18,13 @@ export type AvatarSize = (typeof AVATAR_SIZE)[keyof typeof AVATAR_SIZE];
 export type BadgeVariant = (typeof BADGE_VARIANT)[keyof typeof BADGE_VARIANT];
 
 // @public (undocumented)
+export const borders: {
+    readonly rimTop: "#ffffff2e";
+    readonly hairline: "#ffffff14";
+    readonly glassRim: "#ffffff29";
+};
+
+// @public (undocumented)
 export type CodeTheme = {
     bg: string | number;
     fg: string | number;
@@ -28,26 +35,27 @@ export type CodeTheme = {
 
 // @public (undocumented)
 export const colors: {
-    readonly background: "#0a0a0a";
+    readonly background: "#09090b";
     readonly foreground: "#fafafa";
-    readonly card: "#171717";
+    readonly card: "#121216";
     readonly cardForeground: "#fafafa";
-    readonly popover: "#171717";
+    readonly popover: "#16161cd9";
     readonly popoverForeground: "#fafafa";
-    readonly primary: "#e5e5e5";
-    readonly primaryForeground: "#171717";
-    readonly secondary: "#262626";
-    readonly secondaryForeground: "#fafafa";
-    readonly muted: "#262626";
-    readonly mutedForeground: "#a3a3a3";
-    readonly accent: "#262626";
+    readonly primary: "#f4f4f5";
+    readonly primaryHover: "#ffffff";
+    readonly primaryForeground: "#09090b";
+    readonly secondary: "#1f1f26";
+    readonly secondaryForeground: "#e4e4e7";
+    readonly muted: "#18181e";
+    readonly mutedForeground: "#a1a1aa";
+    readonly accent: "#272730";
     readonly accentForeground: "#fafafa";
-    readonly destructive: "#dc2626";
+    readonly destructive: "#ef4444";
     readonly destructiveForeground: "#fafafa";
-    readonly border: "#ffffff25";
-    readonly input: "#ffffff40";
-    readonly ring: "#737373";
-    readonly ringSubtle: "#73737380";
+    readonly border: "#ffffff1f";
+    readonly input: "#ffffff29";
+    readonly ring: "#a1a1aa";
+    readonly ringSubtle: "#a1a1aa66";
     readonly transparent: "#00000000";
 };
 
@@ -98,7 +106,55 @@ export type Glow = {
 };
 
 // @public (undocumented)
-export const glows: Record<"ring" | "destructive" | "success", Glow>;
+export const glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow>;
+
+// @public (undocumented)
+export type Gradient = {
+    type: "linear";
+    angle: number;
+    from: string;
+    to: string;
+};
+
+// @public (undocumented)
+export const gradients: {
+    readonly card: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#18181f";
+        readonly to: "#101014";
+    };
+    readonly glass: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#202029e6";
+        readonly to: "#131318d9";
+    };
+    readonly primaryButton: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#ffffff";
+        readonly to: "#e4e4e7";
+    };
+    readonly secondaryButton: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#2a2a35";
+        readonly to: "#1c1c24";
+    };
+    readonly destructiveButton: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#f87171";
+        readonly to: "#dc2626";
+    };
+    readonly subtle: {
+        readonly type: "linear";
+        readonly angle: 180;
+        readonly from: "#16161d";
+        readonly to: "#0e0e13";
+    };
+};
 
 // @public (undocumented)
 export function H1(props: TypographyProps): JSX.Element;
@@ -246,26 +302,27 @@ export type TabsVariant = (typeof TABS_VARIANT)[keyof typeof TABS_VARIANT];
 // @public (undocumented)
 export const theme: {
     readonly colors: {
-        readonly background: "#0a0a0a";
+        readonly background: "#09090b";
         readonly foreground: "#fafafa";
-        readonly card: "#171717";
+        readonly card: "#121216";
         readonly cardForeground: "#fafafa";
-        readonly popover: "#171717";
+        readonly popover: "#16161cd9";
         readonly popoverForeground: "#fafafa";
-        readonly primary: "#e5e5e5";
-        readonly primaryForeground: "#171717";
-        readonly secondary: "#262626";
-        readonly secondaryForeground: "#fafafa";
-        readonly muted: "#262626";
-        readonly mutedForeground: "#a3a3a3";
-        readonly accent: "#262626";
+        readonly primary: "#f4f4f5";
+        readonly primaryHover: "#ffffff";
+        readonly primaryForeground: "#09090b";
+        readonly secondary: "#1f1f26";
+        readonly secondaryForeground: "#e4e4e7";
+        readonly muted: "#18181e";
+        readonly mutedForeground: "#a1a1aa";
+        readonly accent: "#272730";
         readonly accentForeground: "#fafafa";
-        readonly destructive: "#dc2626";
+        readonly destructive: "#ef4444";
         readonly destructiveForeground: "#fafafa";
-        readonly border: "#ffffff25";
-        readonly input: "#ffffff40";
-        readonly ring: "#737373";
-        readonly ringSubtle: "#73737380";
+        readonly border: "#ffffff1f";
+        readonly input: "#ffffff29";
+        readonly ring: "#a1a1aa";
+        readonly ringSubtle: "#a1a1aa66";
         readonly transparent: "#00000000";
     };
     readonly radius: {
@@ -310,7 +367,50 @@ export const theme: {
         readonly bold: 700;
     };
     readonly shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
-    readonly glows: Record<"ring" | "destructive" | "success", Glow>;
+    readonly glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow>;
+    readonly gradients: {
+        readonly card: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#18181f";
+            readonly to: "#101014";
+        };
+        readonly glass: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#202029e6";
+            readonly to: "#131318d9";
+        };
+        readonly primaryButton: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#ffffff";
+            readonly to: "#e4e4e7";
+        };
+        readonly secondaryButton: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#2a2a35";
+            readonly to: "#1c1c24";
+        };
+        readonly destructiveButton: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#f87171";
+            readonly to: "#dc2626";
+        };
+        readonly subtle: {
+            readonly type: "linear";
+            readonly angle: 180;
+            readonly from: "#16161d";
+            readonly to: "#0e0e13";
+        };
+    };
+    readonly borders: {
+        readonly rimTop: "#ffffff2e";
+        readonly hairline: "#ffffff14";
+        readonly glassRim: "#ffffff29";
+    };
 };
 
 // @public (undocumented)
@@ -496,6 +596,7 @@ export type VoidCheckboxProps = {
     label?: string;
     disabled?: boolean;
     focusId?: string;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -526,6 +627,7 @@ export type VoidComboboxProps = {
     focusId?: string;
     width?: SizingUnit;
     filter?: (option: ComboboxOption, query: string) => boolean;
+    className?: string;
 };
 
 // Warning: (ae-forgotten-export) The symbol "VoidDialogRoot" needs to be exported by the entry point index.d.ts
@@ -559,6 +661,7 @@ export type VoidDialogProps = {
     width?: number;
     maxWidth?: number;
     children?: JSX.Element;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -602,6 +705,7 @@ export type VoidDropdownMenuContentProps = {
     minWidth?: number;
     maxHeight?: number;
     sideOffset?: number;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -631,6 +735,7 @@ export type VoidDropdownMenuProps = {
     defaultOpen?: boolean;
     onOpenChange?: (open: boolean) => void;
     children?: JSX.Element;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -657,6 +762,7 @@ export type VoidInputProps = {
     focusId?: string;
     width?: SizingUnit;
     theme?: Partial<InputTheme>;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -699,6 +805,7 @@ export type VoidPopoverProps = {
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
     width?: SizingUnit;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -710,6 +817,7 @@ export type VoidProgressProps = {
     max?: number;
     width?: SizingUnit;
     height?: number;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -762,6 +870,7 @@ export type VoidSelectProps = {
     focusId?: string;
     width?: SizingUnit;
     children?: JSX.Element;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -805,6 +914,7 @@ export type VoidSliderProps = {
     focusId?: string;
     width?: SizingUnit;
     showValue?: boolean;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -817,6 +927,7 @@ export type VoidSwitchProps = {
     label?: string;
     disabled?: boolean;
     focusId?: string;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -833,6 +944,7 @@ export type VoidTableProps = {
     striped?: boolean;
     disabled?: boolean;
     focusId?: string;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -845,6 +957,7 @@ export type VoidTabsProps = {
     tabs: TabItem[];
     variant?: TabsVariant;
     focusId?: string;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -868,6 +981,7 @@ export type VoidTextareaProps = {
     language?: string;
     theme?: Partial<TextareaTheme>;
     ref?: (handle: TextareaHandle) => void;
+    className?: string;
 };
 
 // @public (undocumented)
@@ -902,7 +1016,7 @@ export const voidThemeTokenResolver: {
         full: 9999;
     };
     shadows: Record<"xs" | "sm" | "lg" | "xl" | "md", Shadow[]>;
-    glows: Record<"ring" | "destructive" | "success", Glow>;
+    glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow>;
     spacePx: 1;
     getThemeVersion: Accessor<number>;
 };
@@ -926,6 +1040,7 @@ export type VoidTooltipProps = {
     disabled?: boolean;
     placement?: "top" | "bottom" | "left" | "right";
     offset?: number;
+    className?: string;
 };
 
 // @public (undocumented)

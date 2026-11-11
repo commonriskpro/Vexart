@@ -11,6 +11,7 @@ import { Input, type InputTheme } from "@vexart/headless"
 import { radius, space, font } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { SizingUnit } from "@vexart/engine"
+import { resolveClassOverrides } from "../utils/class-overrides"
 
 /** @public */
 export type VoidInputProps = {
@@ -22,22 +23,27 @@ export type VoidInputProps = {
   focusId?: string
   width?: SizingUnit
   theme?: Partial<InputTheme>
+  className?: string
 }
 
 /** @public */
 export function VoidInput(props: VoidInputProps) {
-  const voidTheme = () => ({
-    accent: themeColors.ring,
-    fg: themeColors.foreground,
-    muted: themeColors.mutedForeground,
-    bg: themeColors.card,
-    border: themeColors.input,
-    radius: radius.md,
-    paddingX: space[3],
-    paddingY: 8,
-    fontSize: font.sm,
-    ...props.theme,
-  })
+  const ovr = () => resolveClassOverrides(props.className)
+  const voidTheme = () => {
+    const o = ovr()
+    return {
+      accent: themeColors.ring,
+      fg: (o.color as string | number | undefined) ?? themeColors.foreground,
+      muted: themeColors.mutedForeground,
+      bg: (o.backgroundColor as string | number | undefined) ?? themeColors.card,
+      border: (o.borderColor as string | number | undefined) ?? themeColors.input,
+      radius: (o.cornerRadius as number | undefined) ?? radius.md,
+      paddingX: (o.paddingLeft as number | undefined) ?? (o.paddingRight as number | undefined) ?? (o.paddingX as number | undefined) ?? (o.padding as number | undefined) ?? space[3],
+      paddingY: (o.paddingTop as number | undefined) ?? (o.paddingBottom as number | undefined) ?? (o.paddingY as number | undefined) ?? (o.padding as number | undefined) ?? 8,
+      fontSize: (o.fontSize as number | undefined) ?? font.sm,
+      ...props.theme,
+    }
+  }
 
   return (
     <Input
@@ -47,7 +53,8 @@ export function VoidInput(props: VoidInputProps) {
       placeholder={props.placeholder}
       disabled={props.disabled}
       focusId={props.focusId}
-      width={props.width}
+      width={(ovr().width as SizingUnit | undefined) ?? props.width}
+      height={ovr().height as number | undefined}
       theme={voidTheme()}
     />
   )

@@ -16,6 +16,7 @@ export interface VoidSeparatorProps {
 export function VoidSeparator(props: VoidSeparatorProps) {
   return (
     <box
+      classOverride
       className={props.className}
       width={props.orientation === "vertical" ? 1 : "grow"}
       height={props.orientation === "vertical" ? "grow" : 1}

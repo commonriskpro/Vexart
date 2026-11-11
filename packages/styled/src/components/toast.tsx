@@ -7,7 +7,7 @@
 import { createToaster } from "@vexart/headless"
 import type { ToastData, ToastPosition, ToasterHandle } from "@vexart/headless"
 import type { JSX } from "solid-js"
-import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import { radius, space, font, weight, shadows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
@@ -48,16 +48,18 @@ export function createVoidToaster(options: VoidToasterOptions = {}): ToasterHand
       return (
         <box
           direction="column"
+          backdropBlur={12}
+          gradient={gradients.glass}
           backgroundColor={themeColors.card}
           cornerRadius={radius.lg}
-          borderColor={vg.border()}
+          borderColor={borders.glassRim}
           borderWidth={1}
           padding={space[3]}
           paddingX={space[4]}
           gap={space[1]}
           minWidth={240}
           maxWidth={360}
-          shadow={shadows.lg}
+          shadow={shadows.md}
         >
           <text color={vg.accent()} fontSize={font.sm} fontWeight={weight.medium}>
             {t.message}

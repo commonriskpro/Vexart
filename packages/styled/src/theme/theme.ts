@@ -61,6 +61,7 @@ export const lightTheme = createTheme({
     popover: "#f5f5f5",
     popoverForeground: "#0a0a0a",
     primary: "#171717",
+    primaryHover: "#000000",
     primaryForeground: "#fafafa",
     secondary: "#f0f0f0",
     secondaryForeground: "#171717",
@@ -163,6 +164,7 @@ export const voidThemeTokenResolver = {
       case "popover": return themeColors.popover
       case "popover-foreground": return themeColors.popoverForeground
       case "primary": return themeColors.primary
+      case "primary-hover": return themeColors.primaryHover
       case "primary-foreground": return themeColors.primaryForeground
       case "secondary": return themeColors.secondary
       case "secondary-foreground": return themeColors.secondaryForeground
@@ -175,6 +177,7 @@ export const voidThemeTokenResolver = {
       case "border": return themeColors.border
       case "input": return themeColors.input
       case "ring": return themeColors.ring
+      case "ring-subtle": return themeColors.ringSubtle
       case "transparent": return themeColors.transparent
       case "black": return "#000000"
       case "white": return "#ffffff"

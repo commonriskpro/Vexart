@@ -16,6 +16,7 @@ export type VoidCheckboxProps = {
   label?: string
   disabled?: boolean
   focusId?: string
+  className?: string
 }
 
 const BOX_SIZE = 16
@@ -31,6 +32,8 @@ export function VoidCheckbox(props: VoidCheckboxProps) {
       renderCheckbox={(ctx: CheckboxRenderContext) => (
         <box
           {...ctx.toggleProps}
+          classOverride
+          className={props.className}
           direction="row"
           alignY="center"
           gap={space[2]}

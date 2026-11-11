@@ -32,46 +32,47 @@ function alphaHex(hex: string, a: number): string {
 /** @public */
 export const colors = {
   // App background + default text
-  background:           "#0a0a0a",        // near-OLED black
+  background:           "#09090b",
   foreground:           "#fafafa",
 
   // Elevated surfaces (cards, panels)
-  card:                 "#171717",         // subtle lift from background
+  card:                 "#121216",
   cardForeground:       "#fafafa",
 
   // Floating surfaces (popovers, dropdowns, dialogs)
-  popover:              "#171717",
+  popover:              "#16161cd9",
   popoverForeground:    "#fafafa",
 
   // High-emphasis actions + brand
-  primary:              "#e5e5e5",
-  primaryForeground:    "#171717",
+  primary:              "#f4f4f5",
+  primaryHover:         "#ffffff",
+  primaryForeground:    "#09090b",
 
   // Lower-emphasis actions
-  secondary:            "#262626",
-  secondaryForeground:  "#fafafa",
+  secondary:            "#1f1f26",
+  secondaryForeground:  "#e4e4e7",
 
   // Subtle surfaces + low-emphasis text
-  muted:                "#262626",
-  mutedForeground:      "#a3a3a3",
+  muted:                "#18181e",
+  mutedForeground:      "#a1a1aa",
 
   // Hover/focus/active surfaces
-  accent:               "#262626",
+  accent:               "#272730",
   accentForeground:     "#fafafa",
 
   // Destructive actions + errors
-  destructive:          "#dc2626",
+  destructive:          "#ef4444",
   destructiveForeground: "#fafafa",
 
   // Borders + separators — white with alpha for OLED
-  border:               "#ffffff25",       // ~14.5% white
+  border:               "#ffffff1f",       // 12% crisp border
   // Form control borders — more visible than layout borders
-  input:                "#ffffff40",       // ~25% white — clearly visible on inputs
+  input:                "#ffffff29",       // 16% input border
 
   // Focus rings
-  ring:                 "#737373",
+  ring:                 "#a1a1aa",
   // Subtle ring for focus-visible glow effect (50% opacity equivalent)
-  ringSubtle:           "#73737380",
+  ringSubtle:           "#a1a1aa66",
 
   // Transparent
   transparent:          "#00000000",
@@ -173,11 +174,42 @@ export const shadows: Record<"xs" | "sm" | "md" | "lg" | "xl", Shadow[]> = {
 export type Glow = { radius: number; color: number; intensity?: number }
 
 /** @public */
-export const glows: Record<"ring" | "destructive" | "success", Glow> = {
+export const glows: Record<"ring" | "destructive" | "success" | "ambient" | "primary", Glow> = {
   ring:        { radius: 6, color: hexToU32(alphaHex("#737373", 0.5)), intensity: 40 },
   destructive: { radius: 6, color: hexToU32(alphaHex("#dc2626", 0.5)), intensity: 40 },
   success:     { radius: 6, color: hexToU32(alphaHex("#22c55e", 0.5)), intensity: 40 },
+  ambient:     { radius: 12, color: hexToU32("#ffffff0d"), intensity: 25 },
+  primary:     { radius: 8, color: hexToU32("#ffffff26"), intensity: 35 },
 }
+
+// ── Gradients ──
+
+/** @public */
+export type Gradient = {
+  type: "linear"
+  angle: number
+  from: string
+  to: string
+}
+
+/** @public */
+export const gradients = {
+  card:              { type: "linear" as const, angle: 180, from: "#18181f", to: "#101014" },
+  glass:             { type: "linear" as const, angle: 180, from: "#202029e6", to: "#131318d9" },
+  primaryButton:     { type: "linear" as const, angle: 180, from: "#ffffff", to: "#e4e4e7" },
+  secondaryButton:   { type: "linear" as const, angle: 180, from: "#2a2a35", to: "#1c1c24" },
+  destructiveButton: { type: "linear" as const, angle: 180, from: "#f87171", to: "#dc2626" },
+  subtle:            { type: "linear" as const, angle: 180, from: "#16161d", to: "#0e0e13" },
+} as const
+
+// ── Borders ──
+
+/** @public */
+export const borders = {
+  rimTop:   "#ffffff2e",
+  hairline: "#ffffff14",
+  glassRim: "#ffffff29",
+} as const
 
 // ── Composite theme export ──
 
@@ -190,6 +222,8 @@ export const theme = {
   weight,
   shadows,
   glows,
+  gradients,
+  borders,
 } as const
 
 /** @public */

@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { createSignal } from "solid-js"
 import { focusedId, setFocus } from "@vexart/engine"
-import { createNode, dispatchFocusInput, resetFocus, solidRender, type TGENode } from "@vexart/engine/internal"
+import { createNode, dispatchFocusInput, parseColor, resetFocus, resolveProps, solidRender, type TGENode } from "@vexart/engine/internal"
 import { VoidButton, type VoidButtonProps } from "./button"
+import { gradients, radius, shadows } from "../tokens/tokens"
+import { themeColors } from "../theme/theme"
+import "@vexart/app"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
 const suite = browserRuntime ? describe : describe.skip
@@ -145,6 +149,100 @@ suite("styled VoidButton", () => {
         mods: { shift: false, alt: false, ctrl: false, meta: false },
       })
       expect(focusedId()).toBe("btn-2")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("applies Void 2.0 surface gradients and shadows across variants", () => {
+    const root = createNode("root")
+    const dispose = renderScene(root, () => (
+      <box>
+        <VoidButton variant="default">Primary</VoidButton>
+        <VoidButton variant="secondary">Secondary</VoidButton>
+        <VoidButton variant="destructive">Destructive</VoidButton>
+      </box>
+    ))
+
+    try {
+      const container = first(root)
+      const defaultBtn = container.children[0]
+      const secondaryBtn = container.children[1]
+      const destructiveBtn = container.children[2]
+
+      expect(defaultBtn.props.gradient).toEqual({
+        type: "linear",
+        angle: 180,
+        from: parseColor(gradients.primaryButton.from),
+        to: parseColor(gradients.primaryButton.to),
+      })
+      expect(defaultBtn.props.shadow).toEqual(shadows.xs)
+
+      expect(secondaryBtn.props.gradient).toEqual({
+        type: "linear",
+        angle: 180,
+        from: parseColor(gradients.secondaryButton.from),
+        to: parseColor(gradients.secondaryButton.to),
+      })
+      expect(secondaryBtn.props.shadow).toEqual(shadows.xs)
+
+      expect(destructiveBtn.props.gradient).toEqual({
+        type: "linear",
+        angle: 180,
+        from: parseColor(gradients.destructiveButton.from),
+        to: parseColor(gradients.destructiveButton.to),
+      })
+      expect(destructiveBtn.props.shadow).toEqual(shadows.xs)
+    } finally {
+      dispose()
+    }
+  })
+
+  test('passing className="w-full h-12 bg-emerald-500 rounded-full" overrides width, height, backgroundColor, and cornerRadius', () => {
+    const root = createNode("root")
+    const dispose = renderScene(root, () => (
+      <VoidButton className="w-full h-12 bg-emerald-500 rounded-full">
+        Click
+      </VoidButton>
+    ))
+
+    try {
+      const visual = first(root)
+      const r = resolveProps(visual)
+      expect(r.width).toBe("100%")
+      expect(r.height).toBe(48)
+      expect(parseColor(r.backgroundColor)).toBe(parseColor("#10b981"))
+      expect(r.cornerRadius).toBe(9999)
+      // Gradient is omitted when custom background color is provided via className
+      expect(r.gradient).toBeUndefined()
+    } finally {
+      dispose()
+    }
+  })
+
+  test('reactive className switching on VoidButton reverts resolveProps and Flexily layout with zero stale props', () => {
+    const root = createNode("root")
+    const [cls, setCls] = createSignal("bg-emerald-500 rounded-full hover:bg-blue-500")
+    const dispose = renderScene(root, () => (
+      <VoidButton className={cls()}>
+        Click
+      </VoidButton>
+    ))
+
+    try {
+      const visual = first(root)
+      let r = resolveProps(visual)
+      expect(parseColor(r.backgroundColor)).toBe(parseColor("#10b981"))
+      expect(r.cornerRadius).toBe(9999)
+      expect(parseColor(r.hoverStyle?.backgroundColor)).toBe(parseColor("#3b82f6"))
+      expect(r.gradient).toBeUndefined()
+
+      setCls("p-2")
+      r = resolveProps(visual)
+      expect(parseColor(r.backgroundColor)).toBe(parseColor(themeColors.primary))
+      expect(r.cornerRadius).toBe(radius.md)
+      expect(parseColor(r.hoverStyle?.backgroundColor)).toBe(parseColor(themeColors.foreground))
+      expect(r.padding).toBe(8)
     } finally {
       dispose()
     }

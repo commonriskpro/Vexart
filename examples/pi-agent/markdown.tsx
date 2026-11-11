@@ -1,34 +1,17 @@
-
-import { Code } from "vexart"
-import { Lexer, type Token, type Tokens } from "marked"
-import { For, createMemo } from "solid-js"
+import { VoidMarkdown } from "vexart"
 import { piColors } from "./theme"
 
-
-// Native text has one wrapping flow per Text node, not browser inline boxes.
-// Keep prose in that flow; separate flex children would shrink code and links.
-function inline(tokens: Token[]): string {
-  return tokens.map((token): string => {
-    if (token.type === "br") return "\n"
-    if (token.type === "image") return `[Image: ${token.text}] (${token.href})`
-    if (token.type === "link") return `${inline(token.tokens || [])} (${token.href})`
-    if ("tokens" in token && Array.isArray(token.tokens)) return inline(token.tokens)
-    return "text" in token ? String(token.text) : "raw" in token ? token.raw : ""
-  }).join("")
-}
-
-function Block(props: { token: Token }) {
-  const token = props.token
-  if (token.type === "space") return null
-  if (token.type === "code") return <box width="grow" paddingY={8}><Code content={token.text} language={token.lang || "plaintext"} width="grow" theme={{ bg: piColors.surface, padding: 12, radius: 8 }} /></box>
-  if (token.type === "hr") return <box width="grow" height={1} backgroundColor={piColors.border} />
-  if (token.type === "list") return <box direction="column" width="grow" gap={10}><For each={token.items}>{(item: Tokens.ListItem, index) => <text width="grow" fontSize={17} color={piColors.text} whiteSpace="pre-wrap">{token.ordered ? `${Number(token.start || 1) + index()}. ` : "• "}{inline(item.tokens)}</text>}</For></box>
-  if (token.type === "blockquote") return <box width="grow" paddingLeft={16} direction="column" gap={12}><For each={token.tokens}>{(child) => <Block token={child} />}</For></box>
-  if (token.type === "table") return <box width="grow" direction="column" gap={8}><text color={piColors.text} fontSize={17} fontWeight={600}>{token.header.map((cell: Tokens.TableCell) => inline(cell.tokens)).join(" | ")}</text><For each={token.rows}>{(row) => <text width="grow" color={piColors.text} fontSize={16} whiteSpace="pre-wrap">{row.map((cell: Tokens.TableCell) => inline(cell.tokens)).join(" | ")}</text>}</For></box>
-  return <text width="grow" color={piColors.text} fontSize={token.type === "heading" ? 23 : 17} fontWeight={token.type === "heading" ? 600 : 400} whiteSpace="pre-wrap">{"tokens" in token && Array.isArray(token.tokens) ? inline(token.tokens) : "text" in token ? String(token.text) : token.raw}</text>
-}
-
 export function PiMarkdown(props: { content: string }) {
-  const tokens = createMemo(() => Lexer.lex(props.content))
-  return <box direction="column" width="grow" gap={20}><For each={tokens()}>{(token) => <Block token={token} />}</For></box>
+  return (
+    <VoidMarkdown
+      content={props.content}
+      theme={{
+        fg: piColors.text,
+        heading: piColors.text,
+        codeBlockBg: piColors.surface,
+        hrColor: piColors.border,
+        blockquoteBorder: piColors.border,
+      }}
+    />
+  )
 }

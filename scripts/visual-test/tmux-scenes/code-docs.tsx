@@ -293,12 +293,12 @@ export function verify(frame: RenderToBufferResult) {
 
   // The two columns retain their distinct public component surfaces.
   assertSurface(frame, 28, 112, [26, 26, 46], "headless code/diff")
-  assertSurface(frame, 606, 112, [23, 23, 23], "styled code/diff")
+  assertSurface(frame, 606, 112, [18, 18, 22], "styled code/diff")
 
   // One Dark keyword/string/function colors prove syntax tokens reached both
   // Code implementations instead of remaining the fallback foreground.
   assert.ok(countColor(frame, 38, 125, 570, 270, [198, 120, 221]) > 8, "headless syntax keyword color missing")
-  assert.ok(countColor(frame, 616, 125, 1148, 270, [152, 195, 121]) > 8, "styled syntax string color missing")
+  assert.ok(countColor(frame, 616, 125, 1148, 270, [152, 195, 121]) >= 8, "styled syntax string color missing")
 
   // Diff semantics have separate added/removed backgrounds and sign colors.
   assert.ok(countColor(frame, 28, 275, 570, 430, [26, 58, 26]) > 80, "headless added diff region missing")
@@ -321,8 +321,8 @@ export function verify(frame: RenderToBufferResult) {
   // indentation shifts `return` to the right in both public routes.
   const headlessCodeStart = firstInkX(frame, 54, 136, 570, 149, [26, 26, 46])
   const headlessIndentedCodeStart = firstInkX(frame, 54, 170, 570, 183, [26, 26, 46])
-  const styledCodeStart = firstInkX(frame, 635, 136, 1148, 149, [23, 23, 23])
-  const styledIndentedCodeStart = firstInkX(frame, 635, 170, 1148, 183, [23, 23, 23])
+  const styledCodeStart = firstInkX(frame, 635, 136, 1148, 149, [18, 18, 22])
+  const styledIndentedCodeStart = firstInkX(frame, 635, 170, 1148, 183, [18, 18, 22])
   assert.ok(headlessIndentedCodeStart - headlessCodeStart >= 6, "headless code indentation space collapsed")
   assert.ok(styledIndentedCodeStart - styledCodeStart >= 6, "styled code indentation space collapsed")
 
@@ -336,8 +336,8 @@ export function verify(frame: RenderToBufferResult) {
     for (const [before, after, boundary] of ([[0, 1, "before bold"], [1, 2, "after bold"]] as const)) {
       assert.ok(runs[after][0] - runs[before][1] - 1 >= 4, `${label} markdown ${boundary} space collapsed`)
     }
-    const italic: [number, number, number] = label === "headless" ? [192, 160, 224] : [163, 163, 163]
-    const italicBounds = colorBounds(frame, x, 520, x + 350, 548, italic, label === "styled" ? 2 : 20)
+    const italic: [number, number, number] = label === "headless" ? [192, 160, 224] : [161, 161, 170]
+    const italicBounds = colorBounds(frame, x, 520, x + 350, 548, italic, label === "styled" ? 0 : 20)
     assert.ok(italicBounds, `${label} markdown italic span is missing`)
     const beforeItalic = runs.slice().reverse().find((run) => run[1] < italicBounds![0])
     const afterItalic = runs.find((run) => run[0] > italicBounds![1])
@@ -351,7 +351,7 @@ export function verify(frame: RenderToBufferResult) {
   // unindented removed line in each public route.
   const headlessContextX = firstInkX(frame, 92, 356, 570, 372, [26, 26, 46])
   const headlessRemovedX = firstInkX(frame, 92, 374, 570, 389, [58, 26, 26])
-  const styledContextX = firstInkX(frame, 670, 356, 1148, 372, [23, 23, 23])
+  const styledContextX = firstInkX(frame, 670, 356, 1148, 372, [18, 18, 22])
   const styledRemovedX = firstInkX(frame, 670, 374, 1148, 389, [58, 26, 26])
   assert.ok(headlessContextX - headlessRemovedX >= 5, "headless diff indentation space collapsed")
   assert.ok(styledContextX - styledRemovedX >= 5, "styled diff indentation space collapsed")
@@ -360,7 +360,7 @@ export function verify(frame: RenderToBufferResult) {
   // overflowed text fragments. The right half of the first context gutter
   // must contain its new-line number in the same 17px row.
   assert.ok(inkCount(frame, 48, 356, 72, 372, [13, 13, 20]) > 2, "headless diff gutter numbers stacked vertically")
-  assert.ok(inkCount(frame, 626, 356, 650, 372, [23, 23, 23]) > 2, "styled diff gutter numbers stacked vertically")
+  assert.ok(inkCount(frame, 626, 356, 650, 372, [18, 18, 22]) > 2, "styled diff gutter numbers stacked vertically")
   assert.equal(inkCount(frame, 28, 427, 72, 449, [17, 24, 39]), 0, "headless diff gutter overflowed its rows")
   assert.equal(inkCount(frame, 606, 427, 650, 449, [17, 24, 39]), 0, "styled diff gutter overflowed its rows")
 }

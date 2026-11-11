@@ -22,6 +22,7 @@ export type VoidSwitchProps = {
   label?: string
   disabled?: boolean
   focusId?: string
+  className?: string
 }
 
 /** @public */
@@ -33,7 +34,14 @@ export function VoidSwitch(props: VoidSwitchProps) {
       disabled={props.disabled}
       focusId={props.focusId}
       renderSwitch={(ctx: SwitchRenderContext) => (
-        <box {...ctx.toggleProps} direction="row" gap={space[2]} alignY="center">
+        <box
+          {...ctx.toggleProps}
+          classOverride
+          className={props.className}
+          direction="row"
+          gap={space[2]}
+          alignY="center"
+        >
           <box
             width={TRACK_WIDTH}
             height={TRACK_HEIGHT}

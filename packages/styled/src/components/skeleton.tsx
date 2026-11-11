@@ -20,6 +20,7 @@ export interface VoidSkeletonProps {
 export function VoidSkeleton(props: VoidSkeletonProps) {
   return (
     <box
+      classOverride
       className={props.className}
       width={props.width ?? "grow"}
       height={props.height ?? 16}

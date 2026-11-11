@@ -4,7 +4,7 @@
  * @public
  */
 
-import { radius, space, font, weight, shadows } from "../tokens/tokens"
+import { radius, space, font, weight, shadows, gradients } from "../tokens/tokens"
 import { children as resolveChildren } from "solid-js"
 import type { JSX } from "solid-js"
 import { themeColors } from "../theme/theme"
@@ -24,11 +24,13 @@ export function VoidCard(props: VoidCardProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      classOverride
       className={props.className}
       direction="column"
       gap={sm() ? space[4] : space[6]}
       backgroundColor={themeColors.card}
-      cornerRadius={radius.xl}
+      gradient={gradients.card}
+      cornerRadius={radius.lg}
       borderWidth={1}
       borderColor={themeColors.border}
       paddingTop={sm() ? space[4] : space[6]}
@@ -53,6 +55,7 @@ export function VoidCardHeader(props: VoidCardHeaderProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      classOverride
       className={props.className}
       direction="column"
       gap={space[1.5]}
@@ -77,6 +80,7 @@ export function VoidCardTitle(props: VoidCardTitleProps) {
   const content = resolveChildren(() => props.children)
   return (
     <text
+      classOverride
       className={props.className}
       color={themeColors.cardForeground}
       fontSize={font.base}
@@ -101,6 +105,7 @@ export function VoidCardDescription(props: VoidCardDescriptionProps) {
   const content = resolveChildren(() => props.children)
   return (
     <text
+      classOverride
       className={props.className}
       color={themeColors.mutedForeground}
       fontSize={font.sm}
@@ -123,6 +128,7 @@ export function VoidCardContent(props: VoidCardContentProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      classOverride
       className={props.className}
       paddingLeft={space[6]}
       paddingRight={space[6]}
@@ -145,6 +151,7 @@ export function VoidCardFooter(props: VoidCardFooterProps) {
   const content = resolveChildren(() => props.children)
   return (
     <box
+      classOverride
       className={props.className}
       direction="row"
       alignY="center"
@@ -170,7 +177,7 @@ export interface VoidCardActionProps {
 export function VoidCardAction(props: VoidCardActionProps) {
   const content = resolveChildren(() => props.children)
   return (
-    <box className={props.className} alignX="right" alignY="top">
+    <box classOverride className={props.className} alignX="right" alignY="top">
       {content}
     </box>
   )

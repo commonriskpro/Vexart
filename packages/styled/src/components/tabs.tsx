@@ -31,6 +31,7 @@ export type VoidTabsProps = {
   tabs: TabItem[]
   variant?: TabsVariant
   focusId?: string
+  className?: string
 }
 
 /** @public */
@@ -99,7 +100,12 @@ export function VoidTabs(props: VoidTabsProps) {
         </box>
       )}
       renderContainer={(bar, panel) => (
-        <box direction="column" width="100%">
+        <box
+          classOverride
+          className={props.className}
+          direction="column"
+          width="100%"
+        >
           {bar}
           {panel}
         </box>

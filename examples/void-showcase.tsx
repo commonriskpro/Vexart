@@ -1,10 +1,11 @@
 /**
  * Vexart Void Showcase — every styled component in one app.
  *
- * Organized by tabs: Inputs, Display, Collections, Overlays, Typography, New.
- * Uses ONLY the public styled API — no raw primitives.
+ * Organized by tabs: Inputs, Display, Collections, Code & Docs, Overlays, Typography.
+ * Canonical demonstration of Web-Native JSX, Tailwind className utilities,
+ * Void 2.0 Obsidian visual system (glassmorphism, gradients, glows), and live theme reactivity.
  *
- * Run: bun --conditions=browser run examples/void-showcase.tsx
+ * Run: bun run showcase
  */
 import {
   // SolidJS reactivity & control flow
@@ -21,14 +22,17 @@ import {
   useTerminalDimensions,
   onInput,
   debugStatsLine,
+  focusedId,
 
   // Tokens
-  colors,
   radius,
   space,
   font,
   weight,
   shadows,
+  glows,
+  gradients,
+  borders,
 
   // Theme
   themeColors,
@@ -74,6 +78,8 @@ import {
   VoidDialogTitle,
   VoidDialogDescription,
   VoidDialogFooter,
+  VoidDropdownMenu,
+  VoidPopover,
   VoidTooltip,
   VoidCode,
   VoidMarkdown,
@@ -129,35 +135,36 @@ function InputsTab() {
   const [slider, setSlider] = createSignal(42)
 
   return (
-    <box width="100%" direction="row" gap={space[4]} alignY="top">
+    <div className="w-full flex-row gap-4 items-start">
       {/* Column 1 */}
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Text Inputs</VoidCardTitle>
             <VoidCardDescription>Single-line and multi-line editors</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[4]}>
-              <box direction="column" gap={space[1]}>
+            <div className="flex-col gap-4">
+              <div className="flex-col gap-1">
                 <Small>VoidInput</Small>
                 <VoidInput value={text()} onChange={setText} placeholder="Type here..." />
-              </box>
-              <box direction="column" gap={space[1]}>
+              </div>
+              <div className="flex-col gap-1">
                 <Small>VoidTextarea</Small>
                 <VoidTextarea value={area()} onChange={setArea} width={300} height={100} />
-              </box>
-            </box>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
 
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Selection</VoidCardTitle>
+            <VoidCardDescription>Dropdown and combobox pickers</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[4]}>
-              <box direction="column" gap={space[1]}>
+            <div className="flex-col gap-4">
+              <div className="flex-col gap-1">
                 <Small>VoidSelect</Small>
                 <VoidSelect
                   value={selected()}
@@ -169,8 +176,8 @@ function InputsTab() {
                     { value: "py", label: "Python" },
                   ]}
                 />
-              </box>
-              <box direction="column" gap={space[1]}>
+              </div>
+              <div className="flex-col gap-1">
                 <Small>VoidCombobox</Small>
                 <VoidCombobox
                   value={combo()}
@@ -183,35 +190,37 @@ function InputsTab() {
                   ]}
                   placeholder="Search frameworks..."
                 />
-              </box>
-            </box>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
+      </section>
 
       {/* Column 2 */}
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Toggles</VoidCardTitle>
+            <VoidCardDescription>Switches and checkboxes</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[3]}>
+            <div className="flex-col gap-3">
               <VoidCheckbox checked={checked()} onChange={setChecked} label="Enable notifications" />
               <VoidCheckbox checked={false} label="Marketing emails" />
               <VoidSeparator />
               <VoidSwitch checked={switched()} onChange={setSwitched} label="Dark mode" />
               <VoidSwitch checked={true} label="Auto-save" />
-            </box>
+            </div>
           </VoidCardContent>
         </VoidCard>
 
         <VoidCard>
           <VoidCardHeader>
-            <VoidCardTitle>Radio & Slider</VoidCardTitle>
+            <VoidCardTitle>Radio &amp; Slider</VoidCardTitle>
+            <VoidCardDescription>Discrete and continuous values</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[4]}>
+            <div className="flex-col gap-4">
               <VoidRadioGroup
                 value={radio()}
                 onChange={setRadio}
@@ -222,15 +231,15 @@ function InputsTab() {
                 ]}
               />
               <VoidSeparator />
-              <box direction="column" gap={space[1]}>
+              <div className="flex-col gap-1">
                 <Small>VoidSlider: {slider()}</Small>
                 <VoidSlider value={slider()} onChange={setSlider} min={0} max={100} />
-              </box>
-            </box>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
-    </box>
+      </section>
+    </div>
   )
 }
 
@@ -238,62 +247,77 @@ function InputsTab() {
 
 function DisplayTab() {
   return (
-    <box width="100%" direction="row" gap={space[4]} alignY="top">
-      <box direction="column" gap={space[4]} width="grow">
+    <div className="w-full flex-row gap-4 items-start">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Buttons</VoidCardTitle>
-            <VoidCardDescription>All variants and sizes</VoidCardDescription>
+            <VoidCardDescription>All variants and sizes + Web-Native button</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[3]}>
-              <box direction="row" gap={space[2]} alignY="center">
+            <div className="flex-col gap-3">
+              <div className="flex-row gap-2 items-center">
                 <VoidButton variant="default" onPress={() => {}}>Default</VoidButton>
                 <VoidButton variant="secondary" onPress={() => {}}>Secondary</VoidButton>
                 <VoidButton variant="outline" onPress={() => {}}>Outline</VoidButton>
                 <VoidButton variant="ghost" onPress={() => {}}>Ghost</VoidButton>
                 <VoidButton variant="destructive" onPress={() => {}}>Destructive</VoidButton>
-              </box>
-              <box direction="row" gap={space[2]} alignY="center">
+              </div>
+              <div className="flex-row gap-2 items-center">
                 <VoidButton size="xs" onPress={() => {}}>XS</VoidButton>
                 <VoidButton size="sm" onPress={() => {}}>SM</VoidButton>
                 <VoidButton onPress={() => {}}>Default</VoidButton>
                 <VoidButton size="lg" onPress={() => {}}>LG</VoidButton>
-              </box>
-            </box>
+              </div>
+              <VoidSeparator />
+              <div className="flex-col gap-1.5">
+                <Small>Web-Native &lt;button&gt; with Tailwind className &amp; onClick</Small>
+                <div className="flex-row gap-2 items-center">
+                  <button
+                    onClick={() => {}}
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                  >
+                    Native JSX &lt;button&gt;
+                  </button>
+                  <span className="text-xs text-muted-foreground">Bare text string inside &lt;span&gt;</span>
+                </div>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
 
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Badges</VoidCardTitle>
+            <VoidCardDescription>Status indicators and tags</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="row" gap={space[2]}>
+            <div className="flex-row gap-2">
               <VoidBadge>Default</VoidBadge>
               <VoidBadge variant="secondary">Secondary</VoidBadge>
               <VoidBadge variant="outline">Outline</VoidBadge>
               <VoidBadge variant="destructive">Destructive</VoidBadge>
-            </box>
+            </div>
           </VoidCardContent>
         </VoidCard>
 
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Avatar</VoidCardTitle>
+            <VoidCardDescription>User initials and custom colored avatars</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="row" gap={space[3]} alignY="center">
+            <div className="flex-row gap-3 items-center">
               <VoidAvatar name="Sarah Chen" size="sm" />
               <VoidAvatar name="Alex Rivera" />
               <VoidAvatar name="Jordan Kim" size="lg" />
               <VoidAvatar name="Custom" color="#56d4c8" />
-            </box>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
+      </section>
 
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Card Anatomy</VoidCardTitle>
@@ -310,26 +334,27 @@ function DisplayTab() {
 
         <VoidCard>
           <VoidCardHeader>
-            <VoidCardTitle>Progress & Skeleton</VoidCardTitle>
+            <VoidCardTitle>Progress &amp; Skeleton</VoidCardTitle>
+            <VoidCardDescription>Loading states and gauges</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[3]}>
-              <box direction="column" gap={space[1]}>
+            <div className="flex-col gap-3">
+              <div className="flex-col gap-1">
                 <Small>VoidProgress</Small>
                 <VoidProgress value={72} max={100} />
-              </box>
+              </div>
               <VoidSeparator />
-              <box direction="column" gap={space[1]}>
+              <div className="flex-col gap-1">
                 <Small>Skeleton</Small>
                 <VoidSkeleton width={200} height={12} />
                 <VoidSkeleton width={160} height={12} />
                 <VoidSkeleton width={120} height={12} />
-              </box>
-            </box>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
-    </box>
+      </section>
+    </div>
   )
 }
 
@@ -340,7 +365,7 @@ function CollectionsTab() {
   const [tableRow, setTableRow] = createSignal(0)
 
   const tableData = [
-    { name: "vexart", version: "0.9.0", downloads: "1,247" },
+    { name: "vexart", version: "1.0.0-beta.11", downloads: "12,470" },
     { name: "solid-js", version: "1.9.0", downloads: "892,341" },
     { name: "flexily", version: "0.6.0", downloads: "3,128" },
     { name: "wgpu", version: "29.0", downloads: "—" },
@@ -348,8 +373,8 @@ function CollectionsTab() {
   ]
 
   return (
-    <box width="100%" direction="row" gap={space[4]} alignY="top">
-      <box direction="column" gap={space[4]} width="grow">
+    <div className="w-full flex-row gap-4 items-start">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidList</VoidCardTitle>
@@ -378,15 +403,15 @@ function CollectionsTab() {
               <P>Line 3: Get browser-quality visuals in the terminal.</P>
               <P>Line 4: Shadows, gradients, glow, backdrop blur.</P>
               <P>Line 5: MSDF text rendering for crisp fonts.</P>
-              <P>Line 6: 26 headless components out of the box.</P>
-              <P>Line 7: Void design system with dark theme.</P>
+              <P>Line 6: 25 headless primitives out of the box.</P>
+              <P>Line 7: Void design system with dark &amp; light theme.</P>
               <P>Line 8: Supports Kitty, Ghostty, and WezTerm.</P>
             </VoidScrollView>
           </VoidCardContent>
         </VoidCard>
-      </box>
+      </section>
 
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidTable</VoidCardTitle>
@@ -396,7 +421,7 @@ function CollectionsTab() {
             <VoidTable
               columns={[
                 { key: "name", header: "Package", width: 120 },
-                { key: "version", header: "Version", width: 80 },
+                { key: "version", header: "Version", width: 90 },
                 { key: "downloads", header: "Downloads", width: 120 },
               ]}
               data={tableData}
@@ -405,8 +430,8 @@ function CollectionsTab() {
             />
           </VoidCardContent>
         </VoidCard>
-      </box>
-    </box>
+      </section>
+    </div>
   )
 }
 
@@ -414,6 +439,7 @@ function CollectionsTab() {
 
 function CodeTab() {
   const sampleCode = `import { createApp, VoidCard, VoidButton } from "vexart"
+
 function App() {
   return (
     <VoidCard>
@@ -423,6 +449,7 @@ function App() {
     </VoidCard>
   )
 }
+
 await createApp(() => <App />)`
 
   const sampleMarkdown = `# Vexart
@@ -433,8 +460,9 @@ The **first** GPU-accelerated UI engine for the terminal.
 
 - Pixel-perfect rendering
 - JSX + SolidJS reactivity
-- 26 headless components
-- Void design system
+- 25 headless primitives
+- Void 2.0 Obsidian design system
+- Web-Native JSX & Tailwind className
 
 ## Quick Start
 
@@ -450,11 +478,12 @@ await createApp(() => <App />)
 @@ -1,3 +1,3 @@
 -  "name": "@vxrt/core",
 +  "name": "vexart",
-    "version": "0.10.0-beta.9"`
+-  "version": "0.10.0-beta.9"
++  "version": "1.0.0-beta.11"`
 
   return (
-    <box width="100%" direction="row" gap={space[4]} alignY="top">
-      <box direction="column" gap={space[4]} width="grow">
+    <div className="w-full flex-row gap-4 items-start">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidCode</VoidCardTitle>
@@ -480,9 +509,9 @@ await createApp(() => <App />)
             <VoidDiff diff={sampleDiff} showLineNumbers width={360} />
           </VoidCardContent>
         </VoidCard>
-      </box>
+      </section>
 
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>VoidMarkdown</VoidCardTitle>
@@ -496,8 +525,8 @@ await createApp(() => <App />)
             />
           </VoidCardContent>
         </VoidCard>
-      </box>
-    </box>
+      </section>
+    </div>
   )
 }
 
@@ -505,15 +534,17 @@ await createApp(() => <App />)
 
 function OverlaysTab() {
   const [dialogOpen, setDialogOpen] = createSignal(false)
+  const [dropdownOpen, setDropdownOpen] = createSignal(false)
+  const [popoverOpen, setPopoverOpen] = createSignal(false)
   const toaster = createVoidToaster({ position: "bottom-right" })
 
   return (
-    <box width="100%" direction="row" gap={space[4]} alignY="top">
-      <box direction="column" gap={space[4]} width="grow">
+    <div className="w-full flex-row gap-4 items-start">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Dialog</VoidCardTitle>
-            <VoidCardDescription>Modal with backdrop blur</VoidCardDescription>
+            <VoidCardDescription>Modal with backdrop blur &amp; ambient glow</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
             <VoidButton onPress={() => setDialogOpen(true)}>Open Dialog</VoidButton>
@@ -535,11 +566,40 @@ function OverlaysTab() {
 
         <VoidCard>
           <VoidCardHeader>
+            <VoidCardTitle>Dropdown Menu</VoidCardTitle>
+            <VoidCardDescription>Glassmorphic menu with item selection</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
+            <VoidDropdownMenu open={dropdownOpen()} onOpenChange={setDropdownOpen}>
+              <VoidDropdownMenu.Trigger>
+                <VoidButton variant="outline" size="sm" onPress={() => setDropdownOpen(!dropdownOpen())}>
+                  Options Menu ▾
+                </VoidButton>
+              </VoidDropdownMenu.Trigger>
+              <VoidDropdownMenu.Content>
+                <VoidDropdownMenu.Label>Actions</VoidDropdownMenu.Label>
+                <VoidDropdownMenu.Item onSelect={() => toaster.toast({ message: "Profile opened", variant: "info" })}>
+                  Profile
+                </VoidDropdownMenu.Item>
+                <VoidDropdownMenu.Item onSelect={() => toaster.toast({ message: "Settings saved", variant: "success" })}>
+                  Settings
+                </VoidDropdownMenu.Item>
+                <VoidDropdownMenu.Separator />
+                <VoidDropdownMenu.Item variant="destructive" onSelect={() => toaster.toast({ message: "Logged out", variant: "error" })}>
+                  Log out
+                </VoidDropdownMenu.Item>
+              </VoidDropdownMenu.Content>
+            </VoidDropdownMenu>
+          </VoidCardContent>
+        </VoidCard>
+
+        <VoidCard>
+          <VoidCardHeader>
             <VoidCardTitle>Toasts</VoidCardTitle>
             <VoidCardDescription>Notification system</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="row" gap={space[2]}>
+            <div className="flex-row gap-2">
               <VoidButton size="sm" onPress={() => toaster.toast({ message: "Saved successfully", variant: "success" })}>
                 Success
               </VoidButton>
@@ -549,30 +609,107 @@ function OverlaysTab() {
               <VoidButton size="sm" variant="outline" onPress={() => toaster.toast({ message: "New update available", variant: "info" })}>
                 Info
               </VoidButton>
-            </box>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
+      </section>
 
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Popover</VoidCardTitle>
+            <VoidCardDescription>Floating panel with backdrop blur &amp; glass</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
+            <VoidPopover
+              open={popoverOpen()}
+              onOpenChange={setPopoverOpen}
+              trigger={
+                <VoidButton variant="secondary" size="sm" onPress={() => setPopoverOpen(!popoverOpen())}>
+                  Open Popover
+                </VoidButton>
+              }
+            >
+              <div className="flex-col gap-2 p-1">
+                <span className="text-xs font-semibold text-foreground">Glassmorphic Popover</span>
+                <p className="text-xs text-muted-foreground">
+                  Rendered with WGPU backdrop blur, specular rim, and glass gradient.
+                </p>
+                <VoidButton size="xs" variant="outline" onPress={() => setPopoverOpen(false)}>
+                  Close
+                </VoidButton>
+              </div>
+            </VoidPopover>
+          </VoidCardContent>
+        </VoidCard>
+
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Tooltip</VoidCardTitle>
             <VoidCardDescription>Hover for details</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="row" gap={space[3]}>
+            <div className="flex-row gap-3">
               <VoidTooltip content="This is a tooltip">
                 <VoidButton variant="outline" size="sm" onPress={() => {}}>Hover me</VoidButton>
               </VoidTooltip>
               <VoidTooltip content="Another tooltip with longer text">
                 <VoidBadge>Info</VoidBadge>
               </VoidTooltip>
-            </box>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
-    </box>
+
+        <VoidCard>
+          <VoidCardHeader>
+            <VoidCardTitle>Void 2.0 Surfaces &amp; Glass</VoidCardTitle>
+            <VoidCardDescription>WGPU shader effects: glassmorphism, specular rim &amp; glow</VoidCardDescription>
+          </VoidCardHeader>
+          <VoidCardContent>
+            <div className="flex-col gap-3">
+              {/* Glass surface */}
+              <div
+                className="w-full p-3 flex-col gap-1 border"
+                backdropBlur={16}
+                gradient={gradients.glass}
+                borderColor={borders.glassRim}
+                borderWidth={1}
+                cornerRadius={radius.lg}
+                shadow={shadows.md}
+                glow={glows.ambient}
+              >
+                <span className="text-xs font-semibold text-foreground">Glass Surface (Backdrop Blur 16px)</span>
+                <p className="text-xs text-muted-foreground">Specular rim border with ambient glow and glass gradient</p>
+              </div>
+
+              {/* Gradient buttons & primary glow */}
+              <div className="flex-row gap-2 items-center">
+                <div
+                  className="px-3 py-1.5 flex-row items-center justify-center border"
+                  gradient={gradients.primaryButton}
+                  borderColor={borders.rimTop}
+                  borderWidth={1}
+                  cornerRadius={radius.md}
+                  glow={glows.primary}
+                >
+                  <span className="text-xs font-bold text-black">Primary Gradient + Glow</span>
+                </div>
+
+                <div
+                  className="px-3 py-1.5 flex-row items-center justify-center border"
+                  gradient={gradients.secondaryButton}
+                  borderColor={borders.hairline}
+                  borderWidth={1}
+                  cornerRadius={radius.md}
+                >
+                  <span className="text-xs font-medium text-foreground">Secondary Rim</span>
+                </div>
+              </div>
+            </div>
+          </VoidCardContent>
+        </VoidCard>
+      </section>
+    </div>
   )
 }
 
@@ -580,36 +717,52 @@ function OverlaysTab() {
 
 function TypographyTab() {
   return (
-    <box width="100%" direction="row" gap={space[4]} alignY="top">
-      <box direction="column" gap={space[4]} width="grow">
+    <div className="w-full flex-row gap-4 items-start">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Heading Scale</VoidCardTitle>
+            <VoidCardDescription>Typography components &amp; Web-Native headings</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[3]}>
+            <div className="flex-col gap-3">
               <H1>Heading 1</H1>
               <H2>Heading 2</H2>
               <H3>Heading 3</H3>
               <H4>Heading 4</H4>
-            </box>
+              <VoidSeparator />
+              <div className="flex-col gap-1">
+                <Small>Web-Native JSX Headings</Small>
+                <h1 className="text-xl font-bold text-foreground">Web-Native &lt;h1&gt; Tag</h1>
+                <h2 className="text-lg font-semibold text-foreground">Web-Native &lt;h2&gt; Tag</h2>
+                <h3 className="text-sm font-semibold text-muted-foreground">Web-Native &lt;h3&gt; Tag</h3>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
+      </section>
 
-      <box direction="column" gap={space[4]} width="grow">
+      <section className="flex-col gap-4 flex-1">
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Body Text</VoidCardTitle>
+            <VoidCardDescription>Prose and microcopy primitives</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[3]}>
+            <div className="flex-col gap-3">
               <Lead>Lead — introductory text that stands out.</Lead>
               <P>Paragraph — standard body text for content areas.</P>
               <Large>Large — emphasized text for callouts.</Large>
               <Small>Small — captions, labels, and metadata.</Small>
               <Muted>Muted — secondary information, less important.</Muted>
-            </box>
+              <VoidSeparator />
+              <div className="flex-col gap-1">
+                <Small>Web-Native JSX Paragraph &amp; Spans</Small>
+                <p className="text-xs text-foreground">
+                  Standard Web-Native <span className="font-bold text-primary">inline text</span> with Tailwind classes.
+                </p>
+              </div>
+            </div>
           </VoidCardContent>
         </VoidCard>
 
@@ -618,15 +771,15 @@ function TypographyTab() {
             <VoidCardTitle>Separator</VoidCardTitle>
           </VoidCardHeader>
           <VoidCardContent>
-            <box direction="column" gap={space[2]}>
+            <div className="flex-col gap-2">
               <P>Content above</P>
               <VoidSeparator />
               <P>Content below</P>
-            </box>
+            </div>
           </VoidCardContent>
         </VoidCard>
-      </box>
-    </box>
+      </section>
+    </div>
   )
 }
 
@@ -637,10 +790,19 @@ function App() {
   const dims = useTerminalDimensions(terminal)
   const [tab, setTab] = createSignal(0)
   const [perfLine, setPerfLine] = createSignal("")
+  const [isDark, setIsDark] = createSignal(true)
   const showcaseDebug = process.env.VEXART_DEBUG_SHOWCASE === "1"
 
-  // Keep the default example graphics-only. Diagnostics are opt-in because
-  // stderr text can overwrite a Kitty graphics frame while it is displayed.
+  function toggleTheme() {
+    if (isDark()) {
+      setTheme(lightTheme)
+      setIsDark(false)
+    } else {
+      setTheme(darkTheme)
+      setIsDark(true)
+    }
+  }
+
   // Instrument tab switches
   function onTabSwitch(index: number) {
     const t0 = performance.now()
@@ -652,6 +814,16 @@ function App() {
       console.error(msg)
     }
   }
+
+  // Keyboard shortcut: [T] toggles theme (when not typing in an editor)
+  onInput((e) => {
+    if (e.type === "key" && (e.key === "t" || e.key === "T") && !e.mods.ctrl && !e.mods.meta && !e.mods.alt) {
+      const cur = focusedId()
+      if (!cur || (!cur.includes("input") && !cur.includes("textarea") && !cur.includes("editor"))) {
+        toggleTheme()
+      }
+    }
+  })
 
   // Log frame stats after each input
   if (showcaseDebug) {
@@ -666,38 +838,41 @@ function App() {
   }
 
   return (
-    <box
+    <div
+      className="w-full h-full flex-col bg-background"
       width={dims.width()}
       height={dims.height()}
-      backgroundColor={colors.background}
-      direction="column"
     >
-      <box width="100%" height={space[2]} />
+      <div className="w-full h-2" />
+
       {/* Header */}
-      <box
-        width="100%"
-        paddingX={space[6]}
-        paddingTop={space[4]}
-        paddingBottom={space[2]}
-        direction="row"
-        alignY="center"
-        borderColor={colors.border}
-        borderBottom={1}
-      >
-        <box direction="column" gap={space[0.5]} width="grow">
-          <text color={colors.foreground} fontSize={font.lg} fontWeight={weight.bold} marginTop={space[1]}>
-            Void Component Showcase
-          </text>
-          <Muted>Every styled component in the Vexart design system · Tab navigate · Space/Enter interact · q exit</Muted>
-        </box>
-        <box direction="row" gap={space[2]} alignY="center">
-          <text color="#f59e0b" fontSize={font.xs}>{perfLine()}</text>
-          <VoidBadge variant="outline">v0.9</VoidBadge>
-        </box>
-      </box>
+      <header className="w-full px-6 pt-3 pb-2.5 flex-row items-center justify-between border-b border-border bg-card/60 backdrop-blur-md">
+        <div className="flex-col gap-0.5 flex-1">
+          <div className="flex-row items-center gap-3">
+            <span className="text-lg font-bold text-foreground">Void Component Showcase</span>
+            <VoidBadge variant="outline">v1.0</VoidBadge>
+            <Show when={perfLine()}>
+              <span className="text-xs text-amber-500 font-mono">{perfLine()}</span>
+            </Show>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Void 2.0 Obsidian Design System · 25 headless primitives · [Tab] navigate · [T] theme · [Q] quit
+          </p>
+        </div>
+
+        <div className="flex-row items-center gap-2">
+          <VoidButton
+            variant="outline"
+            size="xs"
+            onPress={toggleTheme}
+          >
+            {isDark() ? "🌙 Dark" : "☀️ Light"} [T]
+          </VoidButton>
+        </div>
+      </header>
 
       {/* Tabs */}
-      <box width="100%" paddingX={space[6]} paddingTop={space[3]}>
+      <main className="w-full flex-1 px-6 pt-3">
         <VoidTabs
           activeTab={tab()}
           onTabChange={onTabSwitch}
@@ -710,9 +885,23 @@ function App() {
             { label: "Typography", content: () => <TypographyTab /> },
           ]}
         />
-      </box>
+      </main>
 
-    </box>
+      {/* Footer */}
+      <footer className="w-full px-6 py-1.5 flex-row items-center justify-between border-t border-border bg-card/30">
+        <span className="text-xs text-muted-foreground">
+          Tab {tab() + 1} of 6 · GPU-accelerated Terminal UI · Kitty / Ghostty / WezTerm
+        </span>
+        <div className="flex-row items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            Theme: <span className="text-foreground font-semibold">{isDark() ? "Obsidian Dark" : "Pure Light"}</span>
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Press <span className="text-foreground font-semibold">T</span> to toggle
+          </span>
+        </div>
+      </footer>
+    </div>
   )
 }
 

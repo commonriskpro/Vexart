@@ -187,33 +187,44 @@ function Clock() {
 
 ## 3. Element Taxonomy: Intrinsics vs Components vs Hallucinations
 
-Vexart has a strict intrinsic element taxonomy. Mixing this up causes immediate compilation or reconciliation failure.
+Vexart provides a rich intrinsic element taxonomy spanning core terminal primitives, modern web-native JSX intrinsics, headless logic primitives, and styled Void 2.0 components.
 
 | Taxonomy Level | Source | Elements | Support `className`? | Description |
 | :--- | :--- | :--- | :---: | :--- |
-| **Engine Intrinsics** | `@vexart/engine` / `"vexart"` | `<box>`, `<text>`, `<img>` / `<image>`, `<canvas>` | **YES for `box`/`text`** | Native layout and rendering nodes. `@vexart/app` installs the `className` resolver for the layout and text intrinsics. |
-| **Headless Components** | `@vexart/headless` / `"vexart"` | `<ToggleSwitch>`, `<Select>`, `<Dialog>`, `<VirtualList>`, etc. | N/A | Unstyled behavior and keyboard/mouse interaction contracts. |
-| **Styled Void Components**| `@vexart/styled` / `"vexart"` | `<Button>`, `<Card>`, `<VoidInput>`, `<VoidTabs>`, `<VoidDialog>`, etc. | **NO (wrap Void components in `<box>` if utility styling is needed)** | Pre-styled design system implementing the Void OLED theme. |
+| **Engine Intrinsics** | `@vexart/engine` / `"vexart"` | Core: `<box>`, `<text>`, `<img>` / `<image>`, `<canvas>`<br>Web-Native: `<div>`, `<section>`, `<header>`, `<footer>`, `<main>`, `<nav>`, `<button>`, `<span>`, `<p>`, `<h1>`–`<h4>`, `<label>` | **YES** | Native layout and rendering nodes. `@vexart/app` installs the Tailwind `className` engine for all intrinsics. |
+| **Headless Components** | `@vexart/headless` / `"vexart"` | `<ToggleSwitch>`, `<Select>`, `<Dialog>`, `<VirtualList>`, `<Tabs>`, etc. | N/A | Unstyled behavior and keyboard/mouse interaction contracts. |
+| **Styled Void Components**| `@vexart/styled` / `"vexart"` | `<VoidButton>`, `<VoidCard>`, `<VoidInput>`, `<VoidTabs>`, `<VoidDialog>`, `<VoidBadge>`, etc. | **YES** | Pre-styled design system implementing Void 2.0 OLED tokens. Directly accepts `className` overrides (e.g. `<VoidButton className="w-full h-12 bg-emerald-500">`). |
 
-### ⛔ STRICTLY FORBIDDEN WEB HALLUCINATIONS
-The reconciler has **NO HTML DOM**. The following tags **DO NOT EXIST** and will crash the reconciler:
-- ❌ `<div>`, `<span>`, `<p>`, `<a>`, `<button>`, `<input>`, `<ul>`, `<li>`, `<table>`, `<tr>`, `<td>`, `<section>`, `<header>`, `<footer>`.
-- ❌ `<scroll>` is **NOT an intrinsic element**. The ONLY four intrinsics that exist are `<box>`, `<text>`, `<image>` (or `<img>`), and `<canvas>`. For scrolling containers, use `<box scrollY scrollId="...">` or `<ScrollView>` / `<VoidScrollView>`.
-- ❌ Raw text inside `<box>`: `<box>Hello</box>` is **ILLEGAL**. All text strings **MUST** be enclosed in `<text>`.
-- ❌ Deleted legacy primitives: `<Span>`, `<RichText>`, `<WrapRow>`, `@vexart/primitives`. (Package `@vexart/primitives` was deleted and merged into `@vexart/app`).
+### Web-Native JSX Intrinsics
+Vexart engine provides native reconciler and layout support for modern web JSX elements:
+- **Block Containers (`<div>`, `<section>`, `<header>`, `<footer>`, `<main>`, `<nav>`)**:
+  - Automatically default to `direction="column"` (vertical flow), matching standard web box behavior (unlike `<box>` which defaults to `direction="row"`).
+- **Interactive Buttons (`<button>`)**:
+  - Automatically default to `focusable={true}`, `alignX="center"`, and `alignY="center"`.
+  - Supports `onClick` (alias of `onPress`), `onMouseEnter` / `onHoverEnter` (alias of `onMouseOver`), and `onMouseLeave` / `onHoverLeave` (alias of `onMouseOut`).
+- **Typography & Text Elements (`<span>`, `<p>`, `<h1>`, `<h2>`, `<h3>`, `<h4>`, `<label>`)**:
+  - Render as text nodes with pre-configured heading scales (`h1` = 28px bold, `h2` = 22px bold, `h3` = 18px semibold, `h4` = 16px semibold, `p` = 14px, `span`/`label` = 14px).
+  - Automatically inherit parent typography (`fontSize`, `color`, `fontWeight`, `fontFamily`, `lineHeight`).
+- **Bare Text Children**:
+  - Direct string children inside `<box>`, `<div>`, `<button>`, `<section>`, etc., work natively (e.g. `<div>Hello World</div>` or `<button>Submit</button>`), automatically synthesized into inherited text nodes.
 
 ```tsx
-// ❌ RECONCILER CRASH:
-<div>
-  <span>Invalid HTML tag</span>
-  <box>Raw text without text element will crash</box>
+// ✅ FULLY SUPPORTED NATIVE JSX:
+<div className="p-4 gap-2 bg-zinc-900 rounded-lg">
+  <h1>Dashboard Title</h1>
+  <p className="text-zinc-400">Welcome to Vexart</p>
+  <button onClick={() => console.log("clicked")} className="bg-indigo-600 px-4 py-2 rounded">
+    Click Me
+  </button>
 </div>
-
-// ✅ CORRECT:
-<box className="flex-col">
-  <text>Valid primitive structure</text>
-</box>
 ```
+
+### ⛔ RESTRICTED WEB CONCEPTS & UNSUPPORTED DOM
+While web JSX tags are supported natively as engine layout nodes, the reconciler has **NO Browser DOM**.
+- ❌ **No Browser Globals / DOM APIs**: `document.getElementById`, `window`, `querySelector`, `addEventListener` do not exist.
+- ❌ `<scroll>` is **NOT an intrinsic element**. For scrolling containers, use `<box scrollY scrollId="...">`, `<div>` with `overflow-y-scroll`, or `<ScrollView>` / `<VoidScrollView>`.
+- ❌ Unimplemented tags: `<a>` (use `<button>` or `<box onPress=...>`), `<ul>`/`<ol>`/`<li>` (use `<div>` with `<For>`), HTML `<table>` (use Vexart `<Table>` / `<VoidTable>`), raw `<input>`/`<textarea>` (use `<Input>` / `<VoidInput>`, `<Textarea>` / `<VoidTextarea>`).
+- ❌ Deleted legacy primitives: `<Span>`, `<RichText>`, `<WrapRow>`, `@vexart/primitives`. (Package `@vexart/primitives` was deleted and merged into `@vexart/app`).
 
 ---
 
@@ -326,20 +337,31 @@ The `@vexart/app` package enables the fast-cached Tailwind-like utility compiler
   - `w-full` (`100%`), `w-fit` (`"fit"`), `w-grow` (`"grow"`), `w-16`, `w-32`, `w-64`.
   - `h-full`, `h-fit`, `h-grow`, `h-16`, `h-32`, `h-64`.
   - Constraints: `min-w-32`, `max-w-64`, `min-h-16`, `max-h-64`.
-- **Flexbox**:
+- **Flexbox & Grid**:
+  - Presets: `flex-1` (flex: 1 1 0%), `flex-auto` (flex: 1 1 auto), `flex-initial` (flex: 0 1 auto), `flex-none` (flex: none).
   - Direction: `flex-row`, `flex-col` / `flex`.
-  - Alignment: `items-start`, `items-center`, `items-end`, `justify-start`, `justify-center`, `justify-end`, `justify-between`.
+  - Alignment: `items-start`, `items-center`, `items-end`, `items-stretch`, `justify-start`, `justify-center`, `justify-end`, `justify-between`, `justify-around`.
   - Flex behavior: `grow`, `grow-0`, `shrink`, `shrink-0`.
+  - CSS Grid: `grid` (`display: grid`), `grid-cols-1` through `grid-cols-12`, `col-span-1` through `col-span-12`.
+- **Borders & Radii**:
+  - Directional borders: `border-t`, `border-b`, `border-l`, `border-r`, `border-t-2`, `border-b-4`, etc.
+  - Border width: `border` (1px), `border-0`, `border-2`, `border-4`.
+  - Border color: `border-border`, `border-input`, `border-ring`, `border-primary`.
+  - Directional radii: `rounded-t-*`, `rounded-b-*`, `rounded-l-*`, `rounded-r-*`, `rounded-tl-*`, `rounded-tr-*`, `rounded-bl-*`, `rounded-br-*`.
+  - Uniform radii: `rounded-none` (0), `rounded-sm` (6px), `rounded` / `rounded-md` (8px), `rounded-lg` (10px), `rounded-xl` (14px), `rounded-2xl` (18px), `rounded-full` (9999px).
+- **Arbitrary Bracket Syntax**:
+  - Spacing & Sizing: `w-[320px]`, `h-[48px]`, `p-[10px]`, `m-[12px]`, `gap-[8px]`, `text-[15px]`, `border-[2px]`, `rounded-[10px]`.
+  - Colors: `bg-[#141418]`, `text-[#e4e4e7]`, `border-[#ffffff15]`.
+- **Tailwind Palette Colors & Opacity Modifiers**:
+  - Standard palettes: `zinc`, `slate`, `neutral`, `red`, `amber`, `emerald`, `blue`, `violet` (scales 50 through 950).
+  - Opacity modifiers: `/opacity` syntax on background and borders (`bg-white/10`, `border-white/15`, `bg-zinc-900/80`, `bg-black/50`).
 - **Colors & Surfaces**:
   - Background: `bg-background`, `bg-card`, `bg-primary`, `bg-secondary`, `bg-muted`, `bg-accent`, `bg-destructive`, `bg-transparent`, `bg-black`, `bg-white`.
   - Text: `text-foreground`, `text-card-foreground`, `text-primary-foreground`, `text-secondary-foreground`, `text-muted`, `text-muted-foreground`, `text-accent-foreground`, `text-destructive`.
-  - Border color: `border-border`, `border-input`, `border-ring`, `border-primary`.
-  - Border width: `border` (1px), `border-0`, `border-2`, `border-4`.
 - **Typography**:
   - Font sizes: `text-xs` (10px), `text-sm` (12px), `text-base` (14px), `text-lg` (16px), `text-xl` (20px), `text-2xl` (24px), `text-3xl` (30px), `text-4xl` (36px).
   - Weights: `font-normal` (400), `font-medium` (500), `font-semibold` (600), `font-bold` (700).
-- **Corners (Border Radius)**:
-  - `rounded-none` (0), `rounded-sm` (6px), `rounded` / `rounded-md` (8px), `rounded-lg` (10px), `rounded-xl` (14px), `rounded-2xl` (18px), `rounded-full` (9999px).
+  - Alignment & Styles: `text-left`, `text-center`, `text-right`, `italic`, `not-italic`, `truncate`.
 - **Interactive Pseudo-states**:
   - Hover: `hover:bg-accent`, `hover:border-primary`, `hover:text-foreground`.
   - Active: `active:bg-muted`, `active:opacity-80`.
@@ -351,20 +373,46 @@ The `@vexart/app` package enables the fast-cached Tailwind-like utility compiler
   - Overflow: `overflow-x-scroll`, `overflow-y-scroll`, `overflow-scroll`.
   - Layer promotion: `layer`.
   - Z-Index: `z-0` through `z-50`.
+- **Styled Component Overrides**:
+  - `className` overrides work directly on all `@vexart/styled` components (`VoidAvatar`, `VoidBadge`, `VoidButton`, `VoidCard` and its subcomponents, `VoidCheckbox`, `VoidCombobox`, `VoidDialog`, `VoidDropdownMenu` content, `VoidInput`, `VoidPopover`, `VoidProgress`, `VoidSelect`, `VoidSeparator`, `VoidSkeleton`, `VoidSlider`, `VoidSwitch`, `VoidTable`, `VoidTabs`, `VoidTextarea`, `VoidTooltip`):
+    `<VoidButton className="w-full h-12 bg-emerald-500">`
+    `<VoidCard className="p-6 bg-zinc-900/90 border-emerald-500/30">`
 
-### 5.2 OLED Void Design System Tokens & Theming
-Vexart includes an OLED-black design system (`@vexart/styled`).
+### 5.2 OLED Void 2.0 Design System Tokens & Theming
+Vexart includes an OLED-black design system (`@vexart/styled`) with Void 2.0 visual tokens.
 
 ```typescript
-import { colors, themeColors, setTheme, darkTheme, lightTheme, createTheme } from "vexart";
+import { colors, themeColors, setTheme, darkTheme, lightTheme, createTheme, gradients, borders, glows } from "vexart";
 
-// Static default color tokens
-colors.background      // "#0a0a0a" (near OLED black)
+// Static default color tokens (Void 2.0 OLED)
+colors.background      // "#09090b" (near-OLED black)
 colors.foreground      // "#fafafa"
-colors.card            // "#171717"
-colors.primary         // "#e5e5e5"
-colors.border          // "#ffffff25"
-colors.ring            // "#737373"
+colors.card            // "#121216" (Void 2.0 elevated surface)
+colors.secondary       // "#1f1f26"
+colors.muted           // "#18181e"
+colors.mutedForeground // "#a1a1aa"
+colors.accent          // "#272730"
+colors.primary         // "#f4f4f5"
+colors.border          // "#ffffff1f" (12% crisp border)
+colors.ring            // "#a1a1aa"
+
+// Void 2.0 Gradients
+gradients.card              // Linear surface gradient (180deg, #18181f to #101014)
+gradients.glass             // Glassmorphism gradient (180deg, #202029e6 to #131318d9)
+gradients.primaryButton     // Hero action button gradient (180deg, #ffffff to #e4e4e7)
+gradients.secondaryButton   // Secondary button gradient (180deg, #2a2a35 to #1c1c24)
+gradients.destructiveButton // Destructive button gradient (180deg, #f87171 to #dc2626)
+gradients.subtle            // Low-contrast gradient (180deg, #16161d to #0e0e13)
+
+// Void 2.0 Specular Borders
+borders.rimTop         // "#ffffff2e" (top specular reflection)
+borders.hairline       // "#ffffff14" (hairline divider)
+borders.glassRim       // "#ffffff29" (glass rim border)
+
+// Void 2.0 Outer Glows
+glows.ambient          // { radius: 24, color: 0x00000080, intensity: 40 } (dialog/card depth)
+glows.primary          // { radius: 12, color: 0x6366f140, intensity: 50 } (hero action accent)
+glows.ring             // { radius: 6, color: 0x73737380, intensity: 40 } (focus ring)
 
 // Reactive getters:
 themeColors.background // Reads an active SolidJS signal under the hood!
@@ -379,11 +427,17 @@ const customTheme = createTheme({
   colors: {
     background: "#050510",
     primary: "#6366f1",
-    card: "#0f0f23",
+    card: "#121216",
   }
 });
 setTheme(customTheme);
 ```
+
+#### Void 2.0 Glassmorphism on Floating Overlays
+Floating components (`VoidDialog`, `VoidPopover`, `VoidDropdownMenu`) apply native GPU glassmorphism:
+- `backdropBlur={16}` (or `backdrop-blur-lg` / `backdrop-blur-xl`) for background blur.
+- Specular border (`borders.specular` / `border-white/15`) for top edge highlights.
+- Ambient outer shadow and glow (`glows.ambient`) for floating depth elevation.
 
 ### 5.3 Native GPU Visual Effects (Props API)
 For fine-grained effect control, apply props directly to `<box>`:
@@ -453,11 +507,14 @@ For fine-grained effect control, apply props directly to `<box>`:
 ### 6.1 Event Propagation (`onPress` vs Low-Level Mouse)
 Vexart maintains a clean separation between high-level synthetic action events and raw pointer events:
 
-1. **`onPress` (Bubbles)**:
+1. **`onPress` and `onClick` (Bubbles)**:
    - Dispatched when a node is clicked with the mouse (pointer press + release inside bounds) **OR** when the node has focus and the user presses `Enter` or `Space`.
+   - `onClick` is fully supported as a direct alias of `onPress`.
    - Bubbles up the ancestor tree. Call `event.stopPropagation()` to halt propagation.
 2. **Raw Pointer Callbacks (DO NOT Bubble)**:
    - `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseOver`, `onMouseOut`.
+   - `onMouseEnter` / `onHoverEnter` are supported as aliases of `onMouseOver`.
+   - `onMouseLeave` / `onHoverLeave` are supported as aliases of `onMouseOut`.
    - Dispatched directly to the target hit node.
    - Receive `NodeMouseEvent: { x, y, nodeX, nodeY, width, height }`.
      - `x, y`: Screen absolute pixel coordinates.
@@ -1168,11 +1225,11 @@ The following matrix documents the most frequent critical hallucinations made by
 | :- | :--- | :--- | :--- | :--- |
 | **1** | `const { background } = themeColors;` | Treating `themeColors` as a static JSON dictionary. | Color strings snapshot once; `setTheme()` never changes color. | Read properties directly in JSX: `<box backgroundColor={themeColors.background}>` |
 | **2** | `const { title, count } = props;` | React habits where props are plain objects. | Reactivity severed; changes to `props.count` will not re-render. | Access via `props.title`, `props.count`, or use `splitProps(props, [...])`. |
-| **3** | `<div>`, `<span>`, `<p>`, `<button>` | Web DOM muscle memory. | Reconciler throws unknown intrinsic element exception immediately. | Use `<box>` and `<text>` from `"vexart"` (or `<box>` and `<text>`). |
-| **4** | `<box>Hello World</box>` | HTML allows text directly inside container tags. | Reconciler crash: `<box>` only accepts element children, not text. | Always wrap text strings in `<text>` or `<text>`. |
+| **3** | Confusing container direction defaults | Assuming `<div>` and `<box>` behave identically. | Unexpected horizontal vs vertical layout flow. | `<div>` defaults to vertical (`direction="column"`); `<box>` defaults to horizontal (`direction="row"`). |
+| **4** | Expecting browser DOM APIs on JSX tags | Assuming `<div>` has DOM methods (`addEventListener`, `classList`). | Runtime TypeError: DOM methods do not exist on terminal nodes. | Use declarative Vexart props (`className`, `onClick`, `style`). |
 | **5** | `items.map(item => <box>...)` | React array mapping pattern. | Loss of key reconciliation, leaks on update, broken re-ordering. | Always use `<For each={items()}>{(item) => ...}</For>`. |
 | **6** | `useState(0)`, `useEffect(...)` | React Hook hallucination. | Runtime ReferenceError: `useState` is not defined. | Use SolidJS primitives: `createSignal(0)`, `createEffect(...)`. |
-| **7** | `onClick={() => ...}` | Web DOM event naming. | Prop ignored or fails to bubble; Enter/Space will not activate. | Use `onPress={() => ...}` for interactive buttons and clickable boxes. |
+| **7** | Missing `onPress` / `onClick` handlers | Relying on unhandled clicks for custom boxes without focus. | Elements cannot be activated via Enter or Space. | Set `focusable={true}` and use `onPress` (or `onClick`). |
 | **8** | Expecting `<Span>`, `<RichText>`, `<WrapRow>` | Outdated documentation or deleted packages (`@vexart/primitives`). | Module not found or export undefined. | Use `<box>` and `<text>` with Flexbox props or `className`. |
 | **9** | Forgetting `focusable={true}` on custom interactive `<box>` | Assuming all elements with click handlers receive keyboard focus. | Tab key skips the element completely; inaccessible via keyboard. | Add `focusable={true}` (or `focusable`) to any element handling `onKeyDown` / `onPress`. |
 | **10**| Dynamic `itemHeight` in `VirtualList` | CSS flex assumption that items can have variable heights. | Virtual scroll calculation corrupts viewport indexing and jitters. | Provide fixed numeric `itemHeight: number` (e.g. `itemHeight={32}`). |

@@ -28,10 +28,10 @@
  *   </VoidDropdownMenu>
  */
 
-import { DropdownMenu } from "@vexart/headless"
-import type { JSX } from "solid-js"
+import { DropdownMenu, useDropdownMenuContext } from "@vexart/headless"
+import { Show, type JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
-import { radius, space, font, shadows } from "../tokens/tokens"
+import { radius, space, font, shadows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 // ── Root ──
@@ -42,6 +42,7 @@ export type VoidDropdownMenuProps = {
   defaultOpen?: boolean
   onOpenChange?: (open: boolean) => void
   children?: JSX.Element
+  className?: string
 }
 
 function VoidDropdownMenuRoot(props: VoidDropdownMenuProps) {
@@ -77,25 +78,46 @@ export type VoidDropdownMenuContentProps = {
   minWidth?: number
   maxHeight?: number
   sideOffset?: number
+  className?: string
 }
 
 /** @public */
 export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
+  const ctx = useDropdownMenuContext()
+
   return (
-    <DropdownMenu.Content
-      width={props.width}
-      minWidth={props.minWidth ?? 128}
-      maxHeight={props.maxHeight ?? 320}
-      sideOffset={props.sideOffset ?? 4}
-      backgroundColor={themeColors.popover}
-      cornerRadius={radius.md}
-      borderColor={themeColors.border}
-      borderWidth={1}
-      padding={space[0.5]}
-      shadow={shadows.md}
-    >
-      {props.children}
-    </DropdownMenu.Content>
+    <Show when={ctx.open()}>
+      <box
+        floating="root"
+        width="100%"
+        height="100%"
+        zIndex={9997}
+        onPress={() => ctx.close()}
+      />
+      <box
+        classOverride
+        className={props.className}
+        floating="parent"
+        zIndex={9999}
+        floatAttach={{ element: 0, parent: 2 }}
+        floatOffset={{ x: 0, y: props.sideOffset ?? 4 }}
+        direction="column"
+        width={props.width}
+        minWidth={props.minWidth ?? 128}
+        maxHeight={props.maxHeight ?? 320}
+        backdropBlur={16}
+        gradient={gradients.glass}
+        backgroundColor={themeColors.popover}
+        cornerRadius={radius.lg}
+        borderColor={borders.glassRim}
+        borderWidth={1}
+        padding={space[0.5]}
+        shadow={shadows.lg}
+        scrollY={props.maxHeight !== undefined}
+      >
+        {props.children}
+      </box>
+    </Show>
   )
 }
 

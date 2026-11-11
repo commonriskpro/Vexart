@@ -13,9 +13,11 @@ export {
   weight,
   shadows,
   glows,
+  gradients,
+  borders,
   theme,
 } from "./tokens/tokens"
-export type { VoidTheme, Shadow, Glow } from "./tokens/tokens"
+export type { VoidTheme, Shadow, Glow, Gradient } from "./tokens/tokens"
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 

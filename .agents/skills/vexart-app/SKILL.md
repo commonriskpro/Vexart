@@ -47,17 +47,35 @@ import {
 ``` 
 ❌ **NEVER import from internal packages**: Do NOT import from `@vexart/engine`, `@vexart/styled`, `@vexart/headless`, `@vexart/app`, `solid-js`, or `solid-js/web`.
 
-### 2. Zero HTML DOM Elements
-HTML tags (`<div>`, `<span>`, `<p>`, `<button>`, `<input>`, `<h1-h6>`, `<ul>`, `<li>`) **DO NOT EXIST**.
-- Intrinsic terminal primitives: `<box>`, `<text>`, `<img>`, `<canvas>`.
-- All text strings MUST be wrapped in a `<text>` intrinsic or a Void typography component (`<H1>`, `<H2>`, `<P>`, `<Small>`). Raw strings inside `<box>` are invalid.
-- Interactive controls use Void components: `<VoidButton>`, `<VoidInput>`, `<VoidCheckbox>`, etc.
+### 2. Web-Native JSX Intrinsics & Core Terminal Primitives
+Vexart provides first-class native reconciler support for web-native JSX elements alongside core terminal primitives:
+- **Block Containers (`<div>`, `<section>`, `<header>`, `<footer>`, `<main>`, `<nav>`)**:
+  - Default to `direction="column"` (vertical flow), matching standard web box behavior.
+- **Terminal Box (`<box>`)**:
+  - Defaults to `direction="row"` (horizontal flow) for 16:9 widescreen terminal layouts.
+- **Interactive Button (`<button>`)**:
+  - Defaults to `focusable={true}`, `alignX="center"`, and `alignY="center"`.
+  - Supports `onClick` (alias of `onPress`), `onMouseEnter` / `onHoverEnter`, and `onMouseLeave` / `onHoverLeave`.
+- **Typography & Text Elements (`<span>`, `<p>`, `<h1>`–`<h4>`, `<label>`)**:
+  - Render as native text nodes with standard heading font scales and inherit parent typography (`fontSize`, `color`, `fontWeight`, `fontFamily`, `lineHeight`).
+- **Bare Text Children**:
+  - Direct string children inside `<box>`, `<div>`, `<button>`, etc. work natively and automatically create text nodes.
+- **Unsupported Browser Features**:
+  - No Browser DOM (`window`, `document`, `addEventListener`).
+  - No `<scroll>` tag (use `<box scrollY scrollId="...">`, `<div>` with `overflow-y-scroll`, or `<ScrollView>`).
+  - Use Void / Headless components for rich form controls (`<VoidInput>`, `<VoidCheckbox>`, `<VoidSelect>`).
 
 ### 3. 16:9 Widescreen Layout Default (`direction="row"`)
-Unlike mobile-first frameworks (React Native), Vexart is built for modern desktop and widescreen terminal displays (16:9 aspect ratio).
+Unlike mobile-first frameworks, Vexart is built for modern desktop and widescreen terminal displays (16:9 aspect ratio).
 - **Default Direction**: `<box>` defaults to `direction="row"`. Sibling elements and adjacent texts flow horizontally from left to right.
-- **Vertical Stacking**: When creating lists, vertical sidebars, dialog contents, or forms, you **MUST** explicitly set `direction="column"`:
+- **Vertical Stacking**: When creating lists, vertical sidebars, dialog contents, or forms, use `<div>` (which defaults to `direction="column"`) or explicitly set `direction="column"` on `<box>`:
 ```tsx
+{/* Stacks vertically using div */}
+<div gap={space[4]}>
+  <text color={colors.foreground}>Item 1</text>
+  <text color={colors.foreground}>Item 2</text>
+</div>
+
 {/* Stacks vertically */}
 <box direction="column" gap={space[4]}>
   <text color={colors.foreground}>Item 1</text>
@@ -69,7 +87,7 @@ Unlike mobile-first frameworks (React Native), Vexart is built for modern deskto
   <VoidButton variant="default">Save</VoidButton>
   <VoidButton variant="outline">Cancel</VoidButton>
 </box>
-``` 
+```
 
 ### 4. SolidJS Reactivity Rules (Not React!)
 Vexart uses SolidJS universal rendering. There is NO Virtual DOM and NO component re-rendering loop.
@@ -82,7 +100,8 @@ Vexart uses SolidJS universal rendering. There is NO Virtual DOM and NO componen
 
 ### 5. Event System & Interactivity
 Vexart uses semantic, cross-platform terminal pointer and keyboard events:
-- Buttons & pressable items: `onPress={(e) => ...}` (NOT `onClick`).
+- Buttons & pressable items: `onPress={(e) => ...}` and `onClick={(e) => ...}` (`onClick` is fully supported as an alias of `onPress`).
+- Hover events: `onMouseEnter` / `onHoverEnter` and `onMouseLeave` / `onHoverLeave` (aliases of `onMouseOver` / `onMouseOut`).
 - Key handling: `onKeyDown={(e) => ...}` (e.g. `e.key === "Enter"`).
 - Pointer: `onPointerDown`, `onPointerMove`, `onPointerUp`, `onHover`.
 
@@ -252,15 +271,38 @@ createApp(() => <Dashboard />, { quit: ["ctrl+c", "q"] })
 
 ---
 
-## 🎨 Void Design System Tokens
+## 🎨 Void 2.0 Design System Tokens & Tailwind Engine
 
-Vexart provides a dark-themed design system inspired by shadcn/ui:
+Vexart provides an OLED-black design system inspired by shadcn/ui with Void 2.0 visual tokens:
 
 | Token Category | Examples | Description |
 |---|---|---|
-| `colors` | `colors.background`, `colors.foreground`, `colors.primary`, `colors.secondary`, `colors.muted`, `colors.mutedForeground`, `colors.border`, `colors.card` | High-contrast WCAG AAA terminal palette |
+| `colors` | `colors.background` (#09090b), `colors.foreground` (#fafafa), `colors.card` (#121216), `colors.muted` (#18181e), `colors.mutedForeground` (#a1a1aa), `colors.border`, `colors.ring` | High-contrast Void 2.0 OLED palette |
+| `gradients` | `gradients.card` (#18181f -> #101014), `gradients.primaryButton`, `gradients.secondaryButton`, `gradients.destructiveButton`, `gradients.subtle` | Elevated card surfaces and hero button gradients |
+| `borders` | `borders.rimTop` (#ffffff2e), `borders.hairline` (#ffffff14), `borders.glassRim` (#ffffff29) | Specular top reflection, hairline divider, and glass rim borders |
+| `glows` | `glows.ambient` (depth/elevation), `glows.primary` (brand hero accent), `glows.ring` (focus ring) | Outer glow presets for focus and elevation |
+| `backdropBlur` | `16` (or `backdrop-blur-lg` / `backdrop-blur-xl`) | GPU glassmorphism for floating modals, popovers, dropdowns |
 | `space` | `space[1]` (4px), `space[2]` (8px), `space[3]` (12px), `space[4]` (16px), `space[6]` (24px), `space[8]` (32px) | Harmonious layout grid scale |
-| `radius` | `radius.sm` (4px), `radius.md` (6px), `radius.lg` (8px), `radius.xl` (12px), `radius.full` (9999px) | Per-corner anti-aliased curvature |
+| `radius` | `radius.sm` (6px), `radius.md` (8px), `radius.lg` (10px), `radius.xl` (14px), `radius.full` (9999px) | Per-corner anti-aliased curvature |
+
+### Tailwind `className` Engine
+Vexart includes an expanded, high-performance Tailwind utility compiler:
+- **Flex & Grid**:
+  - Presets: `flex-1`, `flex-auto`, `flex-initial`, `flex-none`.
+  - Grid: `grid`, `grid-cols-1` through `grid-cols-12`, `col-span-1` through `col-span-12`.
+- **Borders & Radii**:
+  - Directional borders: `border-t`, `border-b`, `border-l`, `border-r`, `border-t-2`, etc.
+  - Directional radii: `rounded-t-*`, `rounded-b-*`, `rounded-l-*`, `rounded-r-*`, `rounded-tl-*`, `rounded-tr-*`, `rounded-bl-*`, `rounded-br-*`.
+- **Arbitrary Bracket Syntax**:
+  - Sizing/spacing: `w-[320px]`, `h-[48px]`, `p-[10px]`, `m-[12px]`, `gap-[8px]`, `text-[15px]`, `rounded-[10px]`.
+  - Colors: `bg-[#141418]`, `text-[#e4e4e7]`, `border-[#ffffff15]`.
+- **Color Scales & Opacity Modifiers**:
+  - Full standard scales: `zinc`, `slate`, `neutral`, `red`, `amber`, `emerald`, `blue`, `violet` (50–950).
+  - Opacity modifiers: `bg-white/10`, `border-white/15`, `bg-zinc-900/80`, `bg-black/50`.
+- **Styled Component Overrides**:
+  - `className` overrides work directly on all `@vexart/styled` components:
+    `<VoidButton className="w-full h-12 bg-emerald-500 rounded-full">Save</VoidButton>`
+    `<VoidCard className="w-[400px] p-6 bg-zinc-900/90 border-emerald-500/30">...</VoidCard>`
 
 ---
 
@@ -282,12 +324,12 @@ For in-depth guides, component catalogs, and API contracts, consult the included
 | Feature | DO (Correct Vexart) | DON'T (Hallucination) |
 |---|---|---|
 | **Package Import** | `import { ... } from "vexart"` | `import { ... } from "@vexart/engine"` or `"solid-js"` |
-| **Container Box** | `<box direction="column">` for vertical list | `<div>` or `<box>` assuming vertical default |
-| **Text Rendering** | `<text color={colors.foreground}>Hello</text>` | `<p>Hello</p>` or raw `"Hello"` in `<box>` |
-| **Button Click** | `<VoidButton onPress={handleClick}>` | `<button onClick={handleClick}>` or `onPress` on HTML |
+| **Container Elements** | `<box>` (defaults to row) or `<div>` (defaults to column) | Assuming `<box>` defaults to vertical |
+| **Text Rendering** | `<text>`, `<span>`, `<p>`, or direct `"Hello"` string child | Calling browser DOM methods on text |
+| **Button Events** | `<VoidButton onPress={...}>` or `<button onClick={...}>` | Calling browser `addEventListener` |
 | **Button Variant** | `<VoidButton variant="default">` | `<VoidButton variant="primary">` (primary does not exist) |
 | **Badge Variant** | `<VoidBadge variant="default">` | `<VoidBadge variant="success">` (success does not exist) |
-| **Card Dimensions** | `<box width={300}><VoidCard>...</VoidCard></box>` | `<VoidCard width={300}>` (`VoidCard` accepts no width/height) |
+| **Card Styling** | `<VoidCard className="w-[300px] p-4">` | Wrapping in unnecessary wrapper boxes |
 | **Input Change** | `<VoidInput onChange={(val) => ...}>` | `<input onChange={(e) => ...}>` |
 | **Conditional UI** | `<Show when={active()}>{...}</Show>` | `{active() && <div>...</div>}` |
 | **List Iteration** | `<For each={items()}>{(item) => ...}</For>` | `{items().map(item => ...)}` |

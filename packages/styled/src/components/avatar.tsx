@@ -34,6 +34,7 @@ export function VoidAvatar(props: VoidAvatarProps) {
 
   return (
     <box
+      classOverride
       className={props.className}
       width={ss().px}
       height={ss().px}

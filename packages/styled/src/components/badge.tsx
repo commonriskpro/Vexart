@@ -65,6 +65,7 @@ export function VoidBadge(props: VoidBadgeProps) {
 
   return (
     <box
+      classOverride
       className={props.className}
       direction="row"
       alignX="center"

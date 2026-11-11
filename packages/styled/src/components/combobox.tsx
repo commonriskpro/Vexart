@@ -7,7 +7,7 @@
 import { Combobox } from "@vexart/headless"
 import type { ComboboxOption, ComboboxInputContext, ComboboxOptionContext } from "@vexart/headless"
 import type { SizingUnit } from "@vexart/engine"
-import { radius, space, font, shadows, glows } from "../tokens/tokens"
+import { radius, space, font, shadows, glows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
@@ -20,6 +20,7 @@ export type VoidComboboxProps = {
   focusId?: string
   width?: SizingUnit
   filter?: (option: ComboboxOption, query: string) => boolean
+  className?: string
 }
 
 /** @public */
@@ -35,6 +36,8 @@ export function VoidCombobox(props: VoidComboboxProps) {
       filter={props.filter}
       renderInput={(ctx: ComboboxInputContext) => (
         <box
+          classOverride
+          className={props.className}
           direction="row"
           alignY="center"
           width={props.width ?? "grow"}
@@ -103,12 +106,14 @@ export function VoidCombobox(props: VoidComboboxProps) {
         <box
           direction="column"
           width={props.width ?? "grow"}
+          backdropBlur={16}
+          gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.md}
-          borderColor={themeColors.border}
+          borderColor={borders.glassRim}
           borderWidth={1}
           padding={space[0.5]}
-          shadow={shadows.md}
+          shadow={shadows.lg}
         >
           {children}
         </box>

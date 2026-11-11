@@ -5,7 +5,7 @@
  */
 
 import { Popover } from "@vexart/headless"
-import { radius, space, shadows } from "../tokens/tokens"
+import { radius, space, shadows, gradients, borders } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 import type { JSX } from "solid-js"
 import type { SizingUnit } from "@vexart/engine"
@@ -19,6 +19,7 @@ export type VoidPopoverProps = {
   placement?: "top" | "bottom" | "left" | "right"
   offset?: number
   width?: SizingUnit
+  className?: string
 }
 
 /** @public */
@@ -32,11 +33,15 @@ export function VoidPopover(props: VoidPopoverProps) {
       renderTrigger={() => <>{props.trigger}</>}
       renderContent={() => (
         <box
+          classOverride
+          className={props.className}
           direction="column"
           width={props.width}
+          backdropBlur={16}
+          gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.lg}
-          borderColor={themeColors.border}
+          borderColor={borders.glassRim}
           borderWidth={1}
           padding={space[3]}
           shadow={shadows.lg}

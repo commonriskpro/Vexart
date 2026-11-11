@@ -22,6 +22,7 @@ export type VoidSliderProps = {
   focusId?: string
   width?: SizingUnit
   showValue?: boolean
+  className?: string
 }
 
 const THUMB_SIZE = 16
@@ -40,7 +41,14 @@ export function VoidSlider(props: VoidSliderProps) {
       disabled={props.disabled}
       focusId={props.focusId}
         renderSlider={(ctx: SliderRenderContext) => (
-        <box direction="row" gap={space[2]} alignY="center" width={props.width ?? 220}>
+        <box
+          classOverride
+          className={props.className}
+          direction="row"
+          gap={space[2]}
+          alignY="center"
+          width={props.width ?? 220}
+        >
           {/* Track — spread trackProps for mouse click/drag */}
           <box
             {...ctx.trackProps}

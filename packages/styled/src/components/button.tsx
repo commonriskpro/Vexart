@@ -14,7 +14,7 @@
 import type { PressEvent } from "@vexart/engine"
 import type { JSX } from "solid-js"
 import { Button as HeadlessButton } from "@vexart/headless"
-import { radius, space, font, weight, shadows, glows } from "../tokens/tokens"
+import { radius, space, font, weight, shadows, glows, gradients, type Gradient } from "../tokens/tokens"
 import { themeColors } from "../theme/theme"
 
 /** @public */
@@ -65,6 +65,7 @@ type VariantColors = {
   border: () => string | number | undefined
   borderWidth: number | undefined
   shadow: import("@vexart/engine").TGEProps["shadow"]
+  gradient?: Gradient
   hoverBg: () => string | number
   activeBg: () => string | number
   focusBorder: () => string | number
@@ -83,6 +84,7 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      shadows.xs,
+    gradient:    gradients.primaryButton,
     hoverBg:     primaryHover,
     activeBg:    primaryActive,
     focusBorder: () => themeColors.ring,
@@ -92,9 +94,10 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
     fg:          () => themeColors.secondaryForeground,
     border:      () => undefined,
     borderWidth: undefined,
-    shadow:      undefined,
+    shadow:      shadows.xs,
+    gradient:    gradients.secondaryButton,
     hoverBg:     () => themeColors.accent,
-    activeBg:    () => themeColors.accent,
+    activeBg:    () => themeColors.muted,
     focusBorder: () => themeColors.ring,
   },
   outline: {
@@ -103,8 +106,9 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
     border:      () => themeColors.input,
     borderWidth: 1,
     shadow:      shadows.xs,
+    gradient:    undefined,
     hoverBg:     () => themeColors.accent,
-    activeBg:    () => themeColors.accent,
+    activeBg:    () => themeColors.muted,
     focusBorder: () => themeColors.ring,
   },
   ghost: {
@@ -113,8 +117,9 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      undefined,
+    gradient:    undefined,
     hoverBg:     () => themeColors.accent,
-    activeBg:    () => themeColors.accent,
+    activeBg:    () => themeColors.muted,
     focusBorder: () => themeColors.ring,
   },
   destructive: {
@@ -123,6 +128,7 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      shadows.xs,
+    gradient:    gradients.destructiveButton,
     // TODO: add semantic destructive hover token.
     hoverBg:     () => "#c72222ff",
     // TODO: add semantic destructive active token.
@@ -135,6 +141,7 @@ const variantGetters: Record<VoidButtonVariant, VariantColors> = {
     border:      () => undefined,
     borderWidth: undefined,
     shadow:      undefined,
+    gradient:    undefined,
     hoverBg:     () => themeColors.transparent,
     activeBg:    () => themeColors.transparent,
     focusBorder: () => themeColors.ring,
@@ -157,6 +164,7 @@ export function VoidButton(props: VoidButtonProps) {
       renderButton={(ctx) => (
         <box
           {...ctx.buttonProps}
+          classOverride
           className={props.className}
           direction="row"
           // Intrinsic buttons already center their label through symmetric
@@ -174,14 +182,21 @@ export function VoidButton(props: VoidButtonProps) {
           paddingTop={ss().paddingY}
           paddingBottom={ss().paddingY}
           backgroundColor={ctx.pressed ? vg().activeBg() : vg().bg()}
+          gradient={ctx.pressed ? undefined : vg().gradient}
           cornerRadius={ss().cornerRadius}
           borderColor={ctx.focused ? vg().focusBorder() : vg().border()}
           borderWidth={ctx.focused ? 2 : vg().borderWidth}
-          shadow={vg().shadow}
+          shadow={ctx.pressed ? undefined : vg().shadow}
           glow={ctx.focused && !isLink() ? glows.ring : undefined}
-          opacity={props.disabled ? 0.5 : 1}
-          hoverStyle={{ backgroundColor: vg().hoverBg() }}
-          activeStyle={{ backgroundColor: vg().activeBg() }}
+          opacity={props.disabled ? 0.5 : (ctx.pressed ? (isLink() ? 0.75 : 0.9) : 1)}
+          transition={150}
+          hoverStyle={{ backgroundColor: vg().hoverBg(), gradient: undefined }}
+          activeStyle={{
+            backgroundColor: vg().activeBg(),
+            gradient: undefined,
+            shadow: undefined,
+            opacity: props.disabled ? 0.5 : (isLink() ? 0.75 : 0.9),
+          }}
           focusStyle={{
             borderColor: vg().focusBorder(),
             borderWidth: 2,
