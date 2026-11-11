@@ -1,7 +1,12 @@
 import type { JSX } from "solid-js"
 import { createTerminal, mount, onInput } from "@vexart/engine"
 import type { KeyEvent, MountHandle, MountOptions, Terminal } from "@vexart/engine"
+import { setClassNameResolver } from "@vexart/engine/internal"
+import { resolveClassName } from "../styles/class-name"
 import { TerminalContext } from "./terminal-context"
+
+// Eagerly bind className resolver for JSX elements whenever createApp is loaded
+setClassNameResolver((cls) => resolveClassName(cls).props)
 
 /** @public */
 export type CreateAppOptions = {

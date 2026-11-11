@@ -69,7 +69,7 @@ export function VoidCombobox(props: VoidComboboxProps) {
             </text>
           </box>
           <text color={themeColors.mutedForeground} fontSize={font.xs}>
-            {ctx.open ? "⌃" : "⌄"}
+            {ctx.open ? "^" : "v"}
           </text>
         </box>
       )}
@@ -98,7 +98,7 @@ export function VoidCombobox(props: VoidComboboxProps) {
             </text>
           </box>
           {ctx.selected ? (
-            <text color={themeColors.foreground} fontSize={font.xs}>✓</text>
+            <text color={themeColors.foreground} fontSize={font.xs}>x</text>
           ) : null}
         </box>
       )}
@@ -106,7 +106,6 @@ export function VoidCombobox(props: VoidComboboxProps) {
         <box
           direction="column"
           width={props.width ?? "grow"}
-          backdropBlur={16}
           gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.md}

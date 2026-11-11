@@ -105,7 +105,6 @@ export function VoidDropdownMenuContent(props: VoidDropdownMenuContentProps) {
         width={props.width}
         minWidth={props.minWidth ?? 128}
         maxHeight={props.maxHeight ?? 320}
-        backdropBlur={16}
         gradient={gradients.glass}
         backgroundColor={themeColors.popover}
         cornerRadius={radius.lg}

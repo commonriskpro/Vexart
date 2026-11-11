@@ -71,7 +71,7 @@ export function VoidSelect(props: VoidSelectProps) {
             </box>
             {/* Chevron */}
             <text color={themeColors.mutedForeground} fontSize={font.xs}>
-              {ctx.open ? "⌃" : "⌄"}
+              {ctx.open ? "^" : "v"}
             </text>
           </box>
         )}
@@ -102,7 +102,7 @@ export function VoidSelect(props: VoidSelectProps) {
             </box>
             {/* Check indicator */}
             {ctx.selected ? (
-              <text color={themeColors.foreground} fontSize={font.xs}>✓</text>
+              <text color={themeColors.foreground} fontSize={font.xs}>x</text>
             ) : null}
           </box>
         )}
@@ -110,7 +110,6 @@ export function VoidSelect(props: VoidSelectProps) {
           <box
             direction="column"
             width={props.width ?? "grow"}
-            backdropBlur={16}
             gradient={gradients.glass}
             backgroundColor={themeColors.popover}
             cornerRadius={radius.md}

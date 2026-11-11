@@ -281,7 +281,7 @@ Vexart provides an OLED-black design system inspired by shadcn/ui with Void 2.0 
 | `gradients` | `gradients.card` (#18181f -> #101014), `gradients.primaryButton`, `gradients.secondaryButton`, `gradients.destructiveButton`, `gradients.subtle` | Elevated card surfaces and hero button gradients |
 | `borders` | `borders.rimTop` (#ffffff2e), `borders.hairline` (#ffffff14), `borders.glassRim` (#ffffff29) | Specular top reflection, hairline divider, and glass rim borders |
 | `glows` | `glows.ambient` (depth/elevation), `glows.primary` (brand hero accent), `glows.ring` (focus ring) | Outer glow presets for focus and elevation |
-| `backdropBlur` | `16` (or `backdrop-blur-lg` / `backdrop-blur-xl`) | GPU glassmorphism for floating modals, popovers, dropdowns |
+| `backdropBlur` | `12` on `Dialog.Overlay` | GPU glassmorphism for modal backdrops (overlay targets only; foreground text stays crisp) |
 | `space` | `space[1]` (4px), `space[2]` (8px), `space[3]` (12px), `space[4]` (16px), `space[6]` (24px), `space[8]` (32px) | Harmonious layout grid scale |
 | `radius` | `radius.sm` (6px), `radius.md` (8px), `radius.lg` (10px), `radius.xl` (14px), `radius.full` (9999px) | Per-corner anti-aliased curvature |
 

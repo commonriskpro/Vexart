@@ -40,7 +40,7 @@ suite("Void 2.0 Glassmorphism & Overlays", () => {
       const contentContainer = centerBox.children[1]
       const content = contentContainer.children[0]
 
-      expect(content.props.backdropBlur).toBe(20)
+      expect(content.props.backdropBlur).toBeUndefined()
       expect(content.props.gradient).toEqual({
         type: "linear",
         angle: 180,
@@ -75,7 +75,7 @@ suite("Void 2.0 Glassmorphism & Overlays", () => {
       const floatingBox = container.children[2]
       const content = floatingBox.children[0]
 
-      expect(content.props.backdropBlur).toBe(16)
+      expect(content.props.backdropBlur).toBeUndefined()
       expect(content.props.gradient).toEqual({
         type: "linear",
         angle: 180,
@@ -109,7 +109,7 @@ suite("Void 2.0 Glassmorphism & Overlays", () => {
       const menuRoot = root.children[0]
       const content = menuRoot.children[2]
 
-      expect(content.props.backdropBlur).toBe(16)
+      expect(content.props.backdropBlur).toBeUndefined()
       expect(content.props.gradient).toEqual({
         type: "linear",
         angle: 180,

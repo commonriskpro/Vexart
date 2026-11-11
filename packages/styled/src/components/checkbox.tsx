@@ -63,7 +63,7 @@ export function VoidCheckbox(props: VoidCheckboxProps) {
                 color={themeColors.primaryForeground}
                 fontSize={font.xs}
               >
-                ✓
+                x
               </text>
             ) : null}
           </box>

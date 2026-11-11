@@ -35,7 +35,6 @@ export function VoidTooltip(props: VoidTooltipProps) {
         <box
           classOverride
           className={props.className}
-          backdropBlur={12}
           gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.md}

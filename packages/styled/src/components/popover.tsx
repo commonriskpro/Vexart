@@ -37,7 +37,6 @@ export function VoidPopover(props: VoidPopoverProps) {
           className={props.className}
           direction="column"
           width={props.width}
-          backdropBlur={16}
           gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           cornerRadius={radius.lg}

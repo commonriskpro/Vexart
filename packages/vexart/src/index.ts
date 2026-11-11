@@ -19,11 +19,14 @@
  *   - Switch (headless): renamed to ToggleSwitch to avoid SolidJS Switch
  */
 
-import { setThemeTokenResolver } from "@vexart/app"
+import { resolveClassName, setThemeTokenResolver } from "@vexart/app"
 import { voidThemeTokenResolver } from "@vexart/styled"
+import { setClassNameResolver } from "@vexart/engine/internal"
 
 // Initialize default Void theme token resolver in @vexart/app
 setThemeTokenResolver(voidThemeTokenResolver)
+// Eagerly bind className resolver for JSX elements
+setClassNameResolver((cls) => resolveClassName(cls).props)
 
 // ── App lifecycle & framework ────────────────────────────────────────────────
 

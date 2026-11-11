@@ -573,7 +573,7 @@ function OverlaysTab() {
             <VoidDropdownMenu open={dropdownOpen()} onOpenChange={setDropdownOpen}>
               <VoidDropdownMenu.Trigger>
                 <VoidButton variant="outline" size="sm" onPress={() => setDropdownOpen(!dropdownOpen())}>
-                  Options Menu ▾
+                  Options Menu
                 </VoidButton>
               </VoidDropdownMenu.Trigger>
               <VoidDropdownMenu.Content>
@@ -618,7 +618,7 @@ function OverlaysTab() {
         <VoidCard>
           <VoidCardHeader>
             <VoidCardTitle>Popover</VoidCardTitle>
-            <VoidCardDescription>Floating panel with backdrop blur &amp; glass</VoidCardDescription>
+            <VoidCardDescription>Floating panel with specular rim &amp; glass</VoidCardDescription>
           </VoidCardHeader>
           <VoidCardContent>
             <VoidPopover
@@ -633,7 +633,7 @@ function OverlaysTab() {
               <div className="flex-col gap-2 p-1">
                 <span className="text-xs font-semibold text-foreground">Glassmorphic Popover</span>
                 <p className="text-xs text-muted-foreground">
-                  Rendered with WGPU backdrop blur, specular rim, and glass gradient.
+                  Rendered with WGPU glass gradient, specular rim, and ambient glow.
                 </p>
                 <VoidButton size="xs" variant="outline" onPress={() => setPopoverOpen(false)}>
                   Close
@@ -670,7 +670,6 @@ function OverlaysTab() {
               {/* Glass surface */}
               <div
                 className="w-full p-3 flex-col gap-1 border"
-                backdropBlur={16}
                 gradient={gradients.glass}
                 borderColor={borders.glassRim}
                 borderWidth={1}
@@ -678,7 +677,7 @@ function OverlaysTab() {
                 shadow={shadows.md}
                 glow={glows.ambient}
               >
-                <span className="text-xs font-semibold text-foreground">Glass Surface (Backdrop Blur 16px)</span>
+                <span className="text-xs font-semibold text-foreground">Glass Surface (Specular Glass)</span>
                 <p className="text-xs text-muted-foreground">Specular rim border with ambient glow and glass gradient</p>
               </div>
 
@@ -785,6 +784,15 @@ function TypographyTab() {
 
 // ── App ──
 
+const SHOWCASE_TABS = [
+  { label: "Inputs", content: () => <InputsTab /> },
+  { label: "Display", content: () => <DisplayTab /> },
+  { label: "Collections", content: () => <CollectionsTab /> },
+  { label: "Code & Docs", content: () => <CodeTab /> },
+  { label: "Overlays", content: () => <OverlaysTab /> },
+  { label: "Typography", content: () => <TypographyTab /> },
+]
+
 function App() {
   const terminal = useAppTerminal()
   const dims = useTerminalDimensions(terminal)
@@ -792,6 +800,10 @@ function App() {
   const [perfLine, setPerfLine] = createSignal("")
   const [isDark, setIsDark] = createSignal(true)
   const showcaseDebug = process.env.VEXART_DEBUG_SHOWCASE === "1"
+
+  const headerH = 44
+  const footerH = 28
+  const contentH = () => Math.max(0, dims.height() - headerH - footerH)
 
   function toggleTheme() {
     if (isDark()) {
@@ -839,14 +851,16 @@ function App() {
 
   return (
     <div
-      className="w-full h-full flex-col bg-background"
+      className="w-full h-full flex-col bg-background overflow-hidden"
       width={dims.width()}
       height={dims.height()}
     >
-      <div className="w-full h-2" />
-
       {/* Header */}
-      <header className="w-full px-6 pt-3 pb-2.5 flex-row items-center justify-between border-b border-border bg-card/60 backdrop-blur-md">
+      <header
+        className="w-full px-6 flex-row items-center justify-between border-b border-border bg-card/80 shrink-0"
+        height={headerH}
+        flexShrink={0}
+      >
         <div className="flex-col gap-0.5 flex-1">
           <div className="flex-row items-center gap-3">
             <span className="text-lg font-bold text-foreground">Void Component Showcase</span>
@@ -866,31 +880,32 @@ function App() {
             size="xs"
             onPress={toggleTheme}
           >
-            {isDark() ? "🌙 Dark" : "☀️ Light"} [T]
+            {isDark() ? "Dark [T]" : "Light [T]"}
           </VoidButton>
         </div>
       </header>
 
       {/* Tabs */}
-      <main className="w-full flex-1 px-6 pt-3">
+      <main
+        className="w-full flex-1 px-6 pt-3 shrink-0 overflow-y-scroll"
+        height={contentH()}
+        flexShrink={0}
+      >
         <VoidTabs
           activeTab={tab()}
           onTabChange={onTabSwitch}
-          tabs={[
-            { label: "Inputs", content: () => <InputsTab /> },
-            { label: "Display", content: () => <DisplayTab /> },
-            { label: "Collections", content: () => <CollectionsTab /> },
-            { label: "Code & Docs", content: () => <CodeTab /> },
-            { label: "Overlays", content: () => <OverlaysTab /> },
-            { label: "Typography", content: () => <TypographyTab /> },
-          ]}
+          tabs={SHOWCASE_TABS}
         />
       </main>
 
       {/* Footer */}
-      <footer className="w-full px-6 py-1.5 flex-row items-center justify-between border-t border-border bg-card/30">
+      <footer
+        className="w-full px-6 py-1.5 flex-row items-center justify-between border-t border-border bg-card/30 shrink-0"
+        height={footerH}
+        flexShrink={0}
+      >
         <span className="text-xs text-muted-foreground">
-          Tab {tab() + 1} of 6 · GPU-accelerated Terminal UI · Kitty / Ghostty / WezTerm
+          Tab {tab() + 1} of 6 ({SHOWCASE_TABS[tab()]?.label ?? "Inputs"}) · GPU-accelerated Terminal UI · Kitty / Ghostty / WezTerm
         </span>
         <div className="flex-row items-center gap-3">
           <span className="text-xs text-muted-foreground">
@@ -905,6 +920,10 @@ function App() {
   )
 }
 
+export { App, SHOWCASE_TABS, InputsTab, DisplayTab, CollectionsTab, CodeTab, OverlaysTab, TypographyTab }
+
+if (import.meta.main) {
 await createApp(() => <App />, {
   quit: ["q", "ctrl+c"],
 })
+}

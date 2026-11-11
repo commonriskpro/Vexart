@@ -434,10 +434,10 @@ setTheme(customTheme);
 ```
 
 #### Void 2.0 Glassmorphism on Floating Overlays
-Floating components (`VoidDialog`, `VoidPopover`, `VoidDropdownMenu`) apply native GPU glassmorphism:
-- `backdropBlur={16}` (or `backdrop-blur-lg` / `backdrop-blur-xl`) for background blur.
-- Specular border (`borders.specular` / `border-white/15`) for top edge highlights.
-- Ambient outer shadow and glow (`glows.ambient`) for floating depth elevation.
+Floating components apply native GPU glassmorphism with crisp, unblurred text:
+- `Dialog.Overlay` owns `backdropBlur={12}` on background `target 0`, blurring background content behind the modal.
+- `Dialog.Content` and floating panels (`VoidPopover`, `VoidDropdownMenu`, `VoidSelect`, `VoidCombobox`, `VoidTooltip`, `VoidToast`) use `gradients.glass`, `borders.glassRim`, `shadows.lg` / `shadows.xl`, and `glows.ambient` on elevated foreground layers for an obsidian glass look with 100% crisp, unblurred text.
+- **Target-Level Blur Invariant**: In `libvexart`, backdrop blur operates per render target. Blur must only be placed on background overlay targets (such as `Dialog.Overlay` on `target 0`), never on containers that hold their own text without a separate foreground layer.
 
 ### 5.3 Native GPU Visual Effects (Props API)
 For fine-grained effect control, apply props directly to `<box>`:

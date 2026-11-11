@@ -60,7 +60,6 @@ function VoidDialogRoot(props: VoidDialogProps) {
           width="100%"
           direction="column"
           gap={space[4]}
-          backdropBlur={20}
           gradient={gradients.glass}
           backgroundColor={themeColors.popover}
           borderColor={borders.glassRim}

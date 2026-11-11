@@ -48,7 +48,6 @@ export function createVoidToaster(options: VoidToasterOptions = {}): ToasterHand
       return (
         <box
           direction="column"
-          backdropBlur={12}
           gradient={gradients.glass}
           backgroundColor={themeColors.card}
           cornerRadius={radius.lg}
