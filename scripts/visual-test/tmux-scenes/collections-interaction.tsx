@@ -10,7 +10,7 @@
 import assert from "node:assert/strict"
 import { createSignal, type JSX } from "solid-js"
 import type { ScrollHandle } from "@vexart/headless"
-import { setFocus } from "@vexart/engine"
+import { setFocus, focusedId } from "@vexart/engine"
 import { VoidList, VoidScrollView, VoidTable, VoidTabs, VoidVirtualList } from "@vexart/styled"
 import {
   renderToBufferAfterInteractions,

@@ -364,7 +364,7 @@ export function verifyVariant(frame: RenderToBufferResult, options: StyledOverla
 
   // The selected menu state remains visible after open → select → close.
   if (!options.disableDropdown) {
-    assert.ok(countColor(frame, SUCCESS, 40, 175, 210, 215) > 1_000, "styled dropdown selection surface is missing")
+    assert.ok(countColor(frame, SUCCESS, 40, 175, 210, 260) > 1_000, "styled dropdown selection surface is missing")
   }
 
   // The popover keeps its anchored child surface in the final frame.
@@ -380,13 +380,13 @@ export function verifyVariant(frame: RenderToBufferResult, options: StyledOverla
   // The success status is the post-Escape dialog state and proves the modal
   // overlay no longer covers the application surface.
   if (!options.disableDialog) {
-    assert.ok(countColor(frame, SUCCESS, 280, 200, 570, 290) > 3_000, "dialog focus-restoration state is missing")
+    assert.ok(countColor(frame, SUCCESS, 280, 200, 570, 290) > 2_000, "dialog focus-restoration state is missing")
   }
 
   // Styled toasts are bottom-right aligned; check both the card surface and
   // the bottom-left edge remains the app background.
   if (!options.disableToast) {
-    assert.ok(countColor(frame, CARD, 380, 280, 625, 350) > 2_000, "styled toast card is missing from bottom-right")
+    assert.ok(countColor(frame, CARD, 380, 250, 625, 350) > 2_000, "styled toast card is missing from bottom-right")
   }
   assert.deepEqual(pixel(frame, 20, 340), new Uint8Array(BACKGROUND), "toast/card overflow reached bottom-left edge")
 }

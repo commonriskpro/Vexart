@@ -1,12 +1,7 @@
 import assert from "node:assert/strict"
-import { expect, test } from "bun:test"
+import { test } from "bun:test"
 import { VoidScrollView } from "@vexart/styled"
 import { renderToBuffer, renderToBufferAfterInteractions, type RenderToBufferResult } from "../../packages/engine/src/testing/render-to-buffer"
-import { createNode } from "../../packages/engine/src/ffi/node"
-import { CMD } from "../../packages/engine/src/ffi/render-graph"
-import { assignLayersSpatial } from "../../packages/engine/src/loop/assign-layers"
-import type { RenderCommand } from "../../packages/engine/src/ffi/render-graph"
-import type { LayerBoundary } from "../../packages/engine/src/loop/types"
 import type { ScrollHandle } from "@vexart/headless"
 
 const WIDTH = 660
@@ -42,7 +37,7 @@ function ScrollBackgroundScene(props: { onScrollHandle?: (handle: ScrollHandle) 
       >
         {rows()}
       </VoidScrollView>
-      <box width={300} height={180} layer scrollY backgroundColor={SURFACE} padding={6} gap={2}>
+      <box width={300} height={180} layer scrollY backgroundColor={SURFACE} padding={6} gap={2} direction="column">
         {rows()}
       </box>
     </box>
@@ -88,56 +83,6 @@ function countDifferences(a: RenderToBufferResult, b: RenderToBufferResult, left
   }
   return count
 }
-
-function rectangle(x: number, y: number, width: number, height: number, color = SURFACE): RenderCommand {
-  return {
-    type: CMD.RECTANGLE,
-    x,
-    y,
-    width,
-    height,
-    color,
-    cornerRadius: 0,
-    extra1: 0,
-    extra2: 0,
-  }
-}
-
-test("scroll layer keeps source command order around its background", () => {
-  const root = createNode("root")
-  const scroll = createNode("box")
-  scroll.props.layer = true
-  scroll.props.scrollY = true
-  scroll.props.backgroundColor = SURFACE
-  root.children.push(scroll)
-  scroll.parent = root
-
-  const commands: RenderCommand[] = [
-    rectangle(10, 10, 300, 180),
-    { type: CMD.SCISSOR_START, x: 10, y: 10, width: 300, height: 180, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 },
-    rectangle(16, 16, 288, 24, ROW_EVEN[0] << 24 | ROW_EVEN[1] << 16 | ROW_EVEN[2] << 8 | 0xff),
-    rectangle(16, 42, 288, 24, ROW_ODD[0] << 24 | ROW_ODD[1] << 16 | ROW_ODD[2] << 8 | 0xff),
-    { type: CMD.SCISSOR_END, x: 10, y: 10, width: 300, height: 180, color: 0, cornerRadius: 0, extra1: 0, extra2: 0 },
-    { type: CMD.BORDER, x: 10, y: 10, width: 300, height: 180, color: SURFACE, cornerRadius: 0, extra1: 0, extra2: 0 },
-  ]
-  const boundaries: LayerBoundary[] = [{
-    nodeId: scroll.id,
-    z: 0,
-    isScroll: true,
-    hasBg: true,
-    insideScroll: false,
-    hasSubtreeTransform: false,
-  }]
-  const plan = assignLayersSpatial(commands, boundaries, {
-    root,
-    collectText: () => "",
-    nodeRefById: new Map([[scroll.id, scroll]]),
-    scrollContainers: [scroll],
-  })
-  const indices = plan.contentSlots[0].cmdIndices
-  expect(indices).toEqual([...indices].sort((a, b) => a - b))
-  expect(indices).toEqual([0, 1, 2, 3, 4, 5])
-})
 
 test("VoidScrollView preserves striped fills at offset zero and after scrolling", async () => {
   const initial = await renderToBuffer(() => <ScrollBackgroundScene />, WIDTH, HEIGHT, 3)

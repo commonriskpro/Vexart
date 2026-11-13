@@ -9,7 +9,7 @@ import {
   type Capabilities,
   type Terminal,
 } from "@vexart/engine"
-import { getRendererBackend, resetFocus, setRendererBackend, setFocusedId } from "@vexart/engine/internal"
+import { getRendererBackend, resetFocus, setRendererBackend, setFocusedId, focusedId } from "@vexart/engine/internal"
 import { createGpuRendererBackendForTesting } from "../../packages/engine/src/ffi/gpu-renderer-backend"
 import { useDrag } from "../../packages/engine/src/reconciler/drag"
 

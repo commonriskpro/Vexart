@@ -1,9 +1,13 @@
-import { Page } from "../../../packages/app/src/public"
+import { Page, setThemeTokenResolver } from "@vexart/app"
+import { voidThemeTokenResolver } from "@vexart/styled"
+
+setThemeTokenResolver(voidThemeTokenResolver)
 
 export const width = 420
 export const height = 320
 
 export function Scene() {
+  setThemeTokenResolver(voidThemeTokenResolver)
   return (
     <Page className="bg-background p-4">
       <box className="rounded-xl border border-border bg-card p-4 shadow-lg">
