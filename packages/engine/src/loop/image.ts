@@ -185,24 +185,43 @@ async function decodeImage(src: string): Promise<DecodedImage | null> {
 
 /**
  * Decode using sharp (libvips) — handles PNG, JPEG, WebP, AVIF, GIF, TIFF.
- * If sharp is not installed, returns null.
+ * Returns null when sharp is missing or the file cannot be decoded; the cause is logged to stderr.
+ * (stderr is hidden behind Kitty graphics frames, so also verify `sharp` ships in the published
+ * package's `dependencies` — see scripts/build-dist.ts.)
  */
-async function decodeWithSharp(buffer: ArrayBuffer, src: string): Promise<DecodedImage | null> {
-  try {
-    // Dynamic import — sharp is an optional dependency
-    // @ts-ignore — sharp may not be installed
-    const sharp = (await import("sharp")).default
-    const image = sharp(Buffer.from(buffer))
-    const metadata = await image.metadata()
-    const { data, info } = await image.raw().ensureAlpha().toBuffer({ resolveWithObject: true })
+let sharpMissingReported = false
 
+async function decodeWithSharp(buffer: ArrayBuffer, src: string): Promise<DecodedImage | null> {
+  // Only the slice of sharp's API used here; avoids depending on its `export =` typing.
+  type SharpFn = (input: Buffer) => {
+    raw(): {
+      ensureAlpha(): {
+        toBuffer(opts: { resolveWithObject: true }): Promise<{ data: Buffer; info: { width: number; height: number } }>
+      }
+    }
+  }
+  let sharp: SharpFn
+  try {
+    // Dynamic import so consumers who never draw images do not pay for loading libvips.
+    // @ts-ignore — sharp types may not be present
+    sharp = (await import("sharp")).default as SharpFn
+  } catch {
+    if (!sharpMissingReported) {
+      sharpMissingReported = true
+      console.error(`[vexart image] 'sharp' is not installed, so <img> cannot decode images (first failure: ${src}). Run: bun add sharp`)
+    }
+    return null
+  }
+
+  try {
+    const { data, info } = await sharp(Buffer.from(buffer)).raw().ensureAlpha().toBuffer({ resolveWithObject: true })
     return {
       data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength),
       width: info.width,
       height: info.height,
     }
-  } catch {
-    console.error(`[vexart image] No image decoder available for ${src}. Install 'sharp' for image support: bun add sharp`)
+  } catch (err) {
+    console.error(`[vexart image] Could not decode ${src}:`, err instanceof Error ? err.message : err)
     return null
   }
 }

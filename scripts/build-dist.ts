@@ -274,6 +274,8 @@ const pkg = {
     "@babel/core": "^7.26.0",
     "@babel/preset-typescript": "^7.26.0",
     "babel-preset-solid": "^1.9.0",
+    // <img src> decodifica con sharp (src/loop/image.ts); sin él las imágenes no se pintan.
+    "sharp": "^0.34.5",
   },
   engines: {
     bun: ">=1.1.0",
