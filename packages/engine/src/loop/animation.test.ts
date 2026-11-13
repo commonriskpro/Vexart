@@ -14,6 +14,8 @@ import {
   createTransition,
   hasActiveAnimations,
   resetActiveAnimations,
+  setLoopAnimationDriver,
+  stepActiveAnimations,
 } from "./animation"
 import { createRenderLoop } from "./loop"
 
@@ -218,5 +220,65 @@ describe("reactive lifecycle & timer symmetry", () => {
 
     expect(hasActiveAnimations()).toBe(false)
     expect(hasCompositorAnimations()).toBe(false)
+  })
+
+  test("stepActiveAnimations evaluates multiple active animations in an atomic batch", () => {
+    const [valA, setTargetA] = createTransition(0, { duration: 300, easing: (t) => t })
+    const [valB, setTargetB] = createTransition(0, { duration: 300, easing: (t) => t })
+
+    const t0 = performance.now()
+    setTargetA(100)
+    setTargetB(200)
+
+    expect(hasActiveAnimations()).toBe(true)
+
+    // Midpoint evaluation
+    const hasMoreMid = stepActiveAnimations(t0 + 150)
+    expect(hasMoreMid).toBe(true)
+    expect(valA()).toBeCloseTo(50, 1)
+    expect(valB()).toBeCloseTo(100, 1)
+
+    // Completion evaluation
+    const hasMoreEnd = stepActiveAnimations(t0 + 350)
+    expect(hasMoreEnd).toBe(false)
+    expect(valA()).toBe(100)
+    expect(valB()).toBe(200)
+    expect(hasActiveAnimations()).toBe(false)
+  })
+
+  test("setLoopAnimationDriver disarms fallbackTimer when loop takes ownership", () => {
+    setLoopAnimationDriver(false)
+    const [, setTarget] = createTransition(0, { duration: 500 })
+    setTarget(100)
+    expect(hasActiveAnimations()).toBe(true)
+
+    // Transfer ownership to RenderLoop
+    setLoopAnimationDriver(true)
+
+    resetActiveAnimations()
+    setLoopAnimationDriver(false)
+    expect(hasActiveAnimations()).toBe(false)
+  })
+
+  test("createSpring evaluates physics across discrete stepActiveAnimations calls", () => {
+    const [springVal, setTarget] = createSpring(0, { stiffness: 200, damping: 20 })
+    const t0 = performance.now()
+    setTarget(100)
+    expect(hasActiveAnimations()).toBe(true)
+
+    // Step 50ms
+    stepActiveAnimations(t0 + 50)
+    expect(springVal()).toBeGreaterThan(0)
+    expect(springVal()).toBeLessThan(100)
+
+    // Run multiple iterations to simulate frame ticks until settled
+    let t = t0 + 50
+    for (let i = 0; i < 60; i++) {
+      t += 16
+      if (!stepActiveAnimations(t)) break
+    }
+
+    expect(springVal()).toBeCloseTo(100, 1)
+    expect(hasActiveAnimations()).toBe(false)
   })
 })

@@ -84,10 +84,18 @@ fn test_dispatch_prohibits_image_command_in_multi_command_graph() {
 #[cfg(feature = "gpu-tests")]
 #[test]
 fn test_dispatch_single_rect_returns_ok() {
-    // Build a minimal graph buffer with 1 rect command (cmd_kind = 0).
-    let instance_size = std::mem::size_of::<instances::BridgeRectInstance>();
-    let payload = vec![0u8; instance_size];
-    let buf = make_graph_buf(0, &payload);
+    // Build a minimal graph buffer with 1 shape_rect command (cmd_kind = 1).
+    let instance = instances::BridgeShapeRectInstance {
+        x: -1.0,
+        y: 1.0,
+        w: 2.0,
+        h: -2.0,
+        fill_r: 1.0,
+        fill_a: 1.0,
+        has_fill: 1.0,
+        ..Default::default()
+    };
+    let buf = make_graph_buf(1, bytemuck::bytes_of(&instance));
 
     let mut ctx = PaintContext::new();
     let result = ctx.dispatch(1, &buf, std::ptr::null_mut());
@@ -382,29 +390,30 @@ fn nested_layer_submission_should_preserve_pending_vertex_allocations() {
     assert_eq!(crate::composite::target_create(&mut ctx, 64, 64, &mut outer), OK);
     assert_eq!(crate::composite::target_create(&mut ctx, 64, 64, &mut inner), OK);
     assert_eq!(crate::composite::target_begin_layer(&mut ctx, outer, 0, 0), OK);
-    let red = instances::BridgeRectInstance {
+    let red = instances::BridgeShapeRectInstance {
         x: -1.0,
         y: 1.0,
         w: 2.0,
         h: -2.0,
-        r: 1.0,
-        a: 1.0,
+        fill_r: 1.0,
+        fill_a: 1.0,
+        has_fill: 1.0,
         ..Default::default()
     };
-    let graph = make_graph_buf(0, bytemuck::bytes_of(&red));
+    let graph = make_graph_buf(1, bytemuck::bytes_of(&red));
     assert_eq!(ctx.dispatch(outer, &graph, std::ptr::null_mut()), OK);
     assert_eq!(crate::composite::target_begin_layer(&mut ctx, inner, 0, 0), OK);
     assert_eq!(ctx.dispatch(inner, &graph, std::ptr::null_mut()), OK);
     assert_eq!(crate::composite::target_end_layer(&mut ctx, inner), OK);
     // A later upload must not overwrite the unsubmitted red background.
-    let blue = instances::BridgeRectInstance {
+    let blue = instances::BridgeShapeRectInstance {
         x: 0.0,
         w: 1.0,
-        r: 0.0,
-        b: 1.0,
+        fill_r: 0.0,
+        fill_b: 1.0,
         ..red
     };
-    let graph = make_graph_buf(0, bytemuck::bytes_of(&blue));
+    let graph = make_graph_buf(1, bytemuck::bytes_of(&blue));
     // Standalone submissions also must preserve the pending parent ranges.
     assert_eq!(ctx.dispatch(inner, &graph, std::ptr::null_mut()), OK);
     assert_eq!(ctx.dispatch(outer, &graph, std::ptr::null_mut()), OK);
@@ -432,8 +441,8 @@ fn nested_layer_submission_should_preserve_pending_vertex_allocations() {
 fn test_dispatch_multi_batch_pipeline_switching_and_ring_reset() {
     let mut ctx = PaintContext::new();
 
-    // Build a multi-command graph: 1 rect (kind 0) + 1 circle (kind 3) + 1 rect (kind 0)
-    let rect_size = std::mem::size_of::<instances::BridgeRectInstance>();
+    // Build a multi-command graph: 1 shape_rect (kind 1) + 1 circle (kind 3) + 1 shape_rect (kind 1)
+    let rect_size = std::mem::size_of::<instances::BridgeShapeRectInstance>();
     let circle_size = std::mem::size_of::<instances::BridgeCircleInstance>();
 
     let total_payload = (8 + rect_size) + (8 + circle_size) + (8 + rect_size);
@@ -446,8 +455,8 @@ fn test_dispatch_multi_batch_pipeline_switching_and_ring_reset() {
     buf[12..16].copy_from_slice(&(total_payload as u32).to_le_bytes());
 
     let mut off = 16usize;
-    // Cmd 1: Rect (kind 0)
-    buf[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+    // Cmd 1: ShapeRect (kind 1)
+    buf[off..off + 2].copy_from_slice(&1u16.to_le_bytes());
     buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
     off += 8 + rect_size;
 
@@ -456,8 +465,8 @@ fn test_dispatch_multi_batch_pipeline_switching_and_ring_reset() {
     buf[off + 4..off + 8].copy_from_slice(&(circle_size as u32).to_le_bytes());
     off += 8 + circle_size;
 
-    // Cmd 3: Rect (kind 0)
-    buf[off..off + 2].copy_from_slice(&0u16.to_le_bytes());
+    // Cmd 3: ShapeRect (kind 1)
+    buf[off..off + 2].copy_from_slice(&1u16.to_le_bytes());
     buf[off + 4..off + 8].copy_from_slice(&(rect_size as u32).to_le_bytes());
 
     let mut stats = FrameStats::default();
@@ -487,18 +496,19 @@ fn test_persistent_render_pass_across_layer_dispatches() {
     }
 
     // 2. Dispatch 1: Red rect covering left half (x=-1.0, y=1.0, w=1.0, h=-2.0)
-    let red_rect = instances::BridgeRectInstance {
+    let red_rect = instances::BridgeShapeRectInstance {
         x: -1.0,
         y: 1.0,
         w: 1.0,
         h: -2.0,
-        r: 1.0,
-        g: 0.0,
-        b: 0.0,
-        a: 1.0,
+        fill_r: 1.0,
+        fill_g: 0.0,
+        fill_b: 0.0,
+        fill_a: 1.0,
+        has_fill: 1.0,
         ..Default::default()
     };
-    let graph1 = make_graph_buf(0, bytemuck::bytes_of(&red_rect));
+    let graph1 = make_graph_buf(1, bytemuck::bytes_of(&red_rect));
     let mut stats1 = FrameStats::default();
     assert_eq!(ctx.dispatch(target, &graph1, &mut stats1), OK);
     assert_eq!(stats1.draw_calls, 1);
@@ -520,18 +530,19 @@ fn test_persistent_render_pass_across_layer_dispatches() {
 
     // 4. Dispatch 2: Green rect covering full NDC (-1.0, 1.0, 2.0, -2.0)
     // With scissor (32..64, 0..64), only the right half will receive green!
-    let green_rect = instances::BridgeRectInstance {
+    let green_rect = instances::BridgeShapeRectInstance {
         x: -1.0,
         y: 1.0,
         w: 2.0,
         h: -2.0,
-        r: 0.0,
-        g: 1.0,
-        b: 0.0,
-        a: 1.0,
+        fill_r: 0.0,
+        fill_g: 1.0,
+        fill_b: 0.0,
+        fill_a: 1.0,
+        has_fill: 1.0,
         ..Default::default()
     };
-    let graph2 = make_graph_buf(0, bytemuck::bytes_of(&green_rect));
+    let graph2 = make_graph_buf(1, bytemuck::bytes_of(&green_rect));
     let mut stats2 = FrameStats::default();
     assert_eq!(ctx.dispatch(target, &graph2, &mut stats2), OK);
     assert_eq!(stats2.draw_calls, 1);

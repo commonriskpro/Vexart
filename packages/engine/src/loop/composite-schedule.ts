@@ -33,9 +33,9 @@ import {
   type CornerRadii,
 } from "../ffi/node"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
-import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle } from "./types"
-import type { WalkTreeState } from "./walk-tree"
-import { summarizeRendererResourceStats } from "../ffi/resource-stats"
+import type { FrameProfile, LayerBoundary, LayerSlot, DirtyTrackingHandle, CompositeFrameState, WalkCounters, WalkTreeState } from "./types"
+export type { WalkCounters } from "./types"
+import { summarizeRendererResourceStats } from "./resource-stats"
 import { hasCompositorAnimations, isCompositorOnlyFrame, resetFrameTracking } from "../animation/compositor-path"
 import type { LayerOpBucket, ClipEntry } from "./pipeline-types"
 import { buildRetainedCompositorLayers } from "./composite-retained"
@@ -50,12 +50,6 @@ import { DIRTY_KIND } from "../reconciler/dirty"
 import type { Matrix3 } from "../ffi/matrix"
 import type { PaintResult } from "./types"
 import type { RendererBackendFrameContext } from "../ffi/renderer-backend"
-import type { CompositeFrameState } from "./composite"
-
-/** Mutable scalar counters for walk state writeback. */
-export type WalkCounters = {
-  scrollSpeedCap: number
-}
 
 /** Create a zero-initialized FrameProfile. Use to avoid 2000-char inline literals. */
 export function createFrameProfile(overrides?: Partial<FrameProfile>): FrameProfile {

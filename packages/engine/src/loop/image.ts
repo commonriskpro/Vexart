@@ -21,7 +21,7 @@
 import { ensureImageExtra, type TGENode } from "../ffi/node"
 import { nativeImageAssetRegister, nativeImageAssetRelease, syncNativeImageHandle, releaseNodeImage } from "../ffi/native-image-assets"
 import { markDirty, markLayoutDirty } from "../reconciler/dirty"
-import { markLayerDirtyByKey } from "./composite"
+import { markLayerDirtyByKey } from "./composite-damage"
 
 // ── Cache ──
 

@@ -31,6 +31,10 @@ nalgebra       = "0.34"     # Affine transforms for MSDF glyph scaling (fdsm dep
 [dev-dependencies]
 # Integration-test helpers land here when tests/ is populated.
 
+[[test]]
+name = "roundtrip"
+path = "tests/integration/roundtrip.rs"
+
 [[bench]]
 name = "bench_kitty_encoding"
 harness = false # use custom timing; avoids criterion dependency for now

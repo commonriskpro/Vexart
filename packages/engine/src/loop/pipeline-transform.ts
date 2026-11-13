@@ -17,7 +17,7 @@ import {
   transformPoint,
 } from "../ffi/matrix"
 import type { TransformQuad, Point2D } from "../ffi/damage"
-import type { WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 
 /**
  * Resolves transform origin coordinates based on origin prop and box dimensions.

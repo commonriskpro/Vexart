@@ -97,7 +97,7 @@ export function ProfileScreen(props: Ps5ScreenProps) {
 
           <Show when={state().profile.tab === "overview"} fallback={
             <box direction="column" gap={scale(10)}>
-              <Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Trofeos · {game()?.title ?? "juego actual"}</Ps5Text>
+              <Ps5Text color={ps5Colors.text} fontSize={scale(18)} fontWeight={700}>Trofeos - {game()?.title ?? "juego actual"}</Ps5Text>
               <box direction="row" gap={scale(8)}>
                 <Ps5Button id="profile-trophy-filter" width="50%" height={scale(42)} label={`Filtro: ${trophyFilter() === "all" ? "Todos" : trophyFilter() === "earned" ? "Conseguidos" : "Pendientes"}`} onPress={() => { setTrophyFilter(trophyFilter() === "all" ? "earned" : trophyFilter() === "earned" ? "pending" : "all"); actions.setFocus("profile-trophy-filter") }} screen={props} />
                 <Ps5Button id="profile-trophy-sort" width="50%" height={scale(42)} label={`Orden: ${trophySort() === "catalog" ? "Catálogo" : trophySort() === "type" ? "Tipo" : "Estado"}`} onPress={() => { setTrophySort(trophySort() === "catalog" ? "type" : trophySort() === "type" ? "earned" : "catalog"); actions.setFocus("profile-trophy-sort") }} screen={props} />
@@ -105,13 +105,13 @@ export function ProfileScreen(props: Ps5ScreenProps) {
               <Show when={visibleTrophies().length > 0} fallback={<Ps5Text color={ps5Colors.mutedText} fontSize={scale(15)}>No hay trofeos para este filtro.</Ps5Text>}>
                 <box direction="column" gap={scale(7)} scrollY viewportClip>
                   <For each={visibleTrophies()}>{(trophy) => (
-                    <Ps5Button id={`profile-trophy-${trophy.name}`} width="100%" height={scale(45)} alignX="left" label={`${trophy.earned ? "✓" : "○"} ${trophyLabel(trophy.type)} · ${trophy.name}`} onPress={() => selectTrophy(trophy)} screen={props} />
+                    <Ps5Button id={`profile-trophy-${trophy.name}`} width="100%" height={scale(45)} alignX="left" label={`${trophy.earned ? "[x]" : "[ ]"} ${trophyLabel(trophy.type)} - ${trophy.name}`} onPress={() => selectTrophy(trophy)} screen={props} />
                   )}</For>
                 </box>
                 <Show when={selectedTrophy()}>
                   <Ps5Panel width="100%" padding={scale(12)} gap={scale(5)} direction="column" backgroundColor="#151a20cc" borderColor="#ffffff1c" cornerRadius={scale(10)}>
                     <Ps5Text color={ps5Colors.text} fontSize={scale(14)} fontWeight={700}>{selectedTrophy()!.name}</Ps5Text>
-                    <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedTrophy()!.earned ? "Conseguido" : "Pendiente"} · {trophyLabel(selectedTrophy()!.type)}</Ps5Text>
+                    <Ps5Text color={ps5Colors.mutedText} fontSize={scale(13)}>{selectedTrophy()!.earned ? "Conseguido" : "Pendiente"} - {trophyLabel(selectedTrophy()!.type)}</Ps5Text>
                   </Ps5Panel>
                 </Show>
               </Show>
@@ -135,7 +135,7 @@ export function ProfileScreen(props: Ps5ScreenProps) {
           <Show when={state().users.length > 1}>
             <box direction="row" gap={scale(8)} scrollX viewportClip>
               <For each={state().users}>{(entry) => (
-                <Ps5Button id={`profile-user-${entry.id}`} width={scale(145)} height={scale(46)} label={entry.id === state().activeUserId ? `${entry.name} · activo` : entry.name} onPress={() => { actions.dispatch({ type: "user/select", userId: entry.id }); actions.go("profile") }} screen={props} />
+                <Ps5Button id={`profile-user-${entry.id}`} width={scale(145)} height={scale(46)} label={entry.id === state().activeUserId ? `${entry.name} - activo` : entry.name} onPress={() => { actions.dispatch({ type: "user/select", userId: entry.id }); actions.go("profile") }} screen={props} />
               )}</For>
             </box>
           </Show>

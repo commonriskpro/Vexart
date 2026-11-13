@@ -1,21 +1,69 @@
-import { createSignal, getOwner, onCleanup } from "solid-js"
+import { batch, createSignal, getOwner, onCleanup } from "solid-js"
 import { deregisterAnimationDescriptor, registerAnimationDescriptor, type CompositorProperty } from "../animation/compositor-path"
 import { markDirty } from "../reconciler/dirty"
 
+type AnimationDriver = (now: number) => boolean // returns true if continues, false if finished
+const activeDrivers = new Set<AnimationDriver>()
+
 let activeCount = 0
+let loopDriving = false
+let fallbackTimer: ReturnType<typeof setTimeout> | null = null
 
 /** @public */
 export function hasActiveAnimations(): boolean {
-  return activeCount > 0
+  return activeDrivers.size > 0 || activeCount > 0
 }
 
 /** @public */
 export function resetActiveAnimations(): void {
+  activeDrivers.clear()
+  if (fallbackTimer !== null) {
+    clearTimeout(fallbackTimer)
+    fallbackTimer = null
+  }
   activeCount = 0
 }
 
 function registerAnimation() { activeCount++ }
 function unregisterAnimation() { activeCount = Math.max(0, activeCount - 1) }
+
+export function stepActiveAnimations(now: number = performance.now()): boolean {
+  if (activeDrivers.size === 0) return false
+  batch(() => {
+    for (const driver of Array.from(activeDrivers)) {
+      const stillActive = driver(now)
+      if (!stillActive) {
+        activeDrivers.delete(driver)
+      }
+    }
+  })
+  if (activeDrivers.size === 0 && fallbackTimer !== null) {
+    clearTimeout(fallbackTimer)
+    fallbackTimer = null
+  }
+  return activeDrivers.size > 0
+}
+
+export function setLoopAnimationDriver(active: boolean): void {
+  loopDriving = active
+  if (active && fallbackTimer) {
+    clearTimeout(fallbackTimer)
+    fallbackTimer = null
+  }
+}
+
+function ensureAnimationStepScheduled() {
+  if (loopDriving) return
+  if (fallbackTimer === null && activeDrivers.size > 0) {
+    fallbackTimer = setTimeout(() => {
+      fallbackTimer = null
+      const hasMore = stepActiveAnimations(performance.now())
+      if (hasMore && !loopDriving) {
+        ensureAnimationStepScheduled()
+      }
+    }, 16)
+  }
+}
 
 /** @public */
 export type EasingFn = (t: number) => number
@@ -99,7 +147,6 @@ export function createTransition(initial: number, config?: TransitionConfig): An
   let to = initial
   let startTime = 0
   let animating = false
-  let timer: ReturnType<typeof setTimeout> | null = null
 
   function syncDescriptor() {
     const compositor = config?.compositor
@@ -115,12 +162,13 @@ export function createTransition(initial: number, config?: TransitionConfig): An
   }
 
   function stop() {
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
-    }
     if (animating) {
       animating = false
+      activeDrivers.delete(driver)
+      if (activeDrivers.size === 0 && fallbackTimer !== null) {
+        clearTimeout(fallbackTimer)
+        fallbackTimer = null
+      }
       const compositor = config?.compositor
       if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
       unregisterAnimation()
@@ -131,9 +179,10 @@ export function createTransition(initial: number, config?: TransitionConfig): An
     onCleanup(stop)
   }
 
-  function tick() {
-    if (!animating) return
-    const elapsed = performance.now() - startTime
+  const driver: AnimationDriver = (now: number): boolean => {
+    if (!animating) return false
+    if (now < startTime) return true
+    const elapsed = now - startTime
     if (elapsed >= duration) {
       setValue(to)
       from = to
@@ -141,18 +190,12 @@ export function createTransition(initial: number, config?: TransitionConfig): An
       const compositor = config?.compositor
       if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
       unregisterAnimation()
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
-      }
-      return
+      return false
     }
     const t = ease(elapsed / duration)
     setValue(from + (to - from) * t)
     markDirty()
-    // Use setTimeout(tick, 16) to approximate 60fps frame alignment instead of
-    // setTimeout(0) which creates a CPU-bound tight loop monopolizing the event loop.
-    timer = setTimeout(tick, 16)
+    return true
   }
 
   function setTarget(target: number) {
@@ -161,14 +204,14 @@ export function createTransition(initial: number, config?: TransitionConfig): An
     from = value()
     to = target
     startTime = performance.now() + delay
-    if (!animating) { animating = true; registerAnimation() }
-    syncDescriptor()
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
+    if (!animating) {
+      animating = true
+      registerAnimation()
+      activeDrivers.add(driver)
     }
-    if (delay > 0) timer = setTimeout(tick, delay)
-    else tick()
+    syncDescriptor()
+    markDirty()
+    ensureAnimationStepScheduled()
   }
 
   const accessor = Object.assign(value, { stop, cancel: stop })
@@ -202,7 +245,6 @@ export function createSpring(initial: number, config?: SpringConfig): AnimationS
   let velocity = 0
   let animating = false
   let lastTime = 0
-  let timer: ReturnType<typeof setTimeout> | null = null
 
   function syncDescriptor() {
     const compositor = config?.compositor
@@ -218,12 +260,13 @@ export function createSpring(initial: number, config?: SpringConfig): AnimationS
   }
 
   function stop() {
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
-    }
     if (animating) {
       animating = false
+      activeDrivers.delete(driver)
+      if (activeDrivers.size === 0 && fallbackTimer !== null) {
+        clearTimeout(fallbackTimer)
+        fallbackTimer = null
+      }
       const compositor = config?.compositor
       if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
       unregisterAnimation()
@@ -234,9 +277,8 @@ export function createSpring(initial: number, config?: SpringConfig): AnimationS
     onCleanup(stop)
   }
 
-  function tick() {
-    if (!animating) return
-    const now = performance.now()
+  const driver: AnimationDriver = (now: number): boolean => {
+    if (!animating) return false
     const dt = Math.min((now - lastTime) / 1000, 0.064)
     lastTime = now
     const displacement = current - target
@@ -253,30 +295,25 @@ export function createSpring(initial: number, config?: SpringConfig): AnimationS
       const compositor = config?.compositor
       if (compositor) deregisterAnimationDescriptor(compositor.nodeId, compositor.property)
       unregisterAnimation()
-      if (timer) {
-        clearTimeout(timer)
-        timer = null
-      }
-      return
+      return false
     }
     setValue(current)
     markDirty()
-    // Use setTimeout(tick, 16) to approximate 60fps frame alignment instead of
-    // setTimeout(0) which creates a CPU-bound tight loop monopolizing the event loop.
-    timer = setTimeout(tick, 16)
+    return true
   }
 
   function setTarget(t: number) {
     if (t === target && animating) return
     target = t
     lastTime = performance.now()
-    if (!animating) { animating = true; registerAnimation() }
-    syncDescriptor()
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
+    if (!animating) {
+      animating = true
+      registerAnimation()
+      activeDrivers.add(driver)
     }
-    tick()
+    syncDescriptor()
+    markDirty()
+    ensureAnimationStepScheduled()
   }
 
   const accessor = Object.assign(value, { stop, cancel: stop })

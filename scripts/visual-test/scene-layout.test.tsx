@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { createNode, parseSizing, resetFocus, solidRender, type TGENode } from "@vexart/engine/internal"
 import { syncAllLayoutProps } from "../../packages/engine/src/ffi/flex-sync"
 import { createVexartLayoutCtx } from "../../packages/engine/src/loop/layout-adapter"
-import { walkTree, type WalkTreeState } from "../../packages/engine/src/loop/walk-tree"
+import type { WalkTreeState } from "../../packages/engine/src/loop/types"
 import { traverseFrame } from "../../packages/engine/src/loop/pipeline-traverse"
 import { Scene as AvatarBadgeScene } from "./scenes/components-avatar-badge"
 import { Scene as BackdropBlurScene } from "./scenes/effects-backdrop-blur"
@@ -56,17 +56,7 @@ function layoutScene(scene: Scene, width: number, height: number, check: (root: 
       rectNodeById: new Map(),
       layout,
     }
-    walkTree(root, state)
-    layout.calculateRoots(root._flexNode)
-
-    state.rectNodes.length = 0
-    state.textNodes.length = 0
-    state.boxNodes.length = 0
-    state.nodeRefById.clear()
-    state.rectNodeById.clear()
-    state.scrollContainers.length = 0
-    state.layerBoundaries.length = 0
-
+    root._flexNode?.calculateLayout(width, height)
     traverseFrame(root, state, width, height)
     const map = new Map<number, Layout>()
     for (const [id, node] of state.nodeRefById) {

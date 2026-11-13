@@ -7,8 +7,9 @@ pub mod shm_posix;
 pub mod shm_ring;
 
 pub use shm_posix::{
-    generate_shm_name, shm_is_consumed, shm_prepare, shm_prepare_native, shm_release,
-    KittyShmHandle,
+    ensure_orphaned_shm_reaped, generate_shm_name, reap_orphaned_shm_segments,
+    reap_orphaned_shm_segments_in_dir, shm_is_consumed, shm_prepare, shm_prepare_native,
+    shm_release, KittyShmHandle, REAPER_ONCE,
 };
 pub use shm_ring::{
     acquire_ring_slot, shm_prepare_ring, shm_ring_fail_closed, shm_ring_is_drained,
@@ -40,6 +41,7 @@ extern "C" fn atexit_shm_cleanup() {
 /// Ensures the emergency C atexit handler and Rust panic hook are registered.
 /// Thread-safe and executes exactly once per process.
 pub fn ensure_emergency_cleanup_registered() {
+    shm_posix::ensure_orphaned_shm_reaped();
     EMERGENCY_CLEANUP_INIT.call_once(|| {
         unsafe {
             nix::libc::atexit(atexit_shm_cleanup);

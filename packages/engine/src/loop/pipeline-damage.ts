@@ -4,7 +4,7 @@
 
 import { type TGENode, type TGEProps } from "../ffi/node"
 import { type DamageRect, unionRect } from "../ffi/damage"
-import { type WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 import { type PipelineContext, getCurrentClipBounds } from "./pipeline-types"
 
 /**

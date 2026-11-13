@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { nativeImageAssetRegister, nativeImageAssetRelease, nativeImageAssetTouch } from "./native-image-assets"
-import { getNativeResourceStats } from "./resource-stats"
+import { getNativeResourceStats } from "../loop/resource-stats"
 
 describe("native image assets", () => {
   test("register returns valid handles and supports touch/release lifecycle", () => {

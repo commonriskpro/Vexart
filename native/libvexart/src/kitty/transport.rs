@@ -117,6 +117,9 @@ pub fn set_transport_mode(mode: u32) -> i32 {
         ));
         return ERR_INVALID_ARG;
     }
+    if mode == 2 {
+        crate::kitty::shm::ensure_orphaned_shm_reaped();
+    }
     TRANSPORT_MODE.with(|cell| cell.set(mode));
     OK
 }

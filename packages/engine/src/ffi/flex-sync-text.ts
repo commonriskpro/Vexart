@@ -10,7 +10,13 @@ import {
   syncHeightSizing,
   syncWidthSizing,
 } from "./flex-sync-style"
-import { syncGridItem, type GridNode } from "./flex-sync-grid"
+import type { GridNode } from "./flex-sync-grid"
+
+let syncGridItemHook: ((node: TGENode) => void) | null = null
+
+export function setGridItemHook(hook: ((node: TGENode) => void) | null): void {
+  syncGridItemHook = hook
+}
 
 export const TEXT_LAYOUT_PROPS = new Set([
   "fontSize",
@@ -155,7 +161,7 @@ export function createTextFlexNode(node: TGENode): void {
     // Text nodes are materialized lazily during walk-tree. Apply any Grid
     // item placement that arrived before that materialization to the same
     // retained Node, without creating a second text/layout path.
-    if (node.parent?.props.layout === "grid") syncGridItem(node)
+    if (node.parent?.props.layout === "grid") syncGridItemHook?.(node)
     syncGridTextIntrinsic(node)
   }
 }

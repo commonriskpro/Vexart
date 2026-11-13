@@ -7,7 +7,7 @@
 
 import { describe, test, expect } from "bun:test"
 import { createNode } from "../ffi/node"
-import type { WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 import { traverseFrame } from "./pipeline-traverse"
 import type { TGENode } from "../ffi/node"
 

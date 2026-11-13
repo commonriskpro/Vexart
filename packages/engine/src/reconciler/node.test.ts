@@ -24,7 +24,7 @@ import { focusedId, getNodeFocusId, resetFocus } from "./focus"
 import { createVexartLayoutCtx } from "../loop/layout-adapter"
 import { updateInteractiveStates, type InteractiveStatesBag } from "../loop/layout"
 import { traverseFrame } from "../loop/pipeline-traverse"
-import { walkTree, type WalkTreeState } from "../loop/walk-tree"
+import type { WalkTreeState } from "../loop/types"
 // Constants mirror layout adapter values for parser compatibility.
 const SIZING = { FIT: 0, GROW: 1, PERCENT: 2, FIXED: 3 } as const
 const DIRECTION = { LEFT_TO_RIGHT: 0, TOP_TO_BOTTOM: 1 } as const
@@ -687,7 +687,6 @@ describe("web-native JSX elements, Flexily layout sync, bare text cascade, and p
       rectNodeById: new Map(),
       layout,
     }
-    walkTree(root, state)
     root._flexNode?.calculateLayout(300, 200)
 
     expect(a._flexNode?.getComputedLeft()).toBe(10)
@@ -729,7 +728,6 @@ describe("web-native JSX elements, Flexily layout sync, bare text cascade, and p
         rectNodeById: new Map(),
         layout,
       }
-      walkTree(root, state)
       root._flexNode?.calculateLayout(300, 100)
       const frame = traverseFrame(root, state, 300, 100)
 

@@ -82,5 +82,5 @@ export function List(props: ListProps) {
 
   return props.renderList
     ? <>{props.renderList(<>{children()}</>)}</>
-    : <box direction="column">{children()}</box>
+    : <box width="100%" direction="column">{children()}</box>
 }

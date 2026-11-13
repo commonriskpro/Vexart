@@ -8,12 +8,10 @@
 #![cfg(feature = "gpu-tests")]
 
 use vexart::ffi::buffer::{GRAPH_MAGIC, GRAPH_VERSION};
-use vexart::ffi::panic::OK;
 use vexart::paint::context::WgpuContext;
+use vexart::paint::instances::BridgeShapeRectInstance;
 
-/// Build a minimal paint graph buffer containing one Rect command (cmd_kind=0).
-///
-/// Rect instance layout (from paint/instances.rs): 20 floats = 80 bytes
+/// Build a minimal paint graph buffer containing one ShapeRect command (cmd_kind=1).
 fn build_single_rect_graph(
     x: f32,
     y: f32,
@@ -24,9 +22,21 @@ fn build_single_rect_graph(
     b: f32,
     a: f32,
 ) -> Vec<u8> {
-    let body_bytes = 80u32; // 20 floats
-    let prefix_bytes = 8u32;
-    let payload_bytes = prefix_bytes + body_bytes;
+    let instance = BridgeShapeRectInstance {
+        x,
+        y,
+        w,
+        h,
+        fill_r: r,
+        fill_g: g,
+        fill_b: b,
+        fill_a: a,
+        has_fill: 1.0,
+        ..Default::default()
+    };
+    let body = bytemuck::bytes_of(&instance);
+    let body_bytes = body.len() as u32;
+    let payload_bytes = 8u32 + body_bytes;
 
     let total = 16 + payload_bytes as usize;
     let mut buf = vec![0u8; total];
@@ -39,24 +49,11 @@ fn build_single_rect_graph(
 
     // Command prefix at offset 16
     let off = 16;
-    buf[off..off + 2].copy_from_slice(&0u16.to_le_bytes()); // cmd_kind = 0 (Rect)
+    buf[off..off + 2].copy_from_slice(&1u16.to_le_bytes()); // cmd_kind = 1 (ShapeRect)
     buf[off + 2..off + 4].copy_from_slice(&0u16.to_le_bytes()); // flags = 0
     buf[off + 4..off + 8].copy_from_slice(&body_bytes.to_le_bytes());
 
-    // Body: 20 f32 values
-    let body_off = off + 8;
-    let floats: [f32; 20] = [
-        x, y, w, h,             // rect
-        r, g, b, a,             // color (RGBA normalized)
-        0.0, 0.0, 0.0, 0.0,    // corner_radii
-        0.0, 0.0, 0.0, 0.0,    // border_color
-        0.0,                     // border_width
-        0.0, 0.0, 0.0,          // _pad
-    ];
-    for (i, &v) in floats.iter().enumerate() {
-        let start = body_off + i * 4;
-        buf[start..start + 4].copy_from_slice(&v.to_le_bytes());
-    }
+    buf[off + 8..off + 8 + body.len()].copy_from_slice(body);
 
     buf
 }
@@ -103,7 +100,7 @@ fn test_paint_dispatch_single_rect() {
     // is well-formed by parsing its header.
     let header = vexart::ffi::buffer::parse_header(&graph).expect("graph should parse");
     assert_eq!(header.cmd_count, 1);
-    assert_eq!(header.payload_bytes, 88); // 8 prefix + 80 body
+    assert_eq!(header.payload_bytes, 8 + std::mem::size_of::<BridgeShapeRectInstance>() as u32);
 
     // Target texture creation succeeded — GPU path is functional.
     let _view = target.create_view(&wgpu::TextureViewDescriptor::default());

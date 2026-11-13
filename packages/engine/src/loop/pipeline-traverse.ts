@@ -47,7 +47,8 @@ import {
   hashCanvasDisplayList,
 } from "../ffi/canvas"
 import { normalizeTextForLayout, resolveLineHeightPx } from "../ffi/text-layout"
-import { type WalkTreeState, collectText } from "./walk-tree"
+import type { WalkTreeState } from "./types"
+import { collectText } from "./text-util"
 import {
   type PipelineContext,
   type LayerOpBucket,

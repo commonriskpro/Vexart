@@ -3,16 +3,20 @@
  * Previously lived in @vexart/engine's renderer entry point.
  */
 
-import { createSignal, onCleanup } from "solid-js"
+import { createComponent, createSignal, onCleanup } from "solid-js"
 import { createParser } from "./input/parser"
 import { createRenderLoop } from "./loop/loop"
 import { render as solidRender } from "./reconciler/reconciler"
-import { dispatchInput, resetInputSubscribers } from "./loop/input"
-import { markDirty } from "./reconciler/dirty"
-import { resetFocus } from "./reconciler/focus"
-import { clearSelection } from "./reconciler/selection"
+import { createDirtyTracker, markDirty } from "./reconciler/dirty"
 import { bindLoop, unbindLoop } from "./reconciler/pointer"
 import { resetCompositorPathState } from "./animation/compositor-path"
+import {
+  createEngineContext,
+  EngineSolidContext,
+  getActiveEngineContext,
+  setActiveEngineContext,
+} from "./context"
+import { createInputManager } from "./loop/input"
 import type { Terminal } from "./terminal/index"
 
 // ── Mouse button constants ──
@@ -103,8 +107,28 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
     },
   })
 
+  const dirtyTracker = loop.root._dirtyTracker ?? createDirtyTracker()
+  const inputManager = createInputManager()
+  const engineCtx = createEngineContext({
+    root: loop.root,
+    loop,
+    dirty: dirtyTracker,
+    inputManager,
+  })
+
+  const priorActiveCtx = getActiveEngineContext()
+  setActiveEngineContext(engineCtx)
+
   bindLoop(loop)
-  const dispose = solidRender(component, loop.root)
+  const dispose = solidRender(
+    () => createComponent(EngineSolidContext.Provider, {
+      value: engineCtx,
+      get children() {
+        return createComponent(component, {})
+      },
+    }) as any,
+    loop.root,
+  )
 
   let cellH = terminal.size.cellHeight || 16
 
@@ -117,35 +141,41 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
   const caps = terminal.caps
   const parser = createParser((event) => {
     if (loop.suspended()) return
-    dispatchInput(event)
+    const prev = getActiveEngineContext()
+    setActiveEngineContext(engineCtx)
+    try {
+      engineCtx.input.dispatchInput(event)
 
-    if (event.type === "mouse") {
-      if (event.action === "press") isButtonDown = true
-      else if (event.action === "release") isButtonDown = false
+      if (event.type === "mouse") {
+        if (event.action === "press") isButtonDown = true
+        else if (event.action === "release") isButtonDown = false
 
-      loop.feedPointer(event.x, event.y, isButtonDown)
+        loop.feedPointer(event.x, event.y, isButtonDown)
 
-      if (event.action === "scroll") {
-        const dy = event.button === 64 ? cellH : -cellH
-        loop.feedScroll(0, dy)
+        if (event.action === "scroll") {
+          const dy = event.button === 64 ? cellH : -cellH
+          loop.feedScroll(0, dy)
+        }
+
+        const shouldRepaint = event.action === "press"
+          || event.action === "release"
+          || event.action === "scroll"
+          || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
+        if (shouldRepaint) {
+          loop.requestInteractionFrame(event.action === "scroll" ? "scroll" : "pointer")
+        }
+        return
       }
 
-      const shouldRepaint = event.action === "press"
-        || event.action === "release"
-        || event.action === "scroll"
-        || (event.action === "move" && (isButtonDown || loop.needsPointerRepaint()))
-      if (shouldRepaint) {
-        loop.requestInteractionFrame(event.action === "scroll" ? "scroll" : "pointer")
+      if (event.type === "focus") {
+        return
       }
-      return
-    }
 
-    if (event.type === "focus") {
-      return
+      markDirty(undefined, dirtyTracker)
+      loop.requestInteractionFrame("key")
+    } finally {
+      setActiveEngineContext(prev)
     }
-
-    markDirty()
-    loop.requestInteractionFrame("key")
   }, {
     pixelOrigin: caps?.mousePixelOrigin ?? 1,
   })
@@ -171,23 +201,18 @@ export function mount(component: () => any, terminal: Terminal, opts?: MountOpti
               dispose()
             } finally {
               try {
-                resetFocus()
+                engineCtx.destroy()
+                if (getActiveEngineContext() === engineCtx) {
+                  setActiveEngineContext(priorActiveCtx)
+                }
               } finally {
                 try {
-                  clearSelection()
+                  unbindLoop(loop)
                 } finally {
                   try {
-                    resetInputSubscribers()
+                    loop.destroy()
                   } finally {
-                    try {
-                      unbindLoop(loop)
-                    } finally {
-                      try {
-                        loop.destroy()
-                      } finally {
-                        resetCompositorPathState()
-                      }
-                    }
+                    resetCompositorPathState()
                   }
                 }
               }

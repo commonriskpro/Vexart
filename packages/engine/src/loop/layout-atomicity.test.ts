@@ -4,7 +4,7 @@ import { syncAllLayoutProps } from "../ffi/flex-sync"
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "../ffi/renderer-backend"
 import { createRenderLoop } from "./loop"
 import { createVexartLayoutCtx } from "./layout-adapter"
-import { walkTree, type WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 import { traverseFrame } from "./pipeline-traverse"
 import { markDirty } from "../reconciler/dirty"
 
@@ -36,7 +36,6 @@ function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCt
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   const calcError = layout.calculateRoots(root._flexNode)
   if (calcError) {
     return {
@@ -44,14 +43,6 @@ function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCt
       result: { success: false, layerBuckets: [], hasAnyTransforms: false, error: calcError },
     }
   }
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   const result = traverseFrame(root, state, width, height)
   return { state, result }

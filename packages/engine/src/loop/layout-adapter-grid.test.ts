@@ -3,7 +3,7 @@ import { DISPLAY_NONE } from "flexily"
 import { CMD } from "../ffi/render-graph"
 import { createNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { syncAllLayoutProps } from "../ffi/flex-sync"
-import { walkTree, type WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 import { ATTACH_POINT, createVexartLayoutCtx } from "./layout-adapter"
 import { hashString, traverseFrame } from "./pipeline-traverse"
 
@@ -38,7 +38,6 @@ function layoutState(root: TGENode, width: number, height: number) {
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   layout.calculateRoots(root._flexNode)
 
   const layoutError = layout.getLastLayoutError()
@@ -49,14 +48,6 @@ function layoutState(root: TGENode, width: number, height: number) {
       ops: [],
     }
   }
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   const result = traverseFrame(root, state, width, height)
   return { layout, result, ops: result.layerBuckets.flatMap((b) => b.ops) }

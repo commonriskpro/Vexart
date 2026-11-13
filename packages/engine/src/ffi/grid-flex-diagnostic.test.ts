@@ -9,7 +9,7 @@ import {
   type TGEProps,
 } from "./node"
 import { syncAllLayoutProps, syncLayoutProp } from "./flex-sync"
-import { walkTree, type WalkTreeState } from "../loop/walk-tree"
+import type { WalkTreeState } from "../loop/types"
 import { createVexartLayoutCtx } from "../loop/layout-adapter"
 import { traverseFrame } from "../loop/pipeline-traverse"
 
@@ -46,16 +46,7 @@ function frame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCtx>, 
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   const error = layout.calculateRoots(root._flexNode)
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   if (error) {
     return {

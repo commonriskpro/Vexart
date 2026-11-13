@@ -19,6 +19,24 @@ function localStackingZ(node: TGENode) {
   return node.props.floating ? (node.props.zIndex ?? 0) : 0
 }
 
+type StackingContextEntry = {
+  node: TGENode
+  z: number
+}
+
+function getStackingContextPath(node: TGENode): StackingContextEntry[] {
+  const path: StackingContextEntry[] = []
+  let curr: TGENode | null = node
+  while (curr) {
+    if (curr.parent === null || (curr.props.floating && curr.props.zIndex !== undefined)) {
+      const z = curr.props.floating ? (curr.props.zIndex ?? 0) : 0
+      path.unshift({ node: curr, z })
+    }
+    curr = curr.parent
+  }
+  return path
+}
+
 function depth(node: TGENode) {
   // Use cached _depth from walkTree when available (O(1) vs O(d) parent walk)
   if (node._depth > 0) return node._depth
@@ -31,7 +49,7 @@ function depth(node: TGENode) {
   return total
 }
 
-export function compareStackingPaintOrder(a: TGENode, b: TGENode) {
+function compareInCommonParent(a: TGENode, b: TGENode): number {
   if (a === b) return 0
 
   let left = a
@@ -57,7 +75,31 @@ export function compareStackingPaintOrder(a: TGENode, b: TGENode) {
 
   const z = localStackingZ(left) - localStackingZ(right)
   if (z !== 0) return z
-  return left._siblingIndex - right._siblingIndex
+  return (left._siblingIndex ?? 0) - (right._siblingIndex ?? 0)
+}
+
+export function compareStackingPaintOrder(a: TGENode, b: TGENode): number {
+  if (a === b) return 0
+
+  const pA = getStackingContextPath(a)
+  const pB = getStackingContextPath(b)
+  const minLen = Math.min(pA.length, pB.length)
+
+  for (let i = 0; i < minLen; i++) {
+    if (pA[i].node !== pB[i].node) {
+      if (pA[i].z !== pB[i].z) return pA[i].z - pB[i].z
+      return compareInCommonParent(pA[i].node, pB[i].node)
+    }
+  }
+
+  if (pA.length !== pB.length) {
+    const deeper = pA.length > pB.length ? pA[minLen] : pB[minLen]
+    const sign = pA.length > pB.length ? 1 : -1
+    if (deeper.z !== 0) return sign * (deeper.z > 0 ? 1 : -1)
+    return compareInCommonParent(a, b)
+  }
+
+  return compareInCommonParent(a, b)
 }
 
 export function sortNodesByStackingPaintOrder(nodes: TGENode[]) {
@@ -231,6 +273,7 @@ function syncFocusStateAfterClick(
   if (newFocusId === previousFocusId) return false
   let changed = false
   for (const node of bag.rectNodes) {
+    if (node.destroyed) continue
     const props = resolveProps(node)
     if (!props.focusable) continue
     const nodeFocusId = getNodeFocusId(node)
@@ -277,6 +320,7 @@ export function updateInteractiveStates(bag: InteractiveStatesBag): boolean {
   let hoveredPressTarget: TGENode | null = null
 
   for (const node of paintOrderedRectNodes) {
+    if (node.destroyed) continue
     const props = resolveProps(node)
     if (!isInteractiveNode(props)) continue
 

@@ -111,6 +111,74 @@ pub fn cleanup_handle_registry() {
     }
 }
 
+pub static REAPER_ONCE: std::sync::Once = std::sync::Once::new();
+
+/// Clean up orphaned POSIX SHM segments left by terminated Vexart processes.
+///
+/// On platforms with /dev/shm (Linux), scans the directory for vx-* files,
+/// extracts the PID, probes whether the process is still alive using kill(pid, 0),
+/// and unlinks segments belonging to dead processes (ESRCH).
+pub fn reap_orphaned_shm_segments() {
+    let shm_dir = std::env::var("VEXART_SHM_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/dev/shm"));
+    reap_orphaned_shm_segments_in_dir(&shm_dir);
+}
+
+/// Helper that sweeps a specific directory for orphaned vx-* segments.
+pub fn reap_orphaned_shm_segments_in_dir(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+
+    let current_pid = std::process::id();
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let filename = name.to_string_lossy();
+        if !filename.starts_with("vx-") {
+            continue;
+        }
+
+        let after_prefix = &filename["vx-".len()..];
+        if !after_prefix.contains('-') {
+            continue;
+        }
+        let pid_hex = after_prefix.split('-').next().unwrap_or("");
+        let Ok(pid) = u32::from_str_radix(pid_hex, 16) else {
+            continue;
+        };
+
+        if pid == 0 || pid == current_pid {
+            continue;
+        }
+
+        let is_dead = unsafe {
+            let res = nix::libc::kill(pid as nix::libc::pid_t, 0);
+            if res == -1 {
+                let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
+                errno == nix::libc::ESRCH
+            } else {
+                false
+            }
+        };
+
+        if is_dead {
+            if let Ok(cname) = CString::new(format!("/{}", filename)) {
+                let _ = posix_shm_unlink(cname.as_c_str());
+            }
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Ensures the orphaned SHM reaper runs at most once per process.
+pub fn ensure_orphaned_shm_reaped() {
+    REAPER_ONCE.call_once(|| {
+        reap_orphaned_shm_segments();
+    });
+}
+
 /// Generate a unique monotonic POSIX SHM name for a frame or layer segment.
 /// Uses the pattern `/vx-{pid:x}-{counter:x}` which fits within the 31-byte
 /// POSIX and Kitty limits and eliminates collision races between frames.
@@ -142,6 +210,7 @@ pub unsafe fn shm_prepare(
     out_handle: *mut u64,
 ) -> i32 {
     super::ensure_emergency_cleanup_registered();
+    ensure_orphaned_shm_reaped();
 
     // 1. Validate inputs.
     if name_ptr.is_null()

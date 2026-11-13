@@ -20,6 +20,7 @@ export type VoidPopoverProps = {
   offset?: number
   width?: SizingUnit
   className?: string
+  modal?: boolean
 }
 
 /** @public */
@@ -30,6 +31,7 @@ export function VoidPopover(props: VoidPopoverProps) {
       onOpenChange={props.onOpenChange}
       placement={props.placement}
       offset={props.offset}
+      modal={props.modal}
       renderTrigger={() => <>{props.trigger}</>}
       renderContent={() => (
         <box

@@ -16,6 +16,7 @@ import { releaseNodeImage } from "./native-image-assets"
 import { Node, FLEX_DIRECTION_ROW, FLEX_DIRECTION_COLUMN, GUTTER_COLUMN, GUTTER_ROW, EDGE_ALL } from "flexily"
 import { createTextFlexNode, isLayoutProp, isTextLayoutProp, syncAllLayoutProps } from "./flex-sync"
 import { syncDirection, syncPadding, syncMargin, syncGap, syncAlign } from "./flex-sync-style"
+import { useEngineContext, type EngineContext } from "../context"
 import {
   acquireFlexNode,
   clearFlexNodePool,
@@ -157,12 +158,15 @@ export class TGENodeImpl implements TGENode {
   declare _syncedClassName?: string
   declare _syncedDefaultStyle?: Partial<TGEProps>
   declare _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
+  declare _engineContext?: EngineContext | null
   declare _rawInteractionMode?: InteractionMode
 
   constructor(kind: TGENodeKind, flex: Node | null) {
     this.kind = kind
     this.id = nextNodeId++
     this._flexNode = flex
+    const ctx = useEngineContext()
+    if (ctx) this._engineContext = ctx
     if (kind === "img") {
       this._imageExtra = { buffer: null, state: "idle", nativeHandle: null }
     } else if (kind === "canvas") {
@@ -619,6 +623,13 @@ function insertFlexChild(parent: TGENode, child: TGENode, index: number): void {
   syncExtendedFlexProps(child)
 }
 
+function propagateEngineContext(node: TGENode, ctx: EngineContext | null) {
+  node._engineContext = ctx
+  for (const child of node.children) {
+    propagateEngineContext(child, ctx)
+  }
+}
+
 /** @public */
 export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
   assertCanInsert(parent, child)
@@ -629,6 +640,10 @@ export function insertChild(parent: TGENode, child: TGENode, anchor?: TGENode) {
     // Reparenting is a move, not a destruction.  Detach the old TGE/native
     // edge first; this leaves no stale parent while the new edge is built.
     if (!detachChild(previousParent, child)) child.parent = null
+  }
+
+  if (parent._engineContext && child._engineContext !== parent._engineContext) {
+    propagateEngineContext(child, parent._engineContext)
   }
 
   if (parent.kind === "text") {

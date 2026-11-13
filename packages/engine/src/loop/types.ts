@@ -8,12 +8,13 @@
  */
 
 import type { TGENode } from "../ffi/node"
-import type { EffectConfig, ImagePaintConfig, CanvasPaintConfig } from "../ffi/render-graph"
-import type { PositionedCommand } from "./layout-adapter"
+import type { EffectConfig, ImagePaintConfig, CanvasPaintConfig, RenderCommand } from "../ffi/render-graph"
+import type { PositionedCommand, createVexartLayoutCtx } from "./layout-adapter"
 import type { DamageRect } from "../ffi/damage"
-import type { Layer } from "../ffi/layers"
+import type { Layer, LayerStoreHandle } from "../ffi/layers"
 import type { Terminal } from "../terminal/index"
 import type { RendererBackend } from "../ffi/renderer-backend"
+import type { LayerOpBucket } from "./pipeline-types"
 
 // ── Pointer + scroll state ──
 
@@ -34,6 +35,33 @@ export type ScrollState = {
   deltaX: number
   deltaY: number
   speedCap: number
+}
+
+/** Mutable scalar counters for walk state writeback. */
+export type WalkCounters = {
+  scrollSpeedCap: number
+}
+
+/**
+ * Mutable state threaded through layout traversal.
+ * Coordinator allocates this once per frame and passes it into traverseFrame.
+ */
+export type WalkTreeState = {
+  scrollSpeedCap: { value: number }
+  nodeCount: { value: number }
+  rectNodes: TGENode[]
+  textNodes: TGENode[]
+  boxNodes: TGENode[]
+  layerBoundaries: LayerBoundary[]
+  scrollContainers: TGENode[]
+  nodeRefById: Map<number, TGENode>
+  rectNodeById: Map<number, TGENode>
+  layout: ReturnType<typeof createVexartLayoutCtx>
+  hasAnyTransforms?: boolean
+  cullingEnabled?: boolean
+  viewportWidth?: number
+  viewportHeight?: number
+  culledCount?: { value: number }
 }
 
 // ── Shared sub-interfaces (used by CompositeFrameState and PaintFrameState) ──
@@ -113,6 +141,104 @@ export type FrameState = {
   scroll: ScrollState
   term: Terminal
   forceLayerRepaint: boolean
+}
+
+/**
+ * All dependencies injected by the coordinator into compositeFrame.
+ * The coordinator owns all mutable state; compositeFrame reads and writes
+ * back via this bag.
+ */
+export type CompositeFrameState = {
+  // Tree root
+  root: TGENode
+
+  // Viewport dimensions (pixels)
+  viewportWidth: number
+  viewportHeight: number
+
+  // Terminal (for beginSync/endSync, cell size)
+  term: Terminal
+
+  // Layout adapter (Flexily-backed)
+  layoutAdapter: ReturnType<typeof createVexartLayoutCtx>
+
+  // Accumulated scroll deltas (reset to 0 after consumption)
+  scroll: { x: number; y: number }
+
+  // Mutable pointer state
+  pointer: {
+    x: number
+    y: number
+    down: boolean
+    dirty: boolean
+    pendingPress: boolean
+    pendingRelease: boolean
+    capturedNodeId: number
+    pressOriginSet: boolean
+    prevActiveNode: TGENode | null
+  }
+
+  // Post-scroll hooks (fire after scroll state updates, before walkTree)
+  postScrollCallbacks: (() => void)[]
+
+  // Walk counters — read at start, written back at end
+  walkCounters: WalkCounters
+
+  // Accumulator arrays — cleared before each walk
+  rectNodes: TGENode[]
+  textNodes: TGENode[]
+  boxNodes: TGENode[]
+  rectNodeById: Map<number, TGENode>
+  nodeRefById: Map<number, TGENode>
+  layerBoundaries: LayerBoundary[]
+  scrollContainers: TGENode[]
+  nodeCountValue: { value: number }
+
+  // Layer cache + dirty rects
+  layerCache: Map<string, Layer>
+  activeSlotKeys: Set<string>
+  frameDirtyRects: DamageRect[]
+  pendingNodeDamageRects: Array<{ nodeId: number; rect: DamageRect }>
+  /** HP-6: Scroll offsets per container ID — used for lazy hit-testing. */
+  scrollOffsets: Map<number, { x: number; y: number }>
+
+  // Layer store methods (coordinator owns the store)
+  layerStore: LayerStoreHandle
+
+  // Dirty tracking
+  dirty: DirtyTrackingHandle
+
+  // Renderer backend
+  backendOverride?: RendererBackend
+
+  // Frame config flags
+  useLayerCompositing: boolean
+  forceLayerRepaint: boolean
+  expFrameBudgetMs: number
+  transmissionMode: "direct" | "shm"
+
+  // Debug flags
+  debugCadence: boolean
+  debugDragRepro: boolean
+
+  // Interaction latency tracking (coordinator-owned scalars)
+  interaction: InteractionLatencyTracking
+
+  // Frame timing (mutable — updated at start of each frame for dt calculation)
+  lastFrameTime: { value: number }
+
+  debug?: unknown
+
+  // Transform flag from pipeline-traverse
+  hasAnyTransforms?: boolean
+
+  // Cached layout/layer artifacts for layout-clean frame reuse
+  lastLayerBuckets?: LayerOpBucket[]
+  lastCommands?: RenderCommand[]
+  lastBoundaries?: LayerBoundary[]
+  lastBgSlot?: LayerSlot
+  lastContentSlots?: LayerSlot[]
+  lastSlotBoundaryByKey?: Map<string, LayerBoundary>
 }
 
 // ── Module outputs ──

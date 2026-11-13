@@ -1,6 +1,6 @@
 // native/libvexart/src/composite/pool.rs
 // Texture pooling for offscreen targets and intermediate effect surfaces.
-// Item 3 of Phase 3 from ARCHITECTURE-AUDIT.md.
+// Phase 3 texture pooling for targets and intermediate effect surfaces.
 
 use std::collections::HashMap;
 

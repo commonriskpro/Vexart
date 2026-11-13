@@ -3,8 +3,10 @@ import { createRenderLoop } from "./loop"
 import { getRendererBackend, setRendererBackend, type RendererBackend } from "../ffi/renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
 import { createDirtyTracker, isDirty, markDirty, DIRTY_KIND } from "../reconciler/dirty"
-import { focusedId, getNodeFocusId, pushFocusScope, registerNodeFocusable, resetFocus, setFocusedId } from "../reconciler/focus"
+import { focusedId, getNodeFocusId, pushFocusScope, registerNodeFocusable, resetFocus, setFocusedId, setFocus, useFocus } from "../reconciler/focus"
 import { getSelection, clearSelection, setSelection } from "../reconciler/selection"
+import { onInput } from "./input"
+import { useEngineContext, createEngineContext, type EngineContext } from "../context"
 import { createNode } from "../ffi/node"
 import { onCleanup } from "solid-js"
 import { mount } from "../mount"
@@ -281,12 +283,14 @@ describe("Step 2: Singleton Elimination & Instance Isolation", () => {
   test("[FLAW-05 & FLAW-04] mount() teardown runs dispose, focus reset, selection reset, and unbindLoop cleanly", () => {
     const term = mockTerminal(200, 100)
     let disposed = false
-
-    setSelection({ text: "selected text", sourceId: 1, start: 0, end: 5 })
-    expect(getSelection()?.text).toBe("selected text")
+    let mountCtx: EngineContext | null = null
 
     const handle = mount(
       () => {
+        mountCtx = useEngineContext()
+        setSelection({ text: "selected text", sourceId: 1, start: 0, end: 5 })
+        useFocus({ id: "mount-focus-id" })
+        setFocus("mount-focus-id")
         onCleanup(() => { disposed = true })
         return null
       },
@@ -294,10 +298,141 @@ describe("Step 2: Singleton Elimination & Instance Isolation", () => {
     )
 
     expect(disposed).toBe(false)
+    expect(mountCtx).not.toBeNull()
+    expect(mountCtx!.selection.getSelection()?.text).toBe("selected text")
+    expect(mountCtx!.focus.focusedId()).toBe("mount-focus-id")
 
     handle.destroy()
     expect(disposed).toBe(true)
-    expect(getSelection()).toBeNull()
-    expect(focusedId()).toBeNull()
+    expect(mountCtx!.selection.getSelection()).toBeNull()
+    expect(mountCtx!.focus.focusedId()).toBeNull()
+  })
+
+  test("two concurrent createEngineContext instances maintain focus, selection, and input 100% isolated, and destroying one preserves the other", () => {
+    const term1 = mockTerminal(200, 100)
+    const term2 = mockTerminal(300, 150)
+    const loop1 = createRenderLoop(term1 as any)
+    const loop2 = createRenderLoop(term2 as any)
+    loops.push(loop1, loop2)
+
+    const ctx1 = createEngineContext({ root: loop1.root, loop: loop1 })
+    const ctx2 = createEngineContext({ root: loop2.root, loop: loop2 })
+
+    // 1. Focus isolation
+    const node1 = createNode("box")
+    node1.props.focusable = true
+    node1.props.focusId = "ctx1-btn"
+    ctx1.focus.registerNodeFocusable(node1)
+    ctx1.focus.setFocus("ctx1-btn")
+
+    const node2 = createNode("box")
+    node2.props.focusable = true
+    node2.props.focusId = "ctx2-btn"
+    ctx2.focus.registerNodeFocusable(node2)
+    ctx2.focus.setFocus("ctx2-btn")
+
+    expect(ctx1.focus.focusedId()).toBe("ctx1-btn")
+    expect(ctx2.focus.focusedId()).toBe("ctx2-btn")
+
+    // 2. Selection isolation
+    ctx1.selection.setSelection({ text: "sel-ctx-1", sourceId: 1, start: 0, end: 5 })
+    ctx2.selection.setSelection({ text: "sel-ctx-2", sourceId: 2, start: 0, end: 5 })
+    expect(ctx1.selection.getSelectedText()).toBe("sel-ctx-1")
+    expect(ctx2.selection.getSelectedText()).toBe("sel-ctx-2")
+
+    // 3. Input subscriber isolation
+    let input1Received = 0
+    let input2Received = 0
+    ctx1.input.onInput(() => { input1Received++ })
+    ctx2.input.onInput(() => { input2Received++ })
+
+    ctx1.input.dispatchInput({ type: "key", key: "a", char: "a", mods: { shift: false, alt: false, ctrl: false, meta: false } })
+    expect(input1Received).toBe(1)
+    expect(input2Received).toBe(0)
+
+    ctx2.input.dispatchInput({ type: "key", key: "b", char: "b", mods: { shift: false, alt: false, ctrl: false, meta: false } })
+    expect(input1Received).toBe(1)
+    expect(input2Received).toBe(1)
+
+    // 4. Destroy isolation: destroying ctx1 leaves ctx2 untouched
+    ctx1.destroy()
+    expect(ctx1.focus.focusedId()).toBeNull()
+    expect(ctx1.selection.getSelection()).toBeNull()
+
+    // ctx2 remains intact
+    expect(ctx2.focus.focusedId()).toBe("ctx2-btn")
+    expect(ctx2.selection.getSelectedText()).toBe("sel-ctx-2")
+    ctx2.input.dispatchInput({ type: "key", key: "c", char: "c", mods: { shift: false, alt: false, ctrl: false, meta: false } })
+    expect(input2Received).toBe(2)
+
+    ctx2.destroy()
+    expect(ctx2.focus.focusedId()).toBeNull()
+    expect(ctx2.selection.getSelection()).toBeNull()
+  })
+
+  test("two concurrent mount() instances maintain focus, selection, and input 100% isolated, and destroying one preserves the other", () => {
+    const term1 = mockTerminal(200, 100)
+    const term2 = mockTerminal(200, 100)
+
+    let ctx1: EngineContext | null = null
+    let ctx2: EngineContext | null = null
+    let app1InputCount = 0
+    let app2InputCount = 0
+
+    const handle1 = mount(() => {
+      ctx1 = useEngineContext()
+      useFocus({ id: "app1-focus" })
+      setFocus("app1-focus")
+      setSelection({ text: "app1-text", sourceId: 10, start: 0, end: 9 })
+      onInput(() => { app1InputCount++ })
+      return null
+    }, term1 as any)
+
+    const handle2 = mount(() => {
+      ctx2 = useEngineContext()
+      useFocus({ id: "app2-focus" })
+      setFocus("app2-focus")
+      setSelection({ text: "app2-text", sourceId: 20, start: 0, end: 9 })
+      onInput(() => { app2InputCount++ })
+      return null
+    }, term2 as any)
+
+    expect(ctx1).not.toBeNull()
+    expect(ctx2).not.toBeNull()
+    expect(ctx1).not.toBe(ctx2)
+
+    // Verify focus & selection isolation
+    expect(ctx1!.focus.focusedId()).toBe("app1-focus")
+    expect(ctx2!.focus.focusedId()).toBe("app2-focus")
+    expect(ctx1!.selection.getSelectedText()).toBe("app1-text")
+    expect(ctx2!.selection.getSelectedText()).toBe("app2-text")
+
+    // Terminal data input isolation
+    term1.emitData(new TextEncoder().encode("hello"))
+    expect(app1InputCount).toBeGreaterThan(0)
+    expect(app2InputCount).toBe(0)
+
+    const count1After = app1InputCount
+    term2.emitData(new TextEncoder().encode("world"))
+    expect(app1InputCount).toBe(count1After)
+    expect(app2InputCount).toBeGreaterThan(0)
+
+    // Destroy handle1
+    handle1.destroy()
+    expect(ctx1!.focus.focusedId()).toBeNull()
+    expect(ctx1!.selection.getSelection()).toBeNull()
+
+    // handle2 remains completely functional with its focus, selection, and input intact
+    expect(handle2.suspended()).toBe(false)
+    expect(ctx2!.focus.focusedId()).toBe("app2-focus")
+    expect(ctx2!.selection.getSelectedText()).toBe("app2-text")
+
+    const count2Before = app2InputCount
+    term2.emitData(new TextEncoder().encode("more"))
+    expect(app2InputCount).toBeGreaterThan(count2Before)
+
+    handle2.destroy()
+    expect(ctx2!.focus.focusedId()).toBeNull()
+    expect(ctx2!.selection.getSelection()).toBeNull()
   })
 })

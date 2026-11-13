@@ -4,7 +4,6 @@
 
 ```ts
 
-import { Accessor } from 'solid-js';
 import { createComponent } from 'solid-js';
 import { createContext } from 'solid-js';
 import { createEffect } from 'solid-js';
@@ -280,7 +279,7 @@ export type FilterConfig = {
 };
 
 // @public (undocumented)
-export const focusedId: Accessor<string | null>;
+export function focusedId(): string | null;
 
 // @public (undocumented)
 type FocusEvent_2 = {
@@ -863,7 +862,7 @@ export type ScrollHandle = {
 };
 
 // @public (undocumented)
-export const selectionSignal: Accessor<TextSelection | null>;
+export const selectionSignal: () => TextSelection | null;
 
 // @public (undocumented)
 export function setDebug(enabled: boolean): void;
@@ -1272,7 +1271,7 @@ export type ViewportConfig = {
 
 // Warnings were encountered during analysis:
 //
-// <repo>/.api-extractor-temp/packages/engine/src/loop/animation.d.ts:58:9 - (ae-forgotten-export) The symbol "CompositorProperty" needs to be exported by the entry point index.d.ts
+// <repo>/.api-extractor-temp/packages/engine/src/loop/animation.d.ts:60:9 - (ae-forgotten-export) The symbol "CompositorProperty" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

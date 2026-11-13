@@ -463,3 +463,95 @@ fn test_ring_buffer_persistent_mapping_realloc() {
     ring.cleanup_all();
     assert!(ring.is_drained());
 }
+
+#[test]
+fn test_reap_orphaned_shm_segments() {
+    let _lock = TEST_MUTEX.lock().unwrap();
+
+    let orphan_pid = 9_999_999u32;
+    let orphan_name = format!("/vx-{orphan_pid:x}-1");
+    let orphan_cname = CString::new(orphan_name.clone()).unwrap();
+
+    let orphan_fd = shm_open(
+        orphan_cname.as_c_str(),
+        OFlag::O_CREAT | OFlag::O_RDWR,
+        Mode::from_bits_truncate(0o600),
+    )
+    .expect("shm_open orphan segment");
+    drop(orphan_fd);
+
+    let my_pid = std::process::id();
+    let my_name = format!("/vx-{my_pid:x}-1");
+    let my_cname = CString::new(my_name.clone()).unwrap();
+
+    let my_fd = shm_open(
+        my_cname.as_c_str(),
+        OFlag::O_CREAT | OFlag::O_RDWR,
+        Mode::from_bits_truncate(0o600),
+    )
+    .expect("shm_open current process segment");
+    drop(my_fd);
+
+    let temp_dir_opt = if !std::path::Path::new("/dev/shm").exists() {
+        let temp_dir = std::env::temp_dir().join(format!("vexart_test_reaper_{}", my_pid));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let orphan_file = temp_dir.join(format!("vx-{orphan_pid:x}-1"));
+        let my_file = temp_dir.join(format!("vx-{my_pid:x}-1"));
+        std::fs::write(&orphan_file, b"").unwrap();
+        std::fs::write(&my_file, b"").unwrap();
+        std::env::set_var("VEXART_SHM_DIR", &temp_dir);
+        Some((temp_dir, orphan_file, my_file))
+    } else {
+        None
+    };
+
+    reap_orphaned_shm_segments();
+
+    if let Some((temp_dir, orphan_file, my_file)) = temp_dir_opt {
+        std::env::remove_var("VEXART_SHM_DIR");
+        assert!(!orphan_file.exists(), "Orphan file in directory should be unlinked");
+        assert!(my_file.exists(), "Current process file in directory should be preserved");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    // Verify orphan segment was unlinked from SHM
+    let probe_orphan = shm_open(orphan_cname.as_c_str(), OFlag::O_RDONLY, Mode::empty());
+    assert!(
+        matches!(probe_orphan, Err(nix::errno::Errno::ENOENT)),
+        "Orphaned SHM segment should have been unlinked"
+    );
+
+    // Verify current process segment was NOT unlinked
+    let probe_my = shm_open(my_cname.as_c_str(), OFlag::O_RDONLY, Mode::empty());
+    assert!(
+        probe_my.is_ok(),
+        "Current process SHM segment must NOT be unlinked"
+    );
+
+    // Clean up current process segment
+    let _ = shm_unlink(my_cname.as_c_str());
+}
+
+#[test]
+fn test_reap_orphaned_shm_preserves_live_external_pid() {
+    let temp_dir = std::env::temp_dir().join(format!("vexart_test_reaper_live_{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    // PID 1 is always alive on POSIX systems (launchd on macOS, init/systemd on Linux)
+    let live_file = temp_dir.join("vx-1-1");
+    std::fs::write(&live_file, b"live").unwrap();
+
+    let invalid_format_file = temp_dir.join("vx-nothex-1");
+    std::fs::write(&invalid_format_file, b"invalid").unwrap();
+
+    let non_vx_file = temp_dir.join("unrelated.txt");
+    std::fs::write(&non_vx_file, b"unrelated").unwrap();
+
+    reap_orphaned_shm_segments_in_dir(&temp_dir);
+
+    assert!(live_file.exists(), "Segment from live PID 1 must NOT be reaped");
+    assert!(invalid_format_file.exists(), "Invalid format file must NOT be reaped");
+    assert!(non_vx_file.exists(), "Unrelated file must NOT be reaped");
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}

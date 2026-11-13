@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { deregisterAllDescriptors, allDescriptors, resetFrameTracking, unmarkLayerBacked } from "../animation/compositor-path"
 import { createNode, insertChild } from "../ffi/node"
-import { setNativeResourceBudget, getNativeResourceStats } from "../ffi/resource-stats"
+import { setNativeResourceBudget, getNativeResourceStats } from "./resource-stats"
 import { getVexartFfiCallCount, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
 import { createRenderLoop } from "./loop"
 import { markDirty } from "../reconciler/dirty"

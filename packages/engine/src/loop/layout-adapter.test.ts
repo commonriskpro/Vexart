@@ -4,7 +4,7 @@ import { createNode, createTextNode, insertChild, parseSizing, type TGENode, typ
 import { CMD, type BorderRenderOp, type RenderGraphOp } from "../ffi/render-graph"
 import { syncAllLayoutProps, syncLayoutProp } from "../ffi/flex-sync"
 import { ATTACH_POINT, createVexartLayoutCtx } from "./layout-adapter"
-import { walkTree, type WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 import { hashString, traverseFrame } from "./pipeline-traverse"
 
 function box(props: TGEProps, children: TGENode[] = []) {
@@ -38,16 +38,7 @@ function layoutState(root: TGENode) {
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   root._flexNode?.calculateLayout(300, 200)
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   const result = traverseFrame(root, state, 300, 200)
   layout.destroy()
@@ -143,7 +134,7 @@ describe("layout adapter stacking contexts", () => {
     expect(fixed.layout).toMatchObject({ x: 0, y: 20, width: 50, height: 30 })
   })
 
-  test("walkTree applies margin props", () => {
+  test("applies margin props in layout traversal", () => {
     const first = box({ width: 100, height: 50 })
     const second = box({ width: 100, height: 50, marginTop: 20 })
     const root = box({ width: 300, height: 200, direction: "column" }, [first, second])

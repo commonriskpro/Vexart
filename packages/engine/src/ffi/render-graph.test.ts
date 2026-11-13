@@ -11,7 +11,7 @@ import {
 } from "./render-graph"
 import { createNode, createTextNode, insertChild, ensureImageExtra, type TGENode } from "./node"
 import { traverseFrame } from "../loop/pipeline-traverse"
-import type { WalkTreeState } from "../loop/walk-tree"
+import type { WalkTreeState } from "../loop/types"
 
 function mockFlex(node: TGENode, left = 0, top = 0, width = 100, height = 50) {
   node._flexNode = {

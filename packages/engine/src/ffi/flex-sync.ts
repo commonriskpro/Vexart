@@ -24,6 +24,7 @@ import {
   getGridSyncDiagnostics,
   recordGridDiagnostics,
   refreshParentGridValidation,
+  setGridTextIntrinsicHook,
   syncGridItem,
   syncGridItemSizing,
   syncGridLayout,
@@ -32,9 +33,13 @@ import {
 import {
   createTextFlexNode,
   isTextLayoutProp,
+  setGridItemHook,
   syncGridTextIntrinsic,
   syncGridTextSizing,
 } from "./flex-sync-text"
+
+setGridTextIntrinsicHook(syncGridTextIntrinsic)
+setGridItemHook(syncGridItem)
 
 export { LAYOUT_PROPS, isLayoutProp } from "./flex-sync-style"
 export { type GridSyncDiagnostic, getGridSyncDiagnostics } from "./flex-sync-grid"

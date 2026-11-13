@@ -47,6 +47,7 @@ export function VoidList(props: VoidListProps) {
         focusId={props.focusId}
         renderItem={(item: string, ctx: ListItemContext) => (
           <box
+            width="100%"
             {...ctx.itemProps}
             paddingX={space[3]}
             paddingY={space[2]}

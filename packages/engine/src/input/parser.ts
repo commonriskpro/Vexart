@@ -67,24 +67,43 @@ export function findKittyResponseEnd(
 }
 
 /**
- * Return whether a CSI/SS3 sequence is a known sequence that may still be
- * completed by a later stdin chunk. Keeping this check narrow is important:
- * an invalid escape sequence should not cause following ordinary input to be
- * buffered indefinitely.
+ * Return whether an escape sequence (CSI, SS3, OSC, DCS, PM, APC) is incomplete
+ * and may still be completed by a later stdin chunk.
  */
-function isIncompleteEscape(data: string): boolean {
+export function isIncompleteEscape(data: string): boolean {
   if (data.startsWith("\x1bO")) return data.length < 3
 
-  if (!data.startsWith("\x1b[")) return false
+  // CSI sequence: starts with ESC[ and has only parameter/intermediate bytes (0x20-0x3f)
+  if (data.startsWith("\x1b[")) {
+    return /^\x1b\[[\x20-\x3f]*$/.test(data) && data.length < 128
+  }
 
-  // SGR mouse: ESC[<button;x;yM/m. parseMouse handles complete sequences;
-  // retain valid-looking prefixes until the final byte arrives.
-  if (/^\x1b\[<\d*(?:;\d*){0,2}$/.test(data)) return true
+  // OSC sequence: starts with ESC] and has not yet received BEL (\x07) or ST (\x1b\)
+  if (data.startsWith("\x1b]")) {
+    return !/[\x07]|\x1b\\/.test(data.slice(2)) && data.length < 512
+  }
 
-  // Keyboard/focus/Kitty CSI sequences use numeric parameters (possibly a
-  // modifier separator). A final byte makes the sequence complete, so this
-  // only matches the parameter portion of a CSI sequence.
-  return /^\x1b\[\d*(?:;\d*){0,2}$/.test(data)
+  // DCS / PM / APC sequence: starts with ESC P, ESC ^, or ESC _
+  if (/^\x1b[P\^_]/.test(data)) {
+    return !/[\x07]|\x1b\\/.test(data.slice(2)) && data.length < 512
+  }
+
+  return false
+}
+
+export function unknownCsiSequenceLength(data: string): number {
+  const match = data.match(/^\x1b\[[\x20-\x3f]*[\x40-\x7e]/)
+  return match ? match[0].length : 0
+}
+
+export function unknownOscSequenceLength(data: string): number {
+  const match = data.match(/^\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/)
+  return match ? match[0].length : 0
+}
+
+export function unknownDcsOrApcSequenceLength(data: string): number {
+  const match = data.match(/^\x1b[P\^_][^\x07\x1b]*(?:\x07|\x1b\\)/)
+  return match ? match[0].length : 0
 }
 
 function malformedModifyOtherKeysLength(data: string): number {
@@ -227,6 +246,12 @@ export function createParser(
       }
 
       if (buffer.startsWith("\x1b_") && buffer[2] !== "G") {
+        const dcsApcLength = unknownDcsOrApcSequenceLength(buffer)
+        if (dcsApcLength > 0) {
+          buffer = buffer.slice(dcsApcLength)
+          continue
+        }
+
         const keyResult = parseAltUnderscore(buffer)
         if (keyResult) {
           handler(keyResult[0])
@@ -268,11 +293,19 @@ export function createParser(
       if (escapeTimer) { clearTimeout(escapeTimer); escapeTimer = null }
 
       if (buffer[0] === "\x1b" && buffer.length >= 2) {
-        // Have at least 2 bytes starting with escape — try parsing
-        const keyResult = parseKey(buffer)
-        if (keyResult) {
-          handler(keyResult[0])
-          buffer = buffer.slice(keyResult[1])
+        // Complete OSC responses (e.g. \x1b]11;rgb:...BEL/ST) must be consumed
+        // before parseKey can misinterpret \x1b] as Alt+]
+        const oscLength = unknownOscSequenceLength(buffer)
+        if (oscLength > 0) {
+          buffer = buffer.slice(oscLength)
+          continue
+        }
+
+        // Complete DCS / PM / APC responses must be consumed before parseKey can
+        // misinterpret \x1bP as Alt+P
+        const dcsLength = unknownDcsOrApcSequenceLength(buffer)
+        if (dcsLength > 0) {
+          buffer = buffer.slice(dcsLength)
           continue
         }
 
@@ -282,12 +315,26 @@ export function createParser(
           return
         }
 
+        // Have at least 2 bytes starting with escape — try parsing
+        const keyResult = parseKey(buffer)
+        if (keyResult) {
+          handler(keyResult[0])
+          buffer = buffer.slice(keyResult[1])
+          continue
+        }
+
         // parseKey rejects out-of-range modifyOtherKeys codepoints. Consume
         // the complete malformed sequence so its payload is not reinterpreted
         // as a series of ordinary keys, while retaining following input.
         const malformedLength = malformedModifyOtherKeysLength(buffer)
         if (malformedLength > 0) {
           buffer = buffer.slice(malformedLength)
+          continue
+        }
+
+        const csiLength = unknownCsiSequenceLength(buffer)
+        if (csiLength > 0) {
+          buffer = buffer.slice(csiLength)
           continue
         }
 

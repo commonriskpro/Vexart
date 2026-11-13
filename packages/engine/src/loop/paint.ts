@@ -23,7 +23,7 @@ import {
   type RendererBackendFrameContext,
   type RendererBackendLayerContext,
 } from "../ffi/renderer-backend"
-import { summarizeRendererResourceStats } from "../ffi/resource-stats"
+import { summarizeRendererResourceStats } from "./resource-stats"
 import { getLatestInteractionTrace } from "./input"
 import { debugUpdateStats, isDebugEnabled } from "./debug"
 import type { LayerSlot, LayerPlan, PaintResult, InteractionLatencyTracking } from "./types"

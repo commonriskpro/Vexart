@@ -3,7 +3,7 @@ import { createNode, createTextNode, insertChild, parseSizing } from "./node"
 import { syncAllLayoutProps } from "./flex-sync"
 import { traverseFrame } from "../loop/pipeline-traverse"
 import { createVexartLayoutCtx } from "../loop/layout-adapter"
-import { walkTree, type WalkTreeState } from "../loop/walk-tree"
+import type { WalkTreeState } from "../loop/types"
 import type { TGENode, TGEProps } from "./node"
 
 function box(props: TGEProps, children: TGENode[] = []) {
@@ -36,17 +36,8 @@ function frame(root: TGENode, width = 200, height = 100) {
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   const calcResult = root._flexNode?.calculateLayout(width, height)
   const isError = Boolean(calcResult && typeof calcResult === "object" && "error" in calcResult && (calcResult as any).error)
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   if (isError) {
     return {

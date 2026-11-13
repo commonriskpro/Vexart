@@ -3,7 +3,7 @@ import { createNode, parseSizing, resetFocus, solidRender, type TGENode } from "
 import { VoidDropdownMenu } from "@vexart/styled"
 import { syncAllLayoutProps } from "../../packages/engine/src/ffi/flex-sync"
 import { createVexartLayoutCtx } from "../../packages/engine/src/loop/layout-adapter"
-import { walkTree, type WalkTreeState } from "../../packages/engine/src/loop/walk-tree"
+import type { WalkTreeState } from "../../packages/engine/src/loop/types"
 import { traverseFrame } from "../../packages/engine/src/loop/pipeline-traverse"
 
 const browserRuntime = import.meta.resolve("solid-js").endsWith("/solid.js")
@@ -67,17 +67,7 @@ suite("styled DropdownMenu floating layout", () => {
         rectNodeById: new Map(),
         layout,
       }
-      walkTree(root, state)
-      layout.calculateRoots(root._flexNode)
-
-      state.rectNodes.length = 0
-      state.textNodes.length = 0
-      state.boxNodes.length = 0
-      state.nodeRefById.clear()
-      state.rectNodeById.clear()
-      state.scrollContainers.length = 0
-      state.layerBoundaries.length = 0
-
+      root._flexNode?.calculateLayout(320, 200)
       traverseFrame(root, state, 320, 200)
 
       const trigger = findNode(root, (node) => node.props.debugName === "dropdown-trigger")

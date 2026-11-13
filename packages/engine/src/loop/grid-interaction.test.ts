@@ -7,7 +7,7 @@ import { buildNodeMouseEvent, isFullyOutsideScrollViewport, setActiveScrollOffse
 import { damageRectForLayoutTransition, traverseFrame } from "./pipeline-traverse"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import { updateInteractiveStates, type InteractiveStatesBag } from "./layout"
-import { walkTree, type WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 
 function box(props: TGEProps, children: TGENode[] = []): TGENode {
   const node = createNode("box")
@@ -40,16 +40,7 @@ function frame(root: TGENode, width: number, height: number) {
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   root._flexNode?.calculateLayout(width, height)
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   const prevLayouts = new Map<number, { x: number; y: number; width: number; height: number }>()
   const collect = (n: TGENode) => {

@@ -181,6 +181,7 @@ export function VirtualList<T>(props: VirtualListProps<T>) {
       backgroundColor={0x00000001}
       scrollY
       scrollId={scrollId}
+      direction="column"
       onMouseMove={(e) => {
         const idx = indexFromLocalY(e.nodeY, e.height)
         if (idx !== hoveredIndex()) {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createNode, createTextNode, insertChild, parseSizing, type TGENode, type TGEProps } from "../ffi/node"
 import { syncAllLayoutProps } from "../ffi/flex-sync"
 import { createVexartLayoutCtx } from "./layout-adapter"
-import { walkTree, type WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 import { traverseFrame } from "./pipeline-traverse"
 
 function box(props: TGEProps, children: TGENode[] = []): TGENode {
@@ -33,16 +33,7 @@ function walkFrame(root: TGENode, layout: ReturnType<typeof createVexartLayoutCt
     rectNodeById: new Map(),
     layout,
   }
-  walkTree(root, state)
   root._flexNode?.calculateLayout(width, height)
-
-  state.rectNodes.length = 0
-  state.textNodes.length = 0
-  state.boxNodes.length = 0
-  state.nodeRefById.clear()
-  state.rectNodeById.clear()
-  state.scrollContainers.length = 0
-  state.layerBoundaries.length = 0
 
   return traverseFrame(root, state, width, height)
 }

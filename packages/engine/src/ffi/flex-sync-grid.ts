@@ -23,7 +23,12 @@ import {
   syncScroll,
   syncSizing,
 } from "./flex-sync-style"
-import { syncGridTextIntrinsic } from "./flex-sync-text"
+
+let syncGridTextIntrinsicHook: ((node: TGENode) => void) | null = null
+
+export function setGridTextIntrinsicHook(hook: ((node: TGENode) => void) | null): void {
+  syncGridTextIntrinsicHook = hook
+}
 
 export const GRID_STYLE_PROPS = new Set([
   "layout", "gap", "justifyContent", "alignContent", "justifyItems", "alignItems",
@@ -288,7 +293,7 @@ export function syncGridLayout(node: TGENode): void {
   for (const child of node.children) {
     if (child._flexNode) {
       syncGridItem(child)
-      if (child.kind === "text") syncGridTextIntrinsic(child)
+      if (child.kind === "text") syncGridTextIntrinsicHook?.(child)
       else syncGridItemSizing(child)
       gridSyncDiagnostics.set(child, gridDiagnostics(child))
     }

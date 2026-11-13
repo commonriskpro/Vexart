@@ -1,4 +1,3 @@
-import { Accessor } from 'solid-js';
 import { createComponent } from 'solid-js';
 import { createContext } from 'solid-js';
 import { createEffect } from 'solid-js';
@@ -155,7 +154,6 @@ export declare type CircleCmd = {
     strokeWidth: number;
 };
 
-/** @public */
 /** @public Clear active focus. */
 export declare function clearFocus(): void;
 
@@ -406,7 +404,7 @@ export declare type FilterConfig = {
 };
 
 /** @public */
-export declare const focusedId: Accessor<string | null>;
+export declare function focusedId(): string | null;
 
 /** @public */
 declare type FocusEvent_2 = {
@@ -1086,7 +1084,7 @@ export declare type ScrollHandle = {
 };
 
 /** @public */
-export declare const selectionSignal: Accessor<TextSelection | null>;
+export declare const selectionSignal: () => TextSelection | null;
 
 /** Set debug overlay state explicitly. */
 /** @public */

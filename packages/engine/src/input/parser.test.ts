@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createParser, findKittyResponseEnd } from "./parser"
+import {
+  createParser,
+  findKittyResponseEnd,
+  unknownCsiSequenceLength,
+  unknownOscSequenceLength,
+  unknownDcsOrApcSequenceLength,
+  isIncompleteEscape,
+} from "./parser"
 import type { InputEvent, KeyEvent, MouseEvent, PasteEvent, FocusEvent } from "./types"
 
 function collect(data: string): InputEvent[] {
@@ -464,5 +471,122 @@ describe("findKittyResponseEnd", () => {
   test("respects fromIndex", () => {
     expect(findKittyResponseEnd("\x07\x1b_Gi=31;OK\x07", 2)).toEqual({ index: 11, length: 1 })
     expect(findKittyResponseEnd("\x1b\\\x1b_Gi=31;OK\x1b\\", 2)).toEqual({ index: 12, length: 2 })
+  })
+})
+
+describe("unknown escape sequence sanitization", () => {
+  test("consumes pixel size CSI responses without emitting keyboard events", () => {
+    expect(collect("\x1b[4;768;1024t")).toEqual([])
+    expect(collect("\x1b[6;16;8t")).toEqual([])
+    expect(collect("\x1b[16t")).toEqual([])
+  })
+
+  test("consumes pixel size responses followed by ordinary keys", () => {
+    const expected: KeyEvent[] = [{
+      type: "key",
+      key: "a",
+      char: "a",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }]
+    expect(collect("\x1b[4;768;1024ta")).toEqual(expected)
+    expect(collect("\x1b[6;16;8ta")).toEqual(expected)
+    expect(collect("\x1b[16ta")).toEqual(expected)
+  })
+
+  test("consumes pixel size responses at every split point", () => {
+    expectSameAtEverySplit("\x1b[4;768;1024t", [])
+    expectSameAtEverySplit("\x1b[6;16;8t", [])
+    expectSameAtEverySplit("\x1b[16t", [])
+    const expected: KeyEvent[] = [{
+      type: "key",
+      key: "z",
+      char: "z",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }]
+    expectSameAtEverySplit("\x1b[4;768;1024tz", expected)
+  })
+
+  test("consumes color OSC responses without emitting keyboard events", () => {
+    expect(collect("\x1b]11;rgb:0000/0000/0000\x07")).toEqual([])
+    expect(collect("\x1b]10;rgb:ffff/ffff/ffff\x1b\\")).toEqual([])
+  })
+
+  test("consumes color OSC responses at every split point", () => {
+    expectSameAtEverySplit("\x1b]11;rgb:0000/0000/0000\x07", [])
+    expectSameAtEverySplit("\x1b]10;rgb:ffff/ffff/ffff\x1b\\", [])
+    const expected: KeyEvent[] = [{
+      type: "key",
+      key: "k",
+      char: "k",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }]
+    expectSameAtEverySplit("\x1b]11;rgb:0000/0000/0000\x07k", expected)
+    expectSameAtEverySplit("\x1b]10;rgb:ffff/ffff/ffff\x1b\\k", expected)
+  })
+
+  test("consumes device attributes CSI responses", () => {
+    expect(collect("\x1b[?62;1;2c")).toEqual([])
+    expectSameAtEverySplit("\x1b[?62;1;2c", [])
+    const expected: KeyEvent[] = [{
+      type: "key",
+      key: "x",
+      char: "x",
+      mods: { shift: false, alt: false, ctrl: false, meta: false },
+    }]
+    expectSameAtEverySplit("\x1b[?62;1;2cx", expected)
+  })
+
+  test("consumes DCS, PM, and APC responses", () => {
+    expect(collect("\x1bP1$r0m\x1b\\")).toEqual([])
+    expect(collect("\x1b^pm_status\x07")).toEqual([])
+    expect(collect("\x1b_unknown\x07")).toEqual([])
+  })
+
+  test("preserves legitimate keys, modifiers, and arrows", () => {
+    const events = collect("\x1b[A\x1b[B\x1b[C\x1b[D\r\x1bOP\x1b[1;5A\x1ba")
+    expect(events).toEqual([
+      { type: "key", key: "up", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } },
+      { type: "key", key: "down", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } },
+      { type: "key", key: "right", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } },
+      { type: "key", key: "left", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } },
+      { type: "key", key: "enter", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } },
+      { type: "key", key: "f1", char: "", mods: { shift: false, alt: false, ctrl: false, meta: false } },
+      { type: "key", key: "up", char: "", mods: { shift: false, alt: false, ctrl: true, meta: false } },
+      { type: "key", key: "a", char: "a", mods: { shift: false, alt: true, ctrl: false, meta: false } },
+    ])
+  })
+})
+
+describe("escape sequence helper functions", () => {
+  test("unknownCsiSequenceLength matches ECMA-48 CSI sequences", () => {
+    expect(unknownCsiSequenceLength("\x1b[4;768;1024t")).toBe(13)
+    expect(unknownCsiSequenceLength("\x1b[6;16;8t")).toBe(9)
+    expect(unknownCsiSequenceLength("\x1b[16t")).toBe(5)
+    expect(unknownCsiSequenceLength("\x1b[?62;1;2c")).toBe(10)
+    expect(unknownCsiSequenceLength("\x1b[4;768")).toBe(0)
+    expect(unknownCsiSequenceLength("not an escape")).toBe(0)
+  })
+
+  test("unknownOscSequenceLength matches OSC sequences with BEL or ST", () => {
+    expect(unknownOscSequenceLength("\x1b]11;rgb:0000/0000/0000\x07")).toBe(24)
+    expect(unknownOscSequenceLength("\x1b]10;rgb:ffff/ffff/ffff\x1b\\")).toBe(25)
+    expect(unknownOscSequenceLength("\x1b]11;incomplete")).toBe(0)
+  })
+
+  test("unknownDcsOrApcSequenceLength matches DCS/PM/APC sequences", () => {
+    expect(unknownDcsOrApcSequenceLength("\x1bP1$r0m\x1b\\")).toBe(9)
+    expect(unknownDcsOrApcSequenceLength("\x1b^pm_status\x07")).toBe(12)
+    expect(unknownDcsOrApcSequenceLength("\x1b_unknown\x07")).toBe(10)
+  })
+
+  test("isIncompleteEscape detects prefixes in flight", () => {
+    expect(isIncompleteEscape("\x1b[")).toBe(true)
+    expect(isIncompleteEscape("\x1b[4;768")).toBe(true)
+    expect(isIncompleteEscape("\x1b[?62;1")).toBe(true)
+    expect(isIncompleteEscape("\x1b[4;768;1024t")).toBe(false)
+    expect(isIncompleteEscape("\x1b]11;rgb:0000")).toBe(true)
+    expect(isIncompleteEscape("\x1b]11;rgb:0000\x07")).toBe(false)
+    expect(isIncompleteEscape("\x1bO")).toBe(true)
+    expect(isIncompleteEscape("\x1bOP")).toBe(false)
   })
 })

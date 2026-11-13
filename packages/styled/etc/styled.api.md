@@ -806,6 +806,7 @@ export type VoidPopoverProps = {
     offset?: number;
     width?: SizingUnit;
     className?: string;
+    modal?: boolean;
 };
 
 // @public (undocumented)

@@ -13,16 +13,13 @@ export {
   INTERACTION_MODE,
   TGE_NODE_KIND,
   acquireFlexNode,
-  bumpThemeEpoch,
   clearFlexNodePool,
   createNode,
   createPressEvent,
   ensureCompositorExtra,
   ensureTransformExtra,
-  getClassNameResolver,
   getFlexNodePoolSize,
   getGridLayoutError,
-  getThemeEpoch,
   insertChild,
   parseAlignX,
   parseAlignY,
@@ -32,11 +29,9 @@ export {
   releaseFlexNode,
   removeChild,
   resolveProps,
-  setClassNameResolver,
   TGENodeImpl,
 } from "./ffi/node"
 export type {
-  ClassNameResolver,
   NodeCanvasExtra,
   NodeCompositorExtra,
   NodeImageExtra,
@@ -44,6 +39,18 @@ export type {
   TGENode,
   TGENodeKind,
 } from "./ffi/node"
+
+// ── Styling and theme context ────────────────────────────────────────────────
+
+export {
+  bumpThemeEpoch,
+  getClassNameResolver,
+  getThemeEpoch,
+  setClassNameResolver,
+} from "./styling/theme-context"
+export type {
+  ClassNameResolver,
+} from "./styling/theme-context"
 
 export {
   setRendererBackend,
@@ -89,8 +96,8 @@ export type {
   EffectRenderOp,
   RawCommandRenderOp,
 } from "./ffi/render-graph"
-export { getRendererResourceStats } from "./ffi/resource-stats"
-export type { ResourceStats } from "./ffi/resource-stats"
+export { getRendererResourceStats } from "./loop/resource-stats"
+export type { ResourceStats } from "./loop/resource-stats"
 export {
   identity,
   translate,
@@ -155,6 +162,7 @@ export { markLayerDirtyByKey, markLayerDamageByKey } from "./loop/composite"
 
 export { createHandle, getHandleNode } from "./reconciler/handle"
 export {
+  focusedId,
   setFocusedId,
   dispatchFocusInput,
   getFocusedEntry,
@@ -166,6 +174,27 @@ export {
   resetFocus,
 } from "./reconciler/focus"
 export type { FocusEntry } from "./reconciler/focus"
+
+export {
+  createEngineContext,
+  useEngineContext,
+  getActiveEngineContext,
+  setActiveEngineContext,
+  EngineSolidContext,
+  createFocusManager,
+  createSelectionManager,
+  createInputManager,
+  defaultFocusManager,
+  defaultSelectionManager,
+  defaultInputManager,
+} from "./context"
+export type {
+  EngineContext,
+  FocusManager,
+  SelectionManager,
+  InputManager,
+} from "./context"
+
 export { buildNodeMouseEvent, isFullyOutsideScrollViewport } from "./reconciler/hit-test"
 export {
   beginNodeInteraction,
@@ -197,7 +226,7 @@ export type { FrameProfile } from "./loop/types"
 export type { RenderLoop, RenderLoopOptions } from "./loop/loop"
 export { resetCompositorPathState } from "./animation/compositor-path"
 export type { CompositorProperty } from "./animation/compositor-path"
-export { resetActiveAnimations, hasActiveAnimations } from "./loop/animation"
+export { resetActiveAnimations, hasActiveAnimations, stepActiveAnimations, setLoopAnimationDriver } from "./loop/animation"
 export { debugFrameStart, debugUpdateStats, debugState, debugDumpCulledNodes, setDebug, isDebugEnabled } from "./loop/debug"
 export type { DebugStats } from "./loop/debug"
 

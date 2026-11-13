@@ -53,6 +53,62 @@ fn test_context_destroy_cleans_all_registries() {
 }
 
 #[test]
+fn test_context_reference_counting_prevents_premature_teardown() {
+    let _lock = lock_or_recover(&TEST_LOCK);
+    while CONTEXT_REF_COUNT.load(Ordering::SeqCst) > 0 {
+        let _ = vexart_context_destroy(1);
+    }
+    let _ = vexart_context_destroy(1);
+
+    let mut ctx1 = 0u64;
+    let mut ctx2 = 0u64;
+    let dummy = [0u8; 1];
+
+    let rc1 = unsafe { vexart_context_create(dummy.as_ptr(), 0, &mut ctx1) };
+    assert_eq!(rc1, OK);
+    assert_ne!(ctx1, 0);
+
+    let rc2 = unsafe { vexart_context_create(dummy.as_ptr(), 0, &mut ctx2) };
+    assert_eq!(rc2, OK);
+    assert_ne!(ctx2, 0);
+
+    // Verify SHARED_PAINT is initialized and ref count is 2
+    {
+        let paint_guard = lock_or_recover(&SHARED_PAINT);
+        assert!(paint_guard.is_some());
+    }
+    assert_eq!(CONTEXT_REF_COUNT.load(Ordering::SeqCst), 2);
+
+    // Destroy first context
+    let rc = vexart_context_destroy(ctx1);
+    assert_eq!(rc, OK);
+
+    // Verify SHARED_PAINT is still alive while ctx2 is active
+    {
+        let paint_guard = lock_or_recover(&SHARED_PAINT);
+        assert!(
+            paint_guard.is_some(),
+            "SHARED_PAINT must remain alive while ctx2 is active"
+        );
+    }
+    assert_eq!(CONTEXT_REF_COUNT.load(Ordering::SeqCst), 1);
+
+    // Destroy second context
+    let rc = vexart_context_destroy(ctx2);
+    assert_eq!(rc, OK);
+
+    // Verify SHARED_PAINT is now drained and ref count is 0
+    {
+        let paint_guard = lock_or_recover(&SHARED_PAINT);
+        assert!(
+            paint_guard.is_none(),
+            "SHARED_PAINT must be drained when all contexts are destroyed"
+        );
+    }
+    assert_eq!(CONTEXT_REF_COUNT.load(Ordering::SeqCst), 0);
+}
+
+#[test]
 fn test_target_scissor_invalid_args() {
     let _lock = lock_or_recover(&TEST_LOCK);
     assert_eq!(

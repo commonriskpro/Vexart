@@ -1,10 +1,15 @@
-/** Pointer capture runtime boundary. */
+/** Pointer capture runtime boundary with multi-instance support. */
 
 import type { RenderLoop } from "../loop/types"
 import type { DamageRect } from "../ffi/damage"
+import { useEngineContext } from "../context"
 
-// WARNING: Module-level singleton — prevents multi-loop usage.
+// Module-level fallback — prefers useEngineContext()?.loop.
 let activeLoop: RenderLoop | null = null
+
+function resolveLoop(): RenderLoop | null {
+  return useEngineContext()?.loop ?? activeLoop
+}
 
 /** @public */
 export function bindLoop(loop: RenderLoop) {
@@ -20,30 +25,30 @@ export function unbindLoop(loop?: RenderLoop) {
 
 /** @public */
 export function setPointerCapture(nodeId: number): void {
-  activeLoop?.setPointerCapture(nodeId)
+  resolveLoop()?.setPointerCapture(nodeId)
 }
 
 /** @public */
 export function releasePointerCapture(nodeId: number): void {
-  activeLoop?.releasePointerCapture(nodeId)
+  resolveLoop()?.releasePointerCapture(nodeId)
 }
 
 /** @public */
 export function getCapturedNodeId(): number {
-  return activeLoop?.getCapturedNodeId?.() ?? 0
+  return resolveLoop()?.getCapturedNodeId?.() ?? 0
 }
 
 /** @public */
 export function onPostScroll(cb: () => void): () => void {
-  return activeLoop?.onPostScroll(cb) ?? (() => {})
+  return resolveLoop()?.onPostScroll(cb) ?? (() => {})
 }
 
 /** @public */
 export function markNodeLayerDamaged(nodeId: number, rect?: DamageRect): void {
-  activeLoop?.markNodeLayerDamaged(nodeId, rect)
+  resolveLoop()?.markNodeLayerDamaged(nodeId, rect)
 }
 
 /** @public */
 export function requestInteractionFrame(kind: "pointer" | "scroll" | "key"): void {
-  activeLoop?.requestInteractionFrame(kind)
+  resolveLoop()?.requestInteractionFrame(kind)
 }

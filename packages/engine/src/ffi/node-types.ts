@@ -16,6 +16,21 @@ import type {
   GridTrack,
   GridTrackSize,
 } from "./grid-types"
+import {
+  getClassNameResolver,
+  setClassNameResolver,
+  bumpThemeEpoch,
+  getThemeEpoch,
+  type ClassNameResolver,
+} from "../styling/theme-context"
+
+export {
+  getClassNameResolver,
+  setClassNameResolver,
+  bumpThemeEpoch,
+  getThemeEpoch,
+  type ClassNameResolver,
+}
 
 // Numeric values preserved for backward compat; semantics map through
 // packages/engine/src/loop/layout-adapter.ts.
@@ -493,6 +508,8 @@ export type TGENode = {
   _layerKey: string | null
   /** Per-loop dirty tracker attached to root node. */
   _dirtyTracker?: import("../reconciler/dirty").DirtyTracker | null
+  /** Per-instance engine context attached to this node or inherited from root. */
+  _engineContext?: import("../context").EngineContext | null
 }
 
 /** Supported sizing keywords. @public */
@@ -516,25 +533,6 @@ export type LayoutRect = {
   y: number
   width: number
   height: number
-}
-
-/** @public */
-export type ClassNameResolver = (className: string) => Partial<TGEProps>
-
-let globalClassNameResolver: ClassNameResolver | null = null
-export function setClassNameResolver(resolver: ClassNameResolver | null) {
-  globalClassNameResolver = resolver
-}
-export function getClassNameResolver(): ClassNameResolver | null {
-  return globalClassNameResolver
-}
-
-let currentThemeEpoch = 0
-export function bumpThemeEpoch() {
-  currentThemeEpoch++
-}
-export function getThemeEpoch(): number {
-  return currentThemeEpoch
 }
 
 // ── Color parsing ──
@@ -609,13 +607,15 @@ export function parseColor(value: string | number | undefined): number {
 /** @public */
 export function resolveProps(node: TGENode): TGEProps {
   const base = node.props
+  const resolver = getClassNameResolver()
+  const themeEpoch = getThemeEpoch()
   const hasActiveInteractive =
     (node._hovered && base.hoverStyle !== undefined)
     || (node._focused && base.focusStyle !== undefined)
     || (node._active && base.activeStyle !== undefined)
   if (
     !base.defaultStyle
-    && (!base.className || !globalClassNameResolver)
+    && (!base.className || !resolver)
     && !base.style
     && !node._defaultLayoutKeys?.size
     && !node._classLayoutKeys?.size
@@ -630,10 +630,10 @@ export function resolveProps(node: TGENode): TGEProps {
   ) {
     return base
   }
-  if (node._vp && !node._vpDirty && node._vpEpoch === currentThemeEpoch) return node._vp
+  if (node._vp && !node._vpDirty && node._vpEpoch === themeEpoch) return node._vp
   const out: TGEProps = {} as TGEProps
-  const classProps = base.className && globalClassNameResolver
-    ? globalClassNameResolver(base.className)
+  const classProps = base.className && resolver
+    ? resolver(base.className)
     : undefined
   const classRecord = classProps as Record<string, unknown> | undefined
 
@@ -754,6 +754,6 @@ export function resolveProps(node: TGENode): TGEProps {
 
   node._vp = out
   node._vpDirty = false
-  node._vpEpoch = currentThemeEpoch
+  node._vpEpoch = themeEpoch
   return out
 }

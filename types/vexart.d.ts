@@ -338,7 +338,6 @@ export declare type ClassNameUnknownBehavior = (typeof CLASS_NAME_UNKNOWN_BEHAVI
  */
 export declare function clearClassNameCache(): void;
 
-/** @public */
 /** @public Clear active focus. */
 export declare function clearFocus(): void;
 
@@ -1099,7 +1098,7 @@ declare type FilterConfig = {
 };
 
 /** @public */
-export declare const focusedId: Accessor<string | null>;
+export declare function focusedId(): string | null;
 
 /** @public */
 declare type FocusEvent_2 = {
@@ -4182,6 +4181,7 @@ export declare type VoidPopoverProps = {
     offset?: number;
     width?: SizingUnit;
     className?: string;
+    modal?: boolean;
 };
 
 /** @public */

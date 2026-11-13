@@ -18,7 +18,7 @@ import {
   updateInteractiveStates as _updateInteractiveStates,
   type InteractiveStatesBag,
 } from "./layout"
-import type { CompositeFrameState } from "./composite"
+import type { CompositeFrameState } from "./types"
 
 let layerDirtyStore: Map<string, Layer> | null = null
 

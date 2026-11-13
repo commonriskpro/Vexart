@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js"
+import { useEngineContext } from "../context"
 
 /** @public */
 export type TextSelection = {
@@ -8,27 +9,59 @@ export type TextSelection = {
   end: number
 }
 
-const [selection, setSelectionSignal] = createSignal<TextSelection | null>(null)
+/** @public */
+export type SelectionManager = {
+  getSelection: () => TextSelection | null
+  getSelectedText: () => string
+  setSelection: (sel: TextSelection | null) => void
+  clearSelection: () => void
+  readonly selectionSignal: () => TextSelection | null
+  destroy: () => void
+}
+
+/**
+ * Factory to create an isolated SelectionManager.
+ * @public
+ */
+export function createSelectionManager(): SelectionManager {
+  const [selection, setSelectionSignal] = createSignal<TextSelection | null>(null)
+
+  return {
+    getSelection: () => selection(),
+    getSelectedText: () => selection()?.text ?? "",
+    setSelection: (sel: TextSelection | null) => setSelectionSignal(sel),
+    clearSelection: () => setSelectionSignal(null),
+    selectionSignal: selection,
+    destroy: () => setSelectionSignal(null),
+  }
+}
+
+/** Module-level default selection manager for backward compatibility and standalone tests. */
+export const defaultSelectionManager = createSelectionManager()
+
+function resolveSelectionManager(): SelectionManager {
+  return useEngineContext()?.selection ?? defaultSelectionManager
+}
 
 /** @public */
 export function getSelection(): TextSelection | null {
-  return selection()
+  return resolveSelectionManager().getSelection()
 }
 
 /** @public */
 export function getSelectedText(): string {
-  return selection()?.text ?? ""
+  return resolveSelectionManager().getSelectedText()
 }
 
 /** @public */
 export function setSelection(sel: TextSelection | null) {
-  setSelectionSignal(sel)
+  resolveSelectionManager().setSelection(sel)
 }
 
 /** @public */
 export function clearSelection() {
-  setSelectionSignal(null)
+  resolveSelectionManager().clearSelection()
 }
 
 /** @public */
-export const selectionSignal = selection
+export const selectionSignal = () => resolveSelectionManager().selectionSignal()

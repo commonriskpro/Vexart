@@ -18,11 +18,11 @@
  */
 
 import { describe, test, expect } from "bun:test"
-import { collectText, walkTree } from "./walk-tree"
+import { collectText } from "./text-util"
 import { createNode, createTextNode } from "../ffi/node"
 import { createVexartLayoutCtx } from "./layout-adapter"
 import { traverseFrame } from "./pipeline-traverse"
-import type { WalkTreeState } from "./walk-tree"
+import type { WalkTreeState } from "./types"
 
 // ── Inline culling decision (mirrors walk-tree.ts AABB logic exactly) ──
 
@@ -255,7 +255,7 @@ describe("raw text inside <box>", () => {
     }
 
     try {
-      walkTree(boxNode, state)
+      traverseFrame(boxNode, state, 300, 200)
       expect(warnings.length).toBe(0)
     } finally {
       console.warn = originalWarn
@@ -293,12 +293,12 @@ describe("raw text inside <box>", () => {
     }
 
     try {
-      walkTree(boxNode, state)
+      traverseFrame(boxNode, state, 300, 200)
       expect(warnings.length).toBe(0)
       expect(state.textNodes).toContain(textNode)
 
       state.nodeCount.value = 0
-      walkTree(boxNode, state)
+      traverseFrame(boxNode, state, 300, 200)
       expect(warnings.length).toBe(0)
     } finally {
       console.warn = originalWarn

@@ -17,12 +17,20 @@
  * always available as a single RGBA buffer from endFrame.
  */
 
+import { createComponent } from "solid-js"
 import { render as solidRender } from "../reconciler/reconciler"
 import type { TGENode } from "../ffi/node"
 import { insertChild, removeChild } from "../ffi/node"
 import { createRenderLoop } from "../loop/loop"
-import { markDirty } from "../reconciler/dirty"
-import { dispatchInput } from "../loop/input"
+import { createDirtyTracker, markDirty } from "../reconciler/dirty"
+import {
+  createEngineContext,
+  EngineSolidContext,
+  getActiveEngineContext,
+  setActiveEngineContext,
+  type EngineContext,
+} from "../context"
+import { createInputManager } from "../loop/input"
 import { setRendererBackend, getRendererBackend } from "../ffi/renderer-backend"
 import {
   createGpuRendererBackendForTerminal,
@@ -31,8 +39,6 @@ import {
   type GpuRendererBackend,
 } from "../ffi/gpu-renderer-backend"
 import { bindLoop, unbindLoop } from "../reconciler/pointer"
-import { resetFocus } from "../reconciler/focus"
-import { clearSelection } from "../reconciler/selection"
 import type { Terminal } from "../terminal/index"
 import type { RendererBackend, RendererBackendFrameContext, RendererBackendFrameResult } from "../ffi/renderer-backend"
 
@@ -177,7 +183,22 @@ export async function renderToBuffer(
   frames = 2,
   options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
-  return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root), undefined, options)
+  return captureToBuffer(
+    width,
+    height,
+    frames,
+    (loop, engineCtx) => solidRender(
+      () => createComponent(EngineSolidContext.Provider, {
+        value: engineCtx,
+        get children() {
+          return createComponent(component as any, {})
+        },
+      }) as any,
+      loop.root,
+    ),
+    undefined,
+    options,
+  )
 }
 
 export async function renderToBufferAfterInteractions(
@@ -188,31 +209,48 @@ export async function renderToBufferAfterInteractions(
   frames = 2,
   options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
-  return captureToBuffer(width, height, frames, (loop) => solidRender(component as () => TGENode, loop.root), async (loop) => {
-    const nextFrame = async () => {
-      loop.frame()
-      await new Promise<void>((resolve) => setTimeout(resolve, 0))
-    }
-    const helpers: RenderLoopInteractionHelpers = {
-      async clickAt(x, y) {
-        loop.feedPointer(x, y, true)
-        await nextFrame()
-        loop.feedPointer(x, y, false)
-        await nextFrame()
-      },
-      async pointerMove(x, y) {
-        loop.feedPointer(x, y, false)
-        await nextFrame()
-      },
-      async keyPress(key, char = "") {
-        dispatchInput({ type: "key", key, char, mods: { shift: false, alt: false, ctrl: false, meta: false } })
-        markDirty()
-        await nextFrame()
-      },
-      frame: nextFrame,
-    }
-    await interact(helpers)
-  }, options)
+  return captureToBuffer(
+    width,
+    height,
+    frames,
+    (loop, engineCtx) => solidRender(
+      () => createComponent(EngineSolidContext.Provider, {
+        value: engineCtx,
+        get children() {
+          return createComponent(component as any, {})
+        },
+      }) as any,
+      loop.root,
+    ),
+    async (loop, engineCtx) => {
+      const nextFrame = async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        markDirty(undefined, engineCtx.dirty)
+        loop.frame()
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      }
+      const helpers: RenderLoopInteractionHelpers = {
+        async clickAt(x, y) {
+          loop.feedPointer(x, y, true)
+          await nextFrame()
+          loop.feedPointer(x, y, false)
+          await nextFrame()
+        },
+        async pointerMove(x, y) {
+          loop.feedPointer(x, y, false)
+          await nextFrame()
+        },
+        async keyPress(key, char = "") {
+          engineCtx.input.dispatchInput({ type: "key", key, char, mods: { shift: false, alt: false, ctrl: false, meta: false } })
+          markDirty(undefined, engineCtx.dirty)
+          await nextFrame()
+        },
+        frame: nextFrame,
+      }
+      await interact(helpers)
+    },
+    options,
+  )
 }
 
 /**
@@ -247,7 +285,7 @@ export async function renderNodeToBufferAfterInteractions(
     return () => {
       removeChild(loop.root, node)
     }
-  }, async (loop) => {
+  }, async (loop, engineCtx) => {
     const nextFrame = async () => {
       loop.frame()
       await new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -264,8 +302,8 @@ export async function renderNodeToBufferAfterInteractions(
         await nextFrame()
       },
       async keyPress(key, char = "") {
-        dispatchInput({ type: "key", key, char, mods: { shift: false, alt: false, ctrl: false, meta: false } })
-        markDirty()
+        engineCtx.input.dispatchInput({ type: "key", key, char, mods: { shift: false, alt: false, ctrl: false, meta: false } })
+        markDirty(undefined, engineCtx.dirty)
         await nextFrame()
       },
       frame: nextFrame,
@@ -278,8 +316,8 @@ async function captureToBuffer(
   width: number,
   height: number,
   frames: number,
-  mountScene: (loop: LoopInstance) => () => void,
-  interact?: (loop: LoopInstance) => Promise<void> | void,
+  mountScene: (loop: LoopInstance, engineCtx: EngineContext) => () => void,
+  interact?: (loop: LoopInstance, engineCtx: EngineContext) => Promise<void> | void,
   options: RenderToBufferOptions = {},
 ): Promise<RenderToBufferResult> {
   // Force final-frame strategy so the GPU backend composites all layers
@@ -308,7 +346,9 @@ async function captureToBuffer(
   const prevBackend = getRendererBackend()
   setRendererBackend(backend)
 
+  const priorActiveCtx = getActiveEngineContext()
   let loop: LoopInstance | null = null
+  let engineCtx: EngineContext | null = null
   let dispose: (() => void) | null = null
   let pixels: Uint8Array | null = null
   try {
@@ -320,21 +360,32 @@ async function captureToBuffer(
         },
       })
 
+      const dirtyTracker = loop.root._dirtyTracker ?? createDirtyTracker()
+      const inputManager = createInputManager()
+      engineCtx = createEngineContext({
+        root: loop.root,
+        loop,
+        dirty: dirtyTracker,
+        inputManager,
+      })
+      setActiveEngineContext(engineCtx)
+
       bindLoop(loop)
-      dispose = mountScene(loop)
-      markDirty()
+      dispose = mountScene(loop, engineCtx)
+      markDirty(undefined, dirtyTracker)
 
       // Run frames — first frame initialises layout, second stabilises
       for (let i = 0; i < frames; i++) {
         loop.frame()
         // Give SolidJS effects a tick to settle between frames
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
-        markDirty()
+        markDirty(undefined, dirtyTracker)
       }
 
       if (interact) {
-        await interact(loop)
-        markDirty()
+        await interact(loop, engineCtx)
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        markDirty(undefined, dirtyTracker)
         loop.frame()
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
@@ -354,11 +405,13 @@ async function captureToBuffer(
           unbindLoop()
         } finally {
           try {
-            resetFocus()
-            clearSelection()
+            dispose?.()
           } finally {
             try {
-              dispose?.()
+              engineCtx?.destroy()
+              if (getActiveEngineContext() === engineCtx) {
+                setActiveEngineContext(priorActiveCtx)
+              }
             } finally {
               loop.destroy()
             }
@@ -371,6 +424,9 @@ async function captureToBuffer(
       }
     }
   } finally {
+    if (getActiveEngineContext() === engineCtx) {
+      setActiveEngineContext(priorActiveCtx)
+    }
     setRendererBackend(prevBackend)
     if (prevStrategy === undefined) {
       delete process.env["VEXART_GPU_FORCE_LAYER_STRATEGY"]

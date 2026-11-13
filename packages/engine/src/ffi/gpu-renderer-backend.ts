@@ -8,7 +8,6 @@
 import type { Terminal } from "../terminal"
 import { inTmux, queryTmuxClientState } from "../terminal/tmux"
 import { onTerminalTransportLifecycle } from "../terminal/transport-lifecycle"
-import { clearImageCache } from "../loop/image"
 import {
   type RenderedLayerRecord,
   getUnsupportedGpuOps,
@@ -377,7 +376,6 @@ function createGpuRendererBackendInternal(options: GpuRendererBackendOptions = {
     destroy() {
       compositor.destroy()
       if (gpuContext.rawHandle !== null) {
-        clearImageCache()
         targetManager.destroy()
         gpuContext.destroy()
       }

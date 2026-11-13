@@ -1,7 +1,7 @@
 // native/libvexart/src/ffi/context.rs
 // Version, context lifecycle, and last error FFI exports.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ffi::panic::{ERR_INVALID_ARG, OK};
 use crate::ffi_guard;
@@ -11,6 +11,9 @@ use crate::{
 };
 
 pub use super::error::{vexart_copy_last_error, vexart_get_last_error_length};
+
+/// Atomic active context reference count across all active handles.
+pub static CONTEXT_REF_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Returns the Phase 2b version constant (0x00020B00).
 /// TS mount path checks this against EXPECTED_BRIDGE_VERSION. Per design §12 rule 2.
@@ -43,6 +46,7 @@ pub unsafe extern "C" fn vexart_context_create(
         }
         // Ensure the GPU singleton is initialized eagerly (fail fast on GPU errors).
         let _guard = crate::get_or_init_paint();
+        CONTEXT_REF_COUNT.fetch_add(1, Ordering::SeqCst);
         *out_ctx = 1;
         OK
     })
@@ -57,6 +61,17 @@ pub unsafe extern "C" fn vexart_context_create(
 pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
     ffi_guard!({
         let _ = ctx;
+        let count_after = CONTEXT_REF_COUNT
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                Some(count.saturating_sub(1))
+            })
+            .map(|prev| prev.saturating_sub(1))
+            .unwrap_or(0);
+
+        if count_after > 0 {
+            return OK;
+        }
+
         // 1. Drain SHARED_PAINT (releases WGPU device, queue, pipeline caches, render targets + scissor state, images, atlases, texture pool)
         {
             let mut guard = lock_or_recover(&SHARED_PAINT);
@@ -79,4 +94,3 @@ pub extern "C" fn vexart_context_destroy(ctx: u64) -> i32 {
         OK
     })
 }
-

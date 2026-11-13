@@ -1,7 +1,7 @@
-import { getGpuRendererBackendCacheStats } from "./gpu-renderer-backend"
-import { getImageCacheStats } from "../loop/image"
-import { getTextLayoutCacheStats } from "./text-layout"
-import { openVexartLibrary } from "./vexart-bridge"
+import { getGpuRendererBackendCacheStats } from "../ffi/gpu-renderer-backend"
+import { getImageCacheStats } from "./image"
+import { getTextLayoutCacheStats } from "../ffi/text-layout"
+import { openVexartLibrary } from "../ffi/vexart-bridge"
 
 /** @public */
 export type ResourceStats = {

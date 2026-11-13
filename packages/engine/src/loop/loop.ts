@@ -31,8 +31,15 @@ import {
   type DirtyScope,
 } from "../reconciler/dirty"
 import { unbindLoop } from "../reconciler/pointer"
-import { hasActiveAnimations, resetActiveAnimations } from "./animation"
+import {
+  hasActiveAnimations,
+  resetActiveAnimations,
+  setLoopAnimationDriver,
+  stepActiveAnimations,
+} from "./animation"
 import { resetCompositorPathState } from "../animation/compositor-path"
+import { getActiveEngineContext, setActiveEngineContext } from "../context"
+import { clearImageCache } from "./image"
 import { debugFrameStart, debugRecordFfiCounts } from "./debug"
 import { type Layer, createLayerStore } from "../ffi/layers"
 import { type DamageRect } from "../ffi/damage"
@@ -47,12 +54,6 @@ import {
 import { bindLayerDirtyStore, unbindLayerDirtyStore, compositeFrame, createFrameProfile, type CompositeFrameState, type FrameProfile } from "./composite"
 import type { LayerBoundary, RenderLoop } from "./types"
 import { createFrameScheduler } from "../scheduler/index"
-import {
-  disableNativeLayerRegistry,
-  enableNativeLayerRegistry,
-  nativeLayerRegistryForcedOffReason,
-  isNativeLayerRegistryForcedOff,
-} from "../ffi/native-layer-registry-flags"
 import { disableNativePresentation, enableNativePresentation, isNativePresentationEnabled, isNativePresentationForcedOff, nativePresentationForcedOffReason } from "../ffi/native-presentation-flags"
 import { tickNativePresentationRecovery } from "../ffi/native-presentation-ops"
 import { getVexartFfiCallCount, getVexartFfiCallCountsBySymbol, resetVexartFfiCallCounts } from "../ffi/vexart-bridge"
@@ -119,6 +120,7 @@ export type { RenderLoop }
 export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): RenderLoop {
   const layoutAdapter = createVexartLayoutCtx()
   const dirtyTracker = createDirtyTracker()
+  setLoopAnimationDriver(true)
   let cachedHasPointerNodes: boolean | null = null
   const isDirty = () => dirtyTracker.isDirty() || globalIsDirty()
   const clearDirty = (expectedVersion?: number) => {
@@ -153,17 +155,6 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     // All transport modes (direct/file/shm) are handled natively by Rust.
     // Rust does readback+compress+emit internally — no TS readback needed.
     enableNativePresentation(`native presentation for ${term.caps.transmissionMode} transport`)
-  }
-
-  const nativeLayerRegistryRequested = opts?.experimental?.nativeLayerRegistry !== false
-  if (!nativeLayerRegistryRequested) {
-    disableNativeLayerRegistry("nativeLayerRegistry disabled by render loop option")
-  } else if (isNativeLayerRegistryForcedOff()) {
-    disableNativeLayerRegistry(nativeLayerRegistryForcedOffReason() ?? "nativeLayerRegistry forced off")
-  } else if (nativePresentationRequested) {
-    enableNativeLayerRegistry()
-  } else {
-    disableNativeLayerRegistry("nativeLayerRegistry requires native presentation")
   }
 
   const root = createNode("root")
@@ -433,7 +424,12 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
     if (!isDirty() && !hasActiveAnimations() && (dirtyCount() === 0 || !hasRecentInteraction()) && pendingInteractionFrameKind === null) return
     isRenderingFrame = true
     const frameStartedAt = performance.now()
+    if (hasActiveAnimations()) {
+      stepActiveAnimations(frameStartedAt)
+    }
     if (hasRecentInteraction()) lastInteractionFrameAt = frameStartedAt
+    const prevEngineCtx = getActiveEngineContext()
+    if (root._engineContext) setActiveEngineContext(root._engineContext)
     try {
       const profile: FrameProfile | undefined = frameProfileSink
         ? createFrameProfile({
@@ -461,6 +457,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
         frameProfileSink?.({ ...profile })
       }
     } finally {
+      if (root._engineContext) setActiveEngineContext(prevEngineCtx)
       isRenderingFrame = false
       if (pendingInteractionFrameKind && !isSuspended && isDirty()) {
         const kind = pendingInteractionFrameKind
@@ -559,6 +556,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
 
       unbindLayerDirtyStore(layerCache)
       releaseSubtreeImages(root)
+      clearImageCache()
       loopBackend.destroy?.()
       if (getRendererBackend() === loopBackend) {
         setRendererBackend(null)
@@ -573,6 +571,7 @@ export function createRenderLoop(term: Terminal, opts?: RenderLoopOptions): Rend
       scrollOffsets.clear()
       activeSlotKeys.clear()
 
+      setLoopAnimationDriver(false)
       resetActiveAnimations()
       resetCompositorPathState()
 

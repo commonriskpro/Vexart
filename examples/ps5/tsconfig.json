@@ -17,6 +17,8 @@
       "vexart/engine": ["../../packages/engine/src/index.ts"],
       "@vexart/app": ["../../packages/app/src/index.ts"],
       "@vexart/engine": ["../../packages/engine/src/index.ts"],
+      "@vexart/engine/jsx-runtime": ["../../packages/engine/src/jsx-runtime.ts"],
+      "@vexart/engine/internal": ["../../packages/engine/src/internal.ts"],
       "@vexart/headless": ["../../packages/headless/src/index.ts"],
       "@vexart/styled": ["../../packages/styled/src/index.ts"]
     },
