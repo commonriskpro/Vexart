@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0-beta.12](https://github.com/commonriskpro/Vexart/compare/v1.0.0-beta.11...v1.0.0-beta.12) (2026-11-13)
+
+
+### Features
+
+* **app:** expand tailwind className utilities with palette, opacity, grid, and transitions ([537c46b](https://github.com/commonriskpro/Vexart/commit/537c46b6f0271826f019c4a9ae162cff7468fc80))
+* **engine:** add web-native jsx intrinsics, msdf typography crispness, and effect transitions ([c49edaa](https://github.com/commonriskpro/Vexart/commit/c49edaad986a9dd6de8c310ee20f715fd3a142ab))
+* **styled:** upgrade to Void 2.0 visual system with wgpu gradients, glassmorphism, and classOverride ([51fca6a](https://github.com/commonriskpro/Vexart/commit/51fca6a7a2a51354fa461f91d0cae00e67bdcc5e))
+
+
+### Bug Fixes
+
+* **engine:** harden sharp decode fallback and declare sharp in dist dependencies ([729e664](https://github.com/commonriskpro/Vexart/commit/729e664b13ef46aa2e0d8c9852536968a2ef6f14))
+* **engine:** prioritize per-crate release dylib over stale node_modules package ([6ba4d48](https://github.com/commonriskpro/Vexart/commit/6ba4d486bbe07b752e9f15c072c79c48e1548155))
+* **styled:** scope backdropBlur to dialog overlay and fix showcase viewport layout ([c11d903](https://github.com/commonriskpro/Vexart/commit/c11d9035520efe2e5b7294368864eaa27e5eec9e))
+
 ## [1.0.0-beta.11](https://github.com/commonriskpro/Vexart/compare/v1.0.0-beta.10...v1.0.0-beta.11) (2026-09-19)
 
 
